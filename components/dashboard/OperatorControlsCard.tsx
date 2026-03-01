@@ -1,0 +1,139 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { updateSettings } from './actions';
+import type { BotSettings } from '@/lib/botData';
+
+type OperatorControlsCardProps = {
+  settings?: BotSettings | null;
+};
+
+export default function OperatorControlsCard({ settings }: OperatorControlsCardProps) {
+  const [isEnabled, setIsEnabled] = useState(settings?.is_enabled ?? false);
+  const [mode, setMode] = useState<'PAPER' | 'LIVE'>(settings?.mode ?? 'PAPER');
+  const [edgeThreshold, setEdgeThreshold] = useState(String(settings?.edge_threshold ?? 0.02));
+  const [tradeSize, setTradeSize] = useState(String(settings?.trade_size ?? 10));
+  const [maxTradesPerHour, setMaxTradesPerHour] = useState(String(settings?.max_trades_per_hour ?? 5));
+  const [liveConfirmed, setLiveConfirmed] = useState(mode === 'LIVE');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    setIsEnabled(settings?.is_enabled ?? false);
+    setMode(settings?.mode ?? 'PAPER');
+    setEdgeThreshold(String(settings?.edge_threshold ?? 0.02));
+    setTradeSize(String(settings?.trade_size ?? 10));
+    setMaxTradesPerHour(String(settings?.max_trades_per_hour ?? 5));
+    setLiveConfirmed(settings?.mode === 'LIVE');
+  }, [settings]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+
+    const result = await updateSettings({
+      is_enabled: isEnabled,
+      mode,
+      edge_threshold: parseFloat(edgeThreshold) || 0,
+      trade_size: parseFloat(tradeSize) || 0,
+      max_trades_per_hour: parseInt(maxTradesPerHour, 10) || 0
+    });
+
+    if (result.success) {
+      setMessage({ text: 'Settings saved', type: 'success' });
+    } else {
+      setMessage({ text: result.error ?? 'Unable to save settings', type: 'error' });
+    }
+
+    setSaving(false);
+  };
+
+  const requiresLiveConfirmation = mode === 'LIVE' && !liveConfirmed;
+
+  return (
+    <div className="profile-card operator-card">
+      <div className="operator-header">
+        <h3>Operator Controls</h3>
+        {mode === 'LIVE' && <p className="operator-warning">LIVE requires Railway KILL_SWITCH=false.</p>}
+      </div>
+
+      <div className="operator-form">
+        <label className="operator-row">
+          <span>Bot Enabled</span>
+          <div className="toggle-switch">
+            <input
+              type="checkbox"
+              checked={isEnabled}
+              onChange={(e) => setIsEnabled(e.target.checked)}
+              id="operator-enabled"
+            />
+            <label className="toggle-slider" htmlFor="operator-enabled"></label>
+          </div>
+        </label>
+
+        <label className="operator-row">
+          <span>Mode</span>
+          <select value={mode} onChange={(e) => setMode(e.target.value as 'PAPER' | 'LIVE')}>
+            <option value="PAPER">PAPER</option>
+            <option value="LIVE">LIVE</option>
+          </select>
+        </label>
+
+        {mode === 'LIVE' && (
+          <label className="operator-row operator-checkbox">
+            <input
+              type="checkbox"
+              checked={liveConfirmed}
+              onChange={(e) => setLiveConfirmed(e.target.checked)}
+            />
+            <span>I understand LIVE requires Railway KILL_SWITCH=false.</span>
+          </label>
+        )}
+
+        <label className="operator-row">
+          <span>Edge Threshold</span>
+          <input
+            type="number"
+            step="0.01"
+            value={edgeThreshold}
+            onChange={(e) => setEdgeThreshold(e.target.value)}
+          />
+        </label>
+
+        <label className="operator-row">
+          <span>Trade Size</span>
+          <input
+            type="number"
+            step="1"
+            value={tradeSize}
+            onChange={(e) => setTradeSize(e.target.value)}
+          />
+        </label>
+
+        <label className="operator-row">
+          <span>Max Trades / Hour</span>
+          <input
+            type="number"
+            step="1"
+            value={maxTradesPerHour}
+            onChange={(e) => setMaxTradesPerHour(e.target.value)}
+          />
+        </label>
+      </div>
+
+      {message && (
+        <div className={`message ${message.type}`}>
+          {message.text}
+        </div>
+      )}
+
+      <button
+        className="operator-save"
+        onClick={handleSave}
+        disabled={saving || requiresLiveConfirmation}
+      >
+        {saving ? 'Saving...' : 'Save Changes'}
+      </button>
+    </div>
+  );
+}

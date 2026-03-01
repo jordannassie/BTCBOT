@@ -1,8 +1,14 @@
+'use client';
+
+import type { BotSettings } from '@/lib/botData';
+import OperatorControlsCard from './OperatorControlsCard';
+
 type ProfileCardsProps = {
   stats: {
     positionsValue: number;
     tradesLast30Days: number;
     totalTrades: number;
+    settings?: BotSettings | null;
   };
 };
 
@@ -74,6 +80,8 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
           <span>Polymarket</span>
         </div>
       </div>
+
+      <OperatorControlsCard settings={stats.settings ?? null} />
     </div>
   );
 }
