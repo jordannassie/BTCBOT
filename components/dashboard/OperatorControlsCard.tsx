@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { updateSettings } from './actions';
+import { useRouter } from 'next/navigation';
 import type { BotSettings } from '@/lib/botData';
 
 type OperatorControlsCardProps = {
@@ -9,6 +9,7 @@ type OperatorControlsCardProps = {
 };
 
 export default function OperatorControlsCard({ settings }: OperatorControlsCardProps) {
+  const router = useRouter();
   const [isEnabled, setIsEnabled] = useState(settings?.is_enabled ?? false);
   const [mode, setMode] = useState<'PAPER' | 'LIVE'>(settings?.mode ?? 'PAPER');
   const [edgeThreshold, setEdgeThreshold] = useState(String(settings?.edge_threshold ?? 0.02));
@@ -31,21 +32,35 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
     setSaving(true);
     setMessage(null);
 
-    const result = await updateSettings({
-      is_enabled: isEnabled,
-      mode,
-      edge_threshold: parseFloat(edgeThreshold) || 0,
-      trade_size: parseFloat(tradeSize) || 0,
-      max_trades_per_hour: parseInt(maxTradesPerHour, 10) || 0
-    });
+    try {
+      const response = await fetch('/api/bot-settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          bot_id: 'default',
+          is_enabled: isEnabled,
+          mode,
+          edge_threshold: parseFloat(edgeThreshold) || 0,
+          trade_size: parseFloat(tradeSize) || 0,
+          max_trades_per_hour: parseInt(maxTradesPerHour, 10) || 0
+        })
+      });
 
-    if (result.success) {
-      setMessage({ text: 'Settings saved', type: 'success' });
-    } else {
-      setMessage({ text: result.error ?? 'Unable to save settings', type: 'error' });
+      const payload = await response.json();
+
+      if (payload.ok) {
+        setMessage({ text: 'Saved', type: 'success' });
+        router.refresh();
+      } else {
+        setMessage({ text: payload.error ?? 'Unable to save settings', type: 'error' });
+      }
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : 'Unexpected error', type: 'error' });
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
   };
 
   const requiresLiveConfirmation = mode === 'LIVE' && !liveConfirmed;
