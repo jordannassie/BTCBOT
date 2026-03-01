@@ -1,7 +1,29 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseInitError } from '@/lib/supabaseClient';
 
 export async function GET() {
+  if (supabaseInitError) {
+    return NextResponse.json(
+      {
+        status: 'error',
+        message: `Supabase client could not be created: ${supabaseInitError.message}`,
+        session: null
+      },
+      { status: 500 }
+    );
+  }
+
+  if (!supabase) {
+    return NextResponse.json(
+      {
+        status: 'error',
+        message: 'Supabase client is unavailable.',
+        session: null
+      },
+      { status: 500 }
+    );
+  }
+
   const { data, error } = await supabase.auth.getSession();
 
   if (error) {
