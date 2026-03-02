@@ -1,50 +1,60 @@
 'use client';
 
-import type { BotSettings } from '@/lib/botData';
+import type { DashboardStats } from '@/lib/botData';
 import ProfitLossCard from './ProfitLossCard';
-import OperatorControlsCard from './OperatorControlsCard';
 
 type ProfileCardsProps = {
-  stats: {
-    positionsValue: number;
-    tradesLast30Days: number;
-    totalTrades: number;
-    settings?: BotSettings | null;
-  };
+  stats: DashboardStats;
 };
 
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
+
 export default function ProfileCards({ stats }: ProfileCardsProps) {
+  const mode = stats.settings?.mode ?? 'PAPER';
+  const enabled = stats.settings?.is_enabled ?? false;
+
   return (
-    <div className="profile-section">
-      <div className="profile-card">
-        <div className="profile-avatar">
-          <div className="avatar-gradient"></div>
-        </div>
-        <div className="profile-info">
-          <h2 className="profile-name">default</h2>
-          <p className="profile-meta">Joined Dec 2025 · {stats.totalTrades} trades</p>
+    <section className="profile-grid">
+      <article className="profile-card summary-card">
+        <header className="summary-header">
+          <div>
+            <p className="summary-eyebrow">Operator</p>
+            <h2 className="profile-name">default</h2>
+          </div>
+          <span className={`status-pill ${enabled ? 'status-pill--active' : ''}`}>
+            {enabled ? 'Enabled' : 'Paused'}
+          </span>
+        </header>
+
+        <div className="summary-body">
+          <div className="summary-metric">
+            <p>Positions value</p>
+            <strong>{formatCurrency(stats.positionsValue)}</strong>
+          </div>
+          <div className="summary-metric">
+            <p>Trades (30d)</p>
+            <strong>{stats.tradesLast30Days.toLocaleString()}</strong>
+          </div>
+          <div className="summary-metric">
+            <p>Total trades</p>
+            <strong>{stats.totalTrades.toLocaleString()}</strong>
+          </div>
         </div>
 
-        <div className="profile-stats">
-          <div className="stat-item">
-            <div className="stat-value">
-              ${stats.positionsValue > 0 ? (stats.positionsValue / 1000).toFixed(1) + 'K' : '—'}
-            </div>
-            <div className="stat-label">Positions Value</div>
+        <footer className="summary-meta">
+          <div>
+            <p>Mode</p>
+            <strong>{mode}</strong>
           </div>
-          <div className="stat-item">
-            <div className="stat-value">—</div>
-            <div className="stat-label">Biggest Win</div>
+          <div>
+            <p>Heartbeat</p>
+            <strong>{stats.heartbeat?.status ?? '—'}</strong>
           </div>
-          <div className="stat-item">
-            <div className="stat-value">{stats.tradesLast30Days.toLocaleString()}</div>
-            <div className="stat-label">Predictions</div>
-          </div>
-        </div>
-      </div>
+        </footer>
+      </article>
 
       <ProfitLossCard paperBalance={stats.settings?.paper_balance_usd ?? 0} />
-      <OperatorControlsCard />
-    </div>
+    </section>
   );
 }

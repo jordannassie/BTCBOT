@@ -1,19 +1,18 @@
-import { getDashboardStats, getBotTrades } from '@/lib/botData';
+import { getDashboardStats } from '@/lib/botData';
 import ProfileCards from '@/components/dashboard/ProfileCards';
 import DashboardTabs from '@/components/dashboard/DashboardTabs';
-import ActivityStream from '@/components/dashboard/ActivityStream';
+import ActivityList from '@/components/dashboard/ActivityList';
 
 export const revalidate = 0;
 
 export default async function ActivityPage() {
   const stats = await getDashboardStats();
-  const trades = await getBotTrades(100);
 
   return (
-    <div className="dashboard-container">
+    <section className="dashboard-panel">
       <ProfileCards stats={stats} />
       <DashboardTabs activeTab="activity" />
-      <ActivityStream initialTrades={trades} />
-    </div>
+      <ActivityList trades={stats.latestTrades} />
+    </section>
   );
 }
