@@ -129,22 +129,19 @@ export async function getBotTrades(limit = 100): Promise<BotTrade[]> {
 }
 
 export async function fetchOpenPaperPositions(botId: string): Promise<PaperPosition[]> {
-  if (!supabase) return [];
+  try {
+    const response = await fetch('/api/paper-positions', {
+      cache: 'no-store'
+    });
 
-  const { data, error } = await supabase
-    .from('paper_positions')
-    .select('id, bot_id, status, market_slug, side, entry_price, size_usd, opened_at')
-    .eq('bot_id', botId)
-    .eq('status', 'OPEN')
-    .order('opened_at', { ascending: false })
-    .limit(50);
+    if (!response.ok) return [];
 
-  if (error) {
-    console.error('Error loading paper positions:', error);
+    const payload = await response.json();
+    return Array.isArray(payload.rows) ? payload.rows : [];
+  } catch (error) {
+    console.error('Error fetching paper positions via API:', error);
     return [];
   }
-
-  return (data as PaperPosition[]) || [];
 }
 
 export async function getPositions(): Promise<PositionGroup[]> {
