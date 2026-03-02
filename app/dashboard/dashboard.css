@@ -768,3 +768,23 @@
     font-size: 1.1rem;
   }
 }
+
+.operator-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 6, 18, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 999;
+}
+
+.operator-modal-card {
+  width: min(460px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: 1rem;
+  padding: 0;
+  background: transparent;
+}
