@@ -15,8 +15,23 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl =
+      (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
+    const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+
+    if (!supabaseUrl.startsWith('http')) {
+      return NextResponse.json(
+        { ok: false, error: `SUPABASE_URL missing/invalid: "${supabaseUrl}"` },
+        { status: 500 }
+      );
+    }
+
+    if (!serviceKey) {
+      return NextResponse.json(
+        { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY missing' },
+        { status: 500 }
+      );
+    }
 
     if (!supabaseUrl || !serviceKey) {
       return NextResponse.json(
