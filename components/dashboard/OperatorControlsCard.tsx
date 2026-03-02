@@ -19,14 +19,37 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
+  const applySettings = (next?: BotSettings | null) => {
+    setIsEnabled(next?.is_enabled ?? false);
+    setMode(next?.mode ?? 'PAPER');
+    setEdgeThreshold(String(next?.edge_threshold ?? 0.02));
+    setTradeSize(String(next?.trade_size ?? 10));
+    setMaxTradesPerHour(String(next?.max_trades_per_hour ?? 5));
+    setLiveConfirmed(next?.mode === 'LIVE');
+  };
+
   useEffect(() => {
-    setIsEnabled(settings?.is_enabled ?? false);
-    setMode(settings?.mode ?? 'PAPER');
-    setEdgeThreshold(String(settings?.edge_threshold ?? 0.02));
-    setTradeSize(String(settings?.trade_size ?? 10));
-    setMaxTradesPerHour(String(settings?.max_trades_per_hour ?? 5));
-    setLiveConfirmed(settings?.mode === 'LIVE');
+    applySettings(settings ?? null);
   }, [settings]);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const response = await fetch('/api/bot-settings');
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json();
+        applySettings(payload.settings ?? null);
+      } catch (error) {
+        console.error('Unable to load settings', error);
+      }
+    };
+
+    loadSettings();
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
@@ -52,6 +75,11 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
 
       if (payload.ok) {
         setMessage({ text: 'Saved', type: 'success' });
+        await fetch('/api/bot-settings')
+          .then((res) => res.json())
+          .then((data) => {
+            applySettings(data.settings ?? null);
+          });
         router.refresh();
       } else {
         setMessage({ text: payload.error ?? 'Unable to save settings', type: 'error' });
