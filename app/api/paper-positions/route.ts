@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const BOT_ID = 'default';
 
-export async function GET() {
+export async function GET(req: Request) {
   const supabaseUrl =
     (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -12,16 +12,29 @@ export async function GET() {
     return NextResponse.json({ ok: false, error: 'Supabase credentials missing or invalid' }, { status: 500 });
   }
 
+  const url = new URL(req.url);
+  const status = url.searchParams.get('status')?.toUpperCase() ?? 'OPEN';
+  if (!['OPEN', 'CLOSED'].includes(status)) {
+    return NextResponse.json({ ok: false, error: 'Invalid status' }, { status: 400 });
+  }
+
   try {
     const client = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-    const { data, error } = await client
+    const query = client
       .from('paper_positions')
-      .select('id, bot_id, status, market_slug, side, entry_price, size_usd, opened_at')
+      .select('id, bot_id, status, market_slug, side, entry_price, size_usd, opened_at, resolved_side, pnl_usd, closed_at')
       .eq('bot_id', BOT_ID)
-      .eq('status', 'OPEN')
-      .order('opened_at', { ascending: false })
-      .limit(10);
+      .eq('status', status)
+      .limit(50);
+
+    if (status === 'OPEN') {
+      query.order('opened_at', { ascending: false });
+    } else {
+      query.order('closed_at', { ascending: false });
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
