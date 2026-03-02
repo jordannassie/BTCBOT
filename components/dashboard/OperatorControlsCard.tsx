@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { BotSettings } from '@/lib/botData';
 
@@ -29,6 +29,7 @@ export default function OperatorControlsCard() {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const parsePaperBalance = (value: string) => {
     const trimmed = value.trim();
@@ -73,30 +74,31 @@ export default function OperatorControlsCard() {
     }
   };
 
-  useEffect(() => {
-    const loadSettings = async () => {
-      setLoading(true);
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-      try {
-        const response = await fetch('/api/bot-settings', { cache: 'no-store' });
+    try {
+      const response = await fetch('/api/bot-settings', { cache: 'no-store' });
 
-        if (!response.ok) {
-          setError('Unable to load bot settings.');
-          return;
-        }
-
-        const payload = await response.json();
-        applySettings(payload.settings ?? null);
-      } catch (error) {
-        console.error('Unable to load settings', error);
+      if (!response.ok) {
         setError('Unable to load bot settings.');
-      } finally {
-        setLoading(false);
+        return;
       }
-    };
 
-    loadSettings();
+      const payload = await response.json();
+      applySettings(payload.settings ?? null);
+    } catch (error) {
+      console.error('Unable to load settings', error);
+      setError('Unable to load bot settings.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -135,6 +137,41 @@ export default function OperatorControlsCard() {
       setMessage({ text: error instanceof Error ? error.message : 'Unexpected error', type: 'error' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleReset = async () => {
+    setResetting(true);
+    setMessage(null);
+    setError(null);
+
+    const roundedBalance = commitPaperBalance() ?? 0;
+
+    try {
+      const response = await fetch('/api/paper-reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        cache: 'no-store',
+        body: JSON.stringify({
+          bot_id: 'default',
+          paper_balance_usd: roundedBalance
+        })
+      });
+
+      const payload = await response.json();
+
+      if (payload.ok) {
+        setMessage({ text: 'Paper balance reset', type: 'success' });
+        await loadSettings();
+      } else {
+        setMessage({ text: payload.error ?? 'Reset failed', type: 'error' });
+      }
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : 'Unexpected error', type: 'error' });
+    } finally {
+      setResetting(false);
     }
   };
 
