@@ -217,6 +217,29 @@
   gap: 0.5rem;
 }
 
+.pnl-toggle {
+  display: flex;
+  gap: 0.35rem;
+  margin-left: 0.5rem;
+}
+
+.pnl-toggle-btn {
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pnl-toggle-btn.active {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: transparent;
+  color: #f8fafc;
+}
+
 .pnl-tab {
   padding: 0.35rem 0.75rem;
   border-radius: 0.5rem;

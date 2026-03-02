@@ -23,6 +23,9 @@ type ProfileCardsProps = {
 
 export default function ProfileCards({ stats }: ProfileCardsProps) {
   const [confirmedSettings, setConfirmedSettings] = useState<BotSettings | null>(stats.settings ?? null);
+  const [liveMode, setLiveMode] = useState(false);
+  const [liveBalance, setLiveBalance] = useState<number | null>(stats.settings?.live_balance_usd ?? null);
+  const [liveUpdatedAt, setLiveUpdatedAt] = useState<string | null>(stats.settings?.live_updated_at ?? null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,12 +54,32 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
   const settings = confirmedSettings ?? stats.settings;
   const paperBalance = settings?.paper_balance_usd ?? 0;
   const paperPnl = settings?.paper_pnl_usd ?? 0;
-  const formattedPnl = formatUSD(paperPnl);
-  const formattedBalance = formatUSD(paperBalance);
+  const formattedPnl = formatUSD(liveMode && liveBalance != null ? liveBalance : paperPnl);
+  const formattedBalance = formatUSD(liveMode && liveBalance != null ? liveBalance : paperBalance);
 
-  if (process.env.NODE_ENV === 'development') {
-    console.log('balance loaded', settings?.paper_balance_usd, settings?.paper_pnl_usd);
-  }
+  useEffect(() => {
+    setLiveBalance(settings?.live_balance_usd ?? null);
+    setLiveUpdatedAt(settings?.live_updated_at ?? null);
+  }, [settings]);
+
+  useEffect(() => {
+    if (!liveMode) return;
+    const fetchLive = async () => {
+      try {
+        const response = await fetch('/api/live-balance', { cache: 'no-store' });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (payload.ok) {
+          setLiveBalance(payload.live_balance_usd);
+          setLiveUpdatedAt(payload.live_updated_at);
+        }
+      } catch (error) {
+        console.error('Failed to refresh live balance', error);
+      }
+    };
+
+    fetchLive();
+  }, [liveMode]);
 
   return (
     <div className="profile-section">
@@ -99,10 +122,21 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
             <button className="pnl-tab">1M</button>
             <button className="pnl-tab">ALL</button>
           </div>
+          <div className="pnl-toggle">
+            <button className={`pnl-toggle-btn ${!liveMode ? 'active' : ''}`} onClick={() => setLiveMode(false)}>
+              PAPER
+            </button>
+            <button className={`pnl-toggle-btn ${liveMode ? 'active' : ''}`} onClick={() => setLiveMode(true)}>
+              LIVE
+            </button>
+          </div>
         </div>
         <div className="pnl-amount">{formattedPnl}</div>
-        <div className="pnl-period">Paper Balance</div>
+        <div className="pnl-period">{liveMode ? 'Live Balance' : 'Paper Balance'}</div>
         <p className="pnl-subtext">{formattedBalance}</p>
+        {liveMode && liveUpdatedAt && (
+          <p className="pnl-subtext">Last updated: {new Date(liveUpdatedAt).toLocaleString()}</p>
+        )}
         <div className="pnl-chart">
           <svg width="100%" height="100" viewBox="0 0 400 100" preserveAspectRatio="none">
             <defs>
