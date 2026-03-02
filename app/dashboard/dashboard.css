@@ -439,6 +439,51 @@
   color: #f8fafc;
 }
 
+.tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0 0.5rem;
+}
+
+.strategy-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.strategy-filter select {
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f8fafc;
+}
+
+.strategy-badge {
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.strategy-fastloop {
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  color: #3b82f6;
+}
+
+.strategy-sniper {
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  color: #10b981;
+}
+
 /* Positions Container */
 .positions-container,
 .activity-container {

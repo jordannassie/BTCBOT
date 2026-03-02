@@ -14,6 +14,7 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const status = url.searchParams.get('status')?.toUpperCase() ?? 'OPEN';
+  const strategyParam = url.searchParams.get('strategy')?.toUpperCase();
   if (!['OPEN', 'CLOSED'].includes(status)) {
     return NextResponse.json({ ok: false, error: 'Invalid status' }, { status: 400 });
   }
@@ -23,11 +24,16 @@ export async function GET(req: Request) {
 
     const query = client
       .from('paper_positions')
-      .select('id, bot_id, status, market_slug, side, entry_price, size_usd, opened_at, resolved_side, pnl_usd, closed_at')
+      .select(
+        'id, bot_id, status, market_slug, side, entry_price, size_usd, opened_at, resolved_side, pnl_usd, closed_at, strategy_id'
+      )
       .eq('bot_id', BOT_ID)
       .eq('status', status)
       .limit(50);
 
+    if (strategyParam && ['FASTLOOP', 'SNIPER'].includes(strategyParam)) {
+      query.eq('strategy_id', strategyParam);
+    }
     if (status === 'OPEN') {
       query.order('opened_at', { ascending: false });
     } else {

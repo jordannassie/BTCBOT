@@ -1,7 +1,6 @@
 import { getDashboardStats, getBotTrades } from '@/lib/botData';
 import ProfileCards from '@/components/dashboard/ProfileCards';
-import DashboardTabs from '@/components/dashboard/DashboardTabs';
-import ActivityStream from '@/components/dashboard/ActivityStream';
+import ActivitySection from '@/components/dashboard/ActivitySection';
 
 export const revalidate = 0;
 
@@ -12,8 +11,7 @@ export default async function ActivityPage() {
   return (
     <div className="dashboard-container">
       <ProfileCards stats={stats} />
-      <DashboardTabs activeTab="activity" />
-      <ActivityStream initialTrades={trades} />
+      <ActivitySection initialTrades={trades} />
     </div>
   );
 }

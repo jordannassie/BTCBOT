@@ -1,7 +1,6 @@
 import { getDashboardStats } from '@/lib/botData';
 import ProfileCards from '@/components/dashboard/ProfileCards';
-import DashboardTabs from '@/components/dashboard/DashboardTabs';
-import PaperPositionsPanel from '@/components/dashboard/PaperPositionsPanel';
+import PositionsSection from '@/components/dashboard/PositionsSection';
 
 export const revalidate = 0;
 
@@ -11,8 +10,7 @@ export default async function DashboardPage() {
   return (
     <div className="dashboard-container">
       <ProfileCards stats={stats} />
-      <DashboardTabs activeTab="positions" />
-      <PaperPositionsPanel />
+      <PositionsSection />
     </div>
   );
 }

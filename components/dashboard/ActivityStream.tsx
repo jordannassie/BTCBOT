@@ -3,24 +3,38 @@
 import { useEffect, useState } from 'react';
 import type { BotTrade } from '@/lib/botData';
 import ActivityList from './ActivityList';
+import type { StrategyOption } from './StrategyFilter';
 
 type ActivityStreamProps = {
   initialTrades: BotTrade[];
+  strategy: StrategyOption;
 };
 
-export default function ActivityStream({ initialTrades }: ActivityStreamProps) {
-  const [trades, setTrades] = useState<BotTrade[]>(Array.isArray(initialTrades) ? initialTrades : []);
+export default function ActivityStream({ initialTrades, strategy }: ActivityStreamProps) {
+  const [trades, setTrades] = useState<BotTrade[]>(
+    Array.isArray(initialTrades)
+      ? initialTrades.filter((trade) =>
+          strategy === 'ALL' ? true : (trade.strategy_id ?? '').toUpperCase() === strategy
+        )
+      : []
+  );
 
   useEffect(() => {
     let isMounted = true;
 
     const fetchTrades = async () => {
       try {
-        const response = await fetch('/api/bot-trades', { cache: 'no-store' });
+        const params = strategy === 'ALL' ? '' : `?strategy=${strategy}`;
+        const response = await fetch(`/api/bot-trades${params}`, { cache: 'no-store' });
         if (!response.ok) return;
         const payload = await response.json();
         if (isMounted && payload.trades) {
-          setTrades(Array.isArray(payload.trades) ? payload.trades : []);
+          const allTrades: BotTrade[] = Array.isArray(payload.trades) ? payload.trades : [];
+          setTrades(
+            allTrades.filter((trade) =>
+              strategy === 'ALL' ? true : (trade.strategy_id ?? '').toUpperCase() === strategy
+            )
+          );
         }
       } catch (error) {
         console.error('Failed to refresh trades', error);
@@ -34,7 +48,7 @@ export default function ActivityStream({ initialTrades }: ActivityStreamProps) {
       isMounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [strategy]);
 
   try {
     return <ActivityList trades={trades} />;

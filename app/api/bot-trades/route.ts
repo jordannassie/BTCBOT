@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabaseUrl =
     (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -14,12 +14,21 @@ export async function GET() {
     auth: { persistSession: false }
   });
 
-  const { data, error } = await client
+  const url = new URL(request.url);
+  const strategyParam = url.searchParams.get('strategy')?.toUpperCase();
+
+  const query = client
     .from('bot_trades')
     .select('*')
     .eq('bot_id', 'default')
     .order('created_at', { ascending: false })
     .limit(100);
+
+  if (strategyParam && ['FASTLOOP', 'SNIPER'].includes(strategyParam)) {
+    query.eq('strategy_id', strategyParam);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('Failed to load trades:', error);

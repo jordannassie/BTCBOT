@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { StrategyOption } from './StrategyFilter';
 
 type PaperPositionRow = {
   id: string;
@@ -14,6 +15,7 @@ type PaperPositionRow = {
   resolved_side?: string | null;
   pnl_usd?: number | null;
   closed_at?: string | null;
+  strategy_id?: string | null;
 };
 
 const STATUS_LABELS: Record<'OPEN' | 'CLOSED', string> = {
@@ -21,7 +23,11 @@ const STATUS_LABELS: Record<'OPEN' | 'CLOSED', string> = {
   CLOSED: 'Closed'
 };
 
-export default function PaperPositionsPanel() {
+type PaperPositionsPanelProps = {
+  strategy: StrategyOption;
+};
+
+export default function PaperPositionsPanel({ strategy }: PaperPositionsPanelProps) {
   const [status, setStatus] = useState<'OPEN' | 'CLOSED'>('OPEN');
   const [positions, setPositions] = useState<PaperPositionRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -32,7 +38,12 @@ export default function PaperPositionsPanel() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/api/paper-positions?status=${status}`, { cache: 'no-store' });
+        const queryParams = [`status=${status}`];
+        if (strategy !== 'ALL') {
+          queryParams.push(`strategy=${strategy}`);
+        }
+        const queryString = queryParams.join('&');
+        const response = await fetch(`/api/paper-positions?${queryString}`, { cache: 'no-store' });
         if (!response.ok) {
           const payload = await response.text();
           setError(`Failed to load positions (${response.status}): ${payload}`);
@@ -55,7 +66,7 @@ export default function PaperPositionsPanel() {
     };
 
     fetchPositions();
-  }, [status]);
+  }, [status, strategy]);
 
   const renderRow = (position: PaperPositionRow) => (
     <div key={position.id} className="table-row">
@@ -74,6 +85,11 @@ export default function PaperPositionsPanel() {
               {position.side.toUpperCase()}
             </span>
             <span className="shares">{position.size_usd.toFixed(2)} USD</span>
+            {position.strategy_id && (
+              <span className={`strategy-badge strategy-${position.strategy_id.toLowerCase()}`}>
+                {position.strategy_id.toUpperCase()}
+              </span>
+            )}
           </div>
         </div>
       </div>
