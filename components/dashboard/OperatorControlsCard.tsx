@@ -4,27 +4,42 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { BotSettings } from '@/lib/botData';
 
+const asString = (value?: number | null): string => (value == null ? '' : String(value));
+
 export default function OperatorControlsCard() {
   const router = useRouter();
   const [isEnabled, setIsEnabled] = useState<boolean>(false);
   const [mode, setMode] = useState<'PAPER' | 'LIVE'>('PAPER');
-  const [edgeThreshold, setEdgeThreshold] = useState('0.02');
-  const [tradeSize, setTradeSize] = useState('0');
-  const [maxTradesPerHour, setMaxTradesPerHour] = useState('0');
-  const [paperBalance, setPaperBalance] = useState('0');
+  const [edgeThreshold, setEdgeThreshold] = useState('');
+  const [tradeSize, setTradeSize] = useState('');
+  const [maxTradesPerHour, setMaxTradesPerHour] = useState('');
+  const [paperBalance, setPaperBalance] = useState('');
   const [liveConfirmed, setLiveConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   const applySettings = (next?: BotSettings | null) => {
-    setIsEnabled(next?.is_enabled ?? false);
-    setMode(next?.mode ?? 'PAPER');
-    setEdgeThreshold(String(next?.edge_threshold ?? 0.02));
-    setTradeSize(String(next?.trade_size ?? 10));
-    setMaxTradesPerHour(String(next?.max_trades_per_hour ?? 5));
-    setPaperBalance(String(next?.paper_balance_usd ?? 50));
-    setLiveConfirmed(next?.mode === 'LIVE');
+    if (!next) {
+      setError('Unable to load bot settings from Supabase.');
+      return;
+    }
+
+    setError(null);
+    setIsEnabled(next.is_enabled);
+    setMode(next.mode);
+    setEdgeThreshold(asString(next.edge_threshold));
+    setTradeSize(asString(next.trade_size ?? next.trade_size_usd));
+    setMaxTradesPerHour(asString(next.max_trades_per_hour));
+    setPaperBalance(asString(next.paper_balance_usd));
+    setLiveConfirmed(next.mode === 'LIVE');
+    setHydrated(true);
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('hydrated settings', next);
+    }
   };
 
   useEffect(() => {
@@ -35,7 +50,7 @@ export default function OperatorControlsCard() {
         const response = await fetch('/api/bot-settings', { cache: 'no-store' });
 
         if (!response.ok) {
-          applySettings(null);
+          setError('Unable to load bot settings.');
           return;
         }
 
@@ -43,7 +58,7 @@ export default function OperatorControlsCard() {
         applySettings(payload.settings ?? null);
       } catch (error) {
         console.error('Unable to load settings', error);
-        applySettings(null);
+        setError('Unable to load bot settings.');
       } finally {
         setLoading(false);
       }
@@ -76,13 +91,13 @@ export default function OperatorControlsCard() {
 
       const payload = await response.json();
 
-        if (payload.ok) {
-          setMessage({ text: 'Saved', type: 'success' });
-          applySettings(payload.settings ?? null);
-          router.refresh();
-        } else {
-          setMessage({ text: payload.error ?? 'Unable to save settings', type: 'error' });
-        }
+      if (payload.ok) {
+        setMessage({ text: 'Saved', type: 'success' });
+        applySettings(payload.settings ?? null);
+        router.refresh();
+      } else {
+        setMessage({ text: payload.error ?? 'Unable to save settings', type: 'error' });
+      }
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : 'Unexpected error', type: 'error' });
     } finally {
@@ -97,7 +112,18 @@ export default function OperatorControlsCard() {
       <div className="profile-card operator-card">
         <div className="operator-header">
           <h3>Operator Controls</h3>
-          <p className="operator-subtitle">Loading...</p>
+          <p className="operator-subtitle">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="profile-card operator-card">
+        <div className="operator-header">
+          <h3>Operator Controls</h3>
+          <p className="operator-subtitle error">{error}</p>
         </div>
       </div>
     );
@@ -109,6 +135,12 @@ export default function OperatorControlsCard() {
         <h3>Operator Controls</h3>
         {mode === 'LIVE' && <p className="operator-warning">LIVE requires Railway KILL_SWITCH=false.</p>}
       </div>
+
+      {message && (
+        <div className={`message ${message.type}`}>
+          {message.text}
+        </div>
+      )}
 
       <div className="operator-form">
         <label className="operator-row">
@@ -195,16 +227,10 @@ export default function OperatorControlsCard() {
         </label>
       </div>
 
-      {message && (
-        <div className={`message ${message.type}`}>
-          {message.text}
-        </div>
-      )}
-
       <button
         className="operator-save"
         onClick={handleSave}
-        disabled={saving || requiresLiveConfirmation || loading}
+        disabled={saving || requiresLiveConfirmation || !hydrated}
       >
         {saving ? 'Saving...' : 'Save Changes'}
       </button>
