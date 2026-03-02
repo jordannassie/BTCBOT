@@ -4,10 +4,6 @@ type ActivityListProps = {
   trades?: BotTrade[];
 };
 
-function safeArray<T>(value: T | undefined): T[] {
-  return Array.isArray(value) ? value : [];
-}
-
 function safeString(value: unknown, fallback = '—'): string {
   if (typeof value === 'string' && value.trim()) return value;
   if (typeof value === 'number') return String(value);
@@ -53,7 +49,9 @@ function getBadgeColor(side: string | undefined): string {
 }
 
 export default function ActivityList({ trades }: ActivityListProps) {
-  const safeTrades = safeArray(trades);
+  const safeTrades: BotTrade[] = Array.isArray(trades)
+    ? trades.flat().filter((item): item is BotTrade => typeof item === 'object' && item !== null)
+    : [];
 
   if (safeTrades.length === 0) {
     return (
