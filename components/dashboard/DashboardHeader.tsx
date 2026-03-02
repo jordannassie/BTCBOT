@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import OperatorControlsTrigger from './OperatorControlsTrigger';
 
 export default function DashboardHeader() {
   return (
@@ -28,7 +27,6 @@ export default function DashboardHeader() {
           <button className="header-btn secondary">How it works</button>
           <button className="header-btn secondary">Log In</button>
           <button className="header-btn primary">Sign Up</button>
-          <OperatorControlsTrigger />
         </div>
       </div>
     </header>

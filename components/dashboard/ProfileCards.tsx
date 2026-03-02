@@ -1,6 +1,7 @@
 'use client';
 
 import type { BotSettings } from '@/lib/botData';
+import OperatorControlsCard from './OperatorControlsCard';
 
 const formatUSD = (value?: number | null) =>
   new Intl.NumberFormat('en-US', {
@@ -97,6 +98,8 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
           <span>Polymarket</span>
         </div>
       </div>
+
+      <OperatorControlsCard />
 
     </div>
   );
