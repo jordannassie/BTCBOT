@@ -1,7 +1,7 @@
 import { getDashboardStats } from '@/lib/botData';
 import ProfileCards from '@/components/dashboard/ProfileCards';
 import DashboardTabs from '@/components/dashboard/DashboardTabs';
-import PositionsTable from '@/components/dashboard/PositionsTable';
+import PaperPositionsPanel from '@/components/dashboard/PaperPositionsPanel';
 
 export const revalidate = 0;
 
@@ -9,10 +9,10 @@ export default async function DashboardPage() {
   const stats = await getDashboardStats();
 
   return (
-    <section className="dashboard-panel">
+    <div className="dashboard-container">
       <ProfileCards stats={stats} />
       <DashboardTabs activeTab="positions" />
-      <PositionsTable positions={stats.positionGroups} />
-    </section>
+      <PaperPositionsPanel />
+    </div>
   );
 }

@@ -108,10 +108,6 @@ export async function POST(request: Request) {
       auth: { persistSession: false }
     });
 
-    const parsedPaperBalance = Number(paper_balance_usd);
-    const roundedPaperBalance =
-      Number.isFinite(parsedPaperBalance) ? Math.round(parsedPaperBalance * 100) / 100 : null;
-
     const updates: Record<string, unknown> = {
       is_enabled,
       mode,
@@ -121,8 +117,8 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString()
     };
 
-    if (roundedPaperBalance !== null) {
-      updates.paper_balance_usd = roundedPaperBalance;
+    if (typeof paper_balance_usd === 'number') {
+      updates.paper_balance_usd = paper_balance_usd;
     }
 
     const { data, error } = await client

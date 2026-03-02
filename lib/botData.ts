@@ -43,17 +43,6 @@ export type PositionGroup = {
   avg_price: number;
   status: string;
   last_updated: string;
-  total_notional: number;
-};
-
-export type DashboardStats = {
-  settings: BotSettings | null;
-  heartbeat: BotHeartbeat | null;
-  positionsValue: number;
-  tradesLast30Days: number;
-  totalTrades: number;
-  positionGroups: PositionGroup[];
-  latestTrades: BotTrade[];
 };
 
 export type PaperPosition = {
@@ -139,6 +128,27 @@ export async function getBotTrades(limit = 100): Promise<BotTrade[]> {
   return (data as BotTrade[]) || [];
 }
 
+export async function fetchOpenPaperPositions(botId: string): Promise<PaperPosition[]> {
+  try {
+    const baseUrl =
+      process.env.URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const response = await fetch(`${baseUrl}/api/paper-positions`, {
+      cache: 'no-store'
+    });
+
+    if (!response.ok) {
+      console.error('paper positions API error', response.status, await response.text());
+      return [];
+    }
+
+    const payload = await response.json();
+    return Array.isArray(payload.rows) ? payload.rows : [];
+  } catch (error) {
+    console.error('Error fetching paper positions via API:', error);
+    return [];
+  }
+}
+
 export type PaperPnlResult = {
   total_pnl_usd: number;
   pnl_24h_usd: number;
@@ -209,20 +219,66 @@ export async function fetchPaperEquity(range: '1D' | '1W' | '1M' | 'ALL'): Promi
   }
 }
 
-export async function getDashboardStats(): Promise<DashboardStats> {
-  const [settings, heartbeat, trades] = await Promise.all([
-    getBotSettings(),
-    getBotHeartbeat(),
-    getBotTrades(250)
+export async function getPositions(): Promise<PositionGroup[]> {
+  const trades = await getBotTrades(1000);
+
+  const grouped = trades.reduce((acc, trade) => {
+    const key = `${trade.market_slug}-${trade.side}`;
+    if (!acc[key]) {
+      acc[key] = {
+        market_slug: trade.market_slug,
+        side: trade.side,
+        total_size: 0,
+        trade_count: 0,
+        avg_price: 0,
+        status: trade.status,
+        last_updated: trade.created_at,
+        total_price: 0
+      };
+    }
+
+    acc[key].total_size += trade.size;
+    acc[key].trade_count += 1;
+    acc[key].total_price += (trade.price || 0) * trade.size;
+
+    if (new Date(trade.created_at) > new Date(acc[key].last_updated)) {
+      acc[key].last_updated = trade.created_at;
+      acc[key].status = trade.status;
+    }
+
+    return acc;
+  }, {} as Record<string, PositionGroup & { total_price: number }>);
+
+  return Object.values(grouped).map(({ total_price, ...pos }) => ({
+    ...pos,
+    avg_price: pos.total_size > 0 ? total_price / pos.total_size : 0
+  }));
+}
+
+export async function getDashboardStats() {
+  const settingsPromise = getBotSettings();
+  const heartbeatPromise = getBotHeartbeat();
+  const tradesPromise = getBotTrades(1000);
+  const positionsPromise = getPositions();
+  const paperPnlPromise = fetchPaperPnl();
+
+  const [settings, heartbeat, trades, positions, paperPnl] = await Promise.all([
+    settingsPromise,
+    heartbeatPromise,
+    tradesPromise,
+    positionsPromise,
+    paperPnlPromise
   ]);
 
-  const positionGroups = groupTradesByMarket(trades);
+  const paperPositions = await fetchOpenPaperPositions(BOT_ID);
 
-  const positionsValue = positionGroups.reduce((sum, group) => sum + group.total_notional, 0);
+  const positionsValue = positions.reduce((sum, p) => sum + p.total_size * p.avg_price, 0);
 
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const tradesLast30Days = trades.filter((trade) => new Date(trade.created_at) >= thirtyDaysAgo).length;
+  const tradesLast30Days = trades.filter((t) => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    return new Date(t.created_at) >= thirtyDaysAgo;
+  }).length;
 
   return {
     settings,
@@ -230,46 +286,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     positionsValue,
     tradesLast30Days,
     totalTrades: trades.length,
-    positionGroups,
-    latestTrades: trades.slice(0, 30)
+    positions,
+    paperPositions,
+    paperPnl
   };
-}
-
-function groupTradesByMarket(trades: BotTrade[]): PositionGroup[] {
-  const aggregated = trades.reduce((acc, trade) => {
-    const slug = trade.market_slug ?? trade.market ?? 'unknown';
-    const existing = acc.get(slug) ?? {
-      market_slug: slug,
-      side: trade.side ?? 'unknown',
-      total_size: 0,
-      trade_count: 0,
-      avg_price: 0,
-      status: trade.status ?? 'unknown',
-      last_updated: trade.created_at,
-      total_notional: 0
-    };
-
-    const size = trade.size ?? 0;
-    const price = trade.price ?? 0;
-
-    existing.total_size += size;
-    existing.total_notional += price * size;
-    existing.trade_count += 1;
-
-    if (!existing.last_updated || new Date(trade.created_at) > new Date(existing.last_updated)) {
-      existing.last_updated = trade.created_at;
-      existing.status = trade.status ?? existing.status;
-      existing.side = trade.side ?? existing.side;
-    }
-
-    acc.set(slug, existing);
-    return acc;
-  }, new Map<string, PositionGroup>());
-
-  return Array.from(aggregated.values())
-    .map((group) => ({
-      ...group,
-      avg_price: group.total_size > 0 ? group.total_notional / group.total_size : 0
-    }))
-    .sort((a, b) => b.total_notional - a.total_notional);
 }
