@@ -15,9 +15,13 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const supabaseUrl =
+    let supabaseUrl =
       (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
     const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+
+    if (supabaseUrl.startsWith('$')) {
+      supabaseUrl = '';
+    }
 
     if (!supabaseUrl.startsWith('http')) {
       return NextResponse.json(
