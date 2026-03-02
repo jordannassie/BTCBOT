@@ -27,18 +27,26 @@ export async function POST(request: Request) {
   const client = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
   try {
-    const { error: updateError } = await client
+    const { data: updatedSettings, error: updateError } = await client
       .from('bot_settings')
       .update({
         paper_balance_usd: roundedBalance,
         paper_pnl_usd: 0,
         updated_at: new Date().toISOString()
       })
-      .eq('bot_id', BOT_ID);
+      .eq('bot_id', BOT_ID)
+      .select('*')
+      .single();
 
     if (updateError) {
       return NextResponse.json({ ok: false, error: updateError.message }, { status: 500 });
     }
+
+    console.error(
+      'paper-reset -> wrote',
+      updatedSettings?.paper_balance_usd,
+      updatedSettings?.paper_pnl_usd
+    );
 
     await client
       .from('paper_positions')
@@ -53,8 +61,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      paper_balance_usd: roundedBalance,
-      paper_pnl_usd: 0
+      ...updatedSettings
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
