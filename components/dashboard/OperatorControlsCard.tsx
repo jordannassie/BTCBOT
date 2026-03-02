@@ -6,7 +6,7 @@ import type { BotSettings } from '@/lib/botData';
 
 export default function OperatorControlsCard() {
   const router = useRouter();
-  const [isEnabled, setIsEnabled] = useState<boolean | null>(null);
+  const [isEnabled, setIsEnabled] = useState<boolean>(false);
   const [mode, setMode] = useState<'PAPER' | 'LIVE'>('PAPER');
   const [edgeThreshold, setEdgeThreshold] = useState('0.02');
   const [tradeSize, setTradeSize] = useState('0');

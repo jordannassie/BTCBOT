@@ -87,7 +87,7 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
         </div>
       </div>
 
-      <OperatorControlsCard settings={stats.settings ?? null} />
+      <OperatorControlsCard />
     </div>
   );
 }
