@@ -42,13 +42,14 @@ export async function POST(request: Request) {
 
     await client
       .from('paper_positions')
-      .update({
-        status: 'CLOSED',
-        closed_at: new Date().toISOString(),
-        pnl_usd: 0
-      })
+      .delete()
+      .eq('bot_id', BOT_ID);
+
+    await client
+      .from('bot_trades')
+      .delete()
       .eq('bot_id', BOT_ID)
-      .eq('status', 'OPEN');
+      .ilike('status', 'PAPER_%');
 
     return NextResponse.json({
       ok: true,

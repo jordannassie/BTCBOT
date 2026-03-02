@@ -163,8 +163,9 @@ export default function OperatorControlsCard() {
       const payload = await response.json();
 
       if (payload.ok) {
-        setMessage({ text: 'Paper balance reset', type: 'success' });
         await loadSettings();
+        router.refresh();
+        setMessage({ text: 'Paper balance reset', type: 'success' });
       } else {
         setMessage({ text: payload.error ?? 'Reset failed', type: 'error' });
       }
