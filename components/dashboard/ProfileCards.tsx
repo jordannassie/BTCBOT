@@ -40,7 +40,7 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
             <div className="stat-label">Biggest Win</div>
           </div>
           <div className="stat-item">
-            <div className="stat-value">{stats.tradesLast30Days.toLocaleString()}</div>
+            <div className="stat-value">{stats.totalTrades.toLocaleString()}</div>
             <div className="stat-label">Predictions</div>
           </div>
         </div>

@@ -1,7 +1,9 @@
-import { getDashboardStats, getBotTrades } from '@/lib/botData';
+import { getDashboardStats } from '@/lib/botData';
 import ProfileCards from '@/components/dashboard/ProfileCards';
 import DashboardTabs from '@/components/dashboard/DashboardTabs';
 import PositionsTable from '@/components/dashboard/PositionsTable';
+
+export const revalidate = 0;
 
 export default async function DashboardPage() {
   const stats = await getDashboardStats();
