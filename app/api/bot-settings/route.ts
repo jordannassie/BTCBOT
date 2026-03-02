@@ -1,15 +1,56 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getBotSettings } from '@/lib/botData';
 
 const BOT_ID = 'default';
 
 export async function GET() {
+  const supabaseUrl =
+    (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
+  const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  let normalizedUrl = supabaseUrl;
+
+  if (normalizedUrl.startsWith('$')) {
+    normalizedUrl = '';
+  }
+
+  if (!normalizedUrl.startsWith('http')) {
+    return NextResponse.json(
+      { ok: false, error: `SUPABASE_URL missing/invalid: "${normalizedUrl}"` },
+      { status: 500 }
+    );
+  }
+
+  if (!serviceKey) {
+    return NextResponse.json({ ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY missing' }, { status: 500 });
+  }
+
   try {
-    const settings = await getBotSettings();
-    return NextResponse.json({ settings });
+    const client = createClient(normalizedUrl, serviceKey, {
+      auth: { persistSession: false }
+    });
+
+    const { data, error } = await client
+      .from('bot_settings')
+      .select('*')
+      .eq('bot_id', BOT_ID)
+      .limit(1)
+      .single();
+
+    if (error) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        { ok: false, error: 'bot_settings row not found for bot_id=default' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, settings: data });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
 
