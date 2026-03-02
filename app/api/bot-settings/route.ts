@@ -72,7 +72,7 @@ export async function POST(request: Request) {
         is_enabled,
         mode,
         edge_threshold,
-        trade_size,
+        trade_size_usd: trade_size,
         max_trades_per_hour,
         updated_at: new Date().toISOString()
       })
