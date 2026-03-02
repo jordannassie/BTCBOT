@@ -149,6 +149,38 @@ export async function fetchOpenPaperPositions(botId: string): Promise<PaperPosit
   }
 }
 
+export type PaperPnlResult = {
+  total_pnl_usd: number;
+  pnl_24h_usd: number;
+};
+
+export async function fetchPaperPnl(): Promise<PaperPnlResult> {
+  const baseUrl =
+    process.env.URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+
+  try {
+    const response = await fetch(`${baseUrl}/api/paper-pnl`, { cache: 'no-store' });
+    if (!response.ok) {
+      console.error('paper pnl API error', response.status, await response.text());
+      return { total_pnl_usd: 0, pnl_24h_usd: 0 };
+    }
+
+    const payload = await response.json();
+    if (!payload.ok) {
+      console.error('paper pnl payload error', payload.error);
+      return { total_pnl_usd: 0, pnl_24h_usd: 0 };
+    }
+
+    return {
+      total_pnl_usd: Number(payload.total_pnl_usd ?? 0),
+      pnl_24h_usd: Number(payload.pnl_24h_usd ?? 0)
+    };
+  } catch (error) {
+    console.error('Error fetching paper pnl via API', error);
+    return { total_pnl_usd: 0, pnl_24h_usd: 0 };
+  }
+}
+
 export async function getPositions(): Promise<PositionGroup[]> {
   const trades = await getBotTrades(1000);
 
@@ -186,11 +218,18 @@ export async function getPositions(): Promise<PositionGroup[]> {
 }
 
 export async function getDashboardStats() {
-  const [settings, heartbeat, trades, positions] = await Promise.all([
-    getBotSettings(),
-    getBotHeartbeat(),
-    getBotTrades(1000),
-    getPositions()
+  const settingsPromise = getBotSettings();
+  const heartbeatPromise = getBotHeartbeat();
+  const tradesPromise = getBotTrades(1000);
+  const positionsPromise = getPositions();
+  const paperPnlPromise = fetchPaperPnl();
+
+  const [settings, heartbeat, trades, positions, paperPnl] = await Promise.all([
+    settingsPromise,
+    heartbeatPromise,
+    tradesPromise,
+    positionsPromise,
+    paperPnlPromise
   ]);
 
   const paperPositions = await fetchOpenPaperPositions(BOT_ID);
@@ -210,6 +249,7 @@ export async function getDashboardStats() {
     tradesLast30Days,
     totalTrades: trades.length,
     positions,
-    paperPositions
+    paperPositions,
+    paperPnl
   };
 }

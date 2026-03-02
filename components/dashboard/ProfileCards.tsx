@@ -9,13 +9,14 @@ type ProfileCardsProps = {
     tradesLast30Days: number;
     totalTrades: number;
     settings?: BotSettings | null;
+    paperPnl?: { total_pnl_usd: number; pnl_24h_usd: number };
   };
 };
 
 export default function ProfileCards({ stats }: ProfileCardsProps) {
   const mode = stats.settings?.mode ?? 'PAPER';
   const paperBalance = stats.settings?.paper_balance_usd ?? 0;
-  const paperPnl = stats.settings?.paper_pnl_usd ?? 0;
+  const paperPnl = stats.paperPnl ?? { total_pnl_usd: 0, pnl_24h_usd: 0 };
   const isPaper = mode === 'PAPER';
   const displayAmount = isPaper ? `$${paperBalance.toFixed(2)}` : '—';
   const subtitle = isPaper ? 'Paper Balance' : 'Live (placeholder)';
@@ -65,7 +66,10 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
         <div className="pnl-amount">{displayAmount}</div>
         <div className="pnl-period">{subtitle}</div>
         {isPaper && (
-          <p className="pnl-subtext">Paper P/L: ${paperPnl.toFixed(2)}</p>
+          <p className="pnl-subtext">Paper P/L (24h): ${paperPnl.pnl_24h_usd.toFixed(2)}</p>
+        )}
+        {isPaper && (
+          <p className="pnl-subtext">Paper P/L (all): ${paperPnl.total_pnl_usd.toFixed(2)}</p>
         )}
         <div className="pnl-chart">
           <svg width="100%" height="100" viewBox="0 0 400 100" preserveAspectRatio="none">
