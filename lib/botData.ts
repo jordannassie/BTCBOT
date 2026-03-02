@@ -4,10 +4,11 @@ export type BotSettings = {
   bot_id: string;
   is_enabled: boolean;
   mode: 'PAPER' | 'LIVE';
-  edge_threshold: number;
-  trade_size: number;
-  max_trades_per_hour: number;
-  paper_balance_usd: number;
+  edge_threshold?: number | null;
+  max_trades_per_hour?: number | null;
+  paper_balance_usd?: number | null;
+  trade_size?: number | null;
+  trade_size_usd?: number | null;
   created_at?: string;
   updated_at?: string;
 };
