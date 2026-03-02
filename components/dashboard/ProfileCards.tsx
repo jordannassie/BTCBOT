@@ -110,33 +110,33 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
 
       <div className="pnl-card">
         <div className="pnl-header">
-          <div className="pnl-indicator">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <circle cx="6" cy="6" r="5" fill="#10b981" />
-            </svg>
-            <span>Profit/Loss</span>
-          </div>
-          <div className="pnl-tabs">
-            <button className="pnl-tab active">1D</button>
-            <button className="pnl-tab">1W</button>
-            <button className="pnl-tab">1M</button>
-            <button className="pnl-tab">ALL</button>
+          <div className="pnl-header-left">
+            <div className="pnl-indicator">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <circle cx="6" cy="6" r="5" fill="#10b981" />
+              </svg>
+              <span>Profit/Loss</span>
+            </div>
+            <div className="pnl-tabs">
+              <button className="pnl-tab active">1D</button>
+              <button className="pnl-tab">1W</button>
+              <button className="pnl-tab">1M</button>
+              <button className="pnl-tab">ALL</button>
+            </div>
           </div>
           <div className="pnl-toggle">
-            <button className={`pnl-toggle-btn ${!liveMode ? 'active' : ''}`} onClick={() => setLiveMode(false)}>
+            <button className="pnl-toggle-btn active" onClick={() => setLiveMode(false)}>
               PAPER
             </button>
-            <button className={`pnl-toggle-btn ${liveMode ? 'active' : ''}`} onClick={() => setLiveMode(true)}>
+            <button className="pnl-toggle-btn" disabled>
               LIVE
             </button>
           </div>
         </div>
         <div className="pnl-amount">{formattedPnl}</div>
-        <div className="pnl-period">{liveMode ? 'Live Balance' : 'Paper Balance'}</div>
+        <div className="pnl-period">Paper Balance</div>
+        <p className="pnl-subtext">Paper P/L: {formatUSD(paperPnl)}</p>
         <p className="pnl-subtext">{formattedBalance}</p>
-        {liveMode && liveUpdatedAt && (
-          <p className="pnl-subtext">Last updated: {new Date(liveUpdatedAt).toLocaleString()}</p>
-        )}
         <div className="pnl-chart">
           <svg width="100%" height="100" viewBox="0 0 400 100" preserveAspectRatio="none">
             <defs>

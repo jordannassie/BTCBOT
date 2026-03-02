@@ -204,6 +204,12 @@
   margin-bottom: 1rem;
 }
 
+.pnl-header-left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
 .pnl-indicator {
   display: flex;
   align-items: center;

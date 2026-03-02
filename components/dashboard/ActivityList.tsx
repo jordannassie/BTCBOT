@@ -85,11 +85,14 @@ export default function ActivityList({ trades }: ActivityListProps) {
           const badgeClass = getBadgeColor(trade.side);
           const marketSlug = formatMarketName(trade.market_slug ?? trade.market ?? null);
           const resolvedPnl = typeof trade.pnl_usd === 'number' ? `$${trade.pnl_usd.toFixed(2)}` : null;
-          const amountMain = resolvedPnl 
-            ? resolvedPnl 
-            : isFinite(Number(trade.size)) 
-              ? `$${(trade.size * (trade.price || 1)).toFixed(2)}` 
-              : '—';
+          const formattedSize = typeof trade.size === 'number' ? `$${trade.size.toFixed(2)}` : null;
+          const formattedPnl = typeof trade.pnl_usd === 'number' ? `$${trade.pnl_usd.toFixed(2)}` : null;
+          let amountMain = '$0.00';
+          if ((trade.status ?? '').toUpperCase().startsWith('PAPER_')) {
+            amountMain = formattedPnl ?? '$0.00';
+          } else if (formattedSize) {
+            amountMain = formattedSize;
+          }
           const amountTime = formatTimeAgo(trade.created_at);
 
           return (
