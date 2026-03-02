@@ -15,9 +15,10 @@ type ProfileCardsProps = {
 export default function ProfileCards({ stats }: ProfileCardsProps) {
   const mode = stats.settings?.mode ?? 'PAPER';
   const paperBalance = stats.settings?.paper_balance_usd ?? 0;
+  const paperPnl = stats.settings?.paper_pnl_usd ?? 0;
   const isPaper = mode === 'PAPER';
   const displayAmount = isPaper ? `$${paperBalance.toFixed(2)}` : '—';
-  const subtitle = isPaper ? 'Paper' : 'Live (placeholder)';
+  const subtitle = isPaper ? 'Paper Balance' : 'Live (placeholder)';
 
   return (
     <div className="profile-section">
@@ -63,6 +64,9 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
         </div>
         <div className="pnl-amount">{displayAmount}</div>
         <div className="pnl-period">{subtitle}</div>
+        {isPaper && (
+          <p className="pnl-subtext">Paper P/L: ${paperPnl.toFixed(2)}</p>
+        )}
         <div className="pnl-chart">
           <svg width="100%" height="100" viewBox="0 0 400 100" preserveAspectRatio="none">
             <defs>

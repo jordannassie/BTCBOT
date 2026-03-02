@@ -261,6 +261,12 @@
   color: rgba(255, 255, 255, 0.5);
 }
 
+.pnl-subtext {
+  font-size: 0.8rem;
+  margin: 0.2rem 0 0;
+  color: rgba(255, 255, 255, 0.7);
+}
+
 .operator-header {
   display: flex;
   flex-direction: column;

@@ -31,6 +31,7 @@ export type BotTrade = {
   created_at: string;
   updated_at?: string;
   market?: string | null;
+  pnl_usd?: number | null;
 };
 
 export type PositionGroup = {
