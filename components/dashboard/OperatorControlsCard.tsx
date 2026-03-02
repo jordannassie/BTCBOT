@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { BotSettings } from '@/lib/botData';
 
+const formatUSD = (value?: number | null): string =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value ?? 0);
+
 const asString = (value?: number | null): string => (value == null ? '' : String(value));
 
 export default function OperatorControlsCard() {
@@ -13,13 +21,29 @@ export default function OperatorControlsCard() {
   const [edgeThreshold, setEdgeThreshold] = useState('');
   const [tradeSize, setTradeSize] = useState('');
   const [maxTradesPerHour, setMaxTradesPerHour] = useState('');
-  const [paperBalance, setPaperBalance] = useState('');
+  const [paperBalance, setPaperBalance] = useState<number | null>(null);
+  const [paperBalanceInput, setPaperBalanceInput] = useState('');
   const [liveConfirmed, setLiveConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+
+  const parsePaperBalance = (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed === '') return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) return null;
+    return Math.round(parsed * 100) / 100;
+  };
+
+  const commitPaperBalance = (): number | null => {
+    const rounded = parsePaperBalance(paperBalanceInput);
+    setPaperBalance(rounded);
+    setPaperBalanceInput(rounded != null ? rounded.toFixed(2) : '');
+    return rounded;
+  };
 
   const applySettings = (next?: BotSettings | null) => {
     if (!next) {
@@ -33,12 +57,19 @@ export default function OperatorControlsCard() {
     setEdgeThreshold(asString(next.edge_threshold));
     setTradeSize(asString(next.trade_size ?? next.trade_size_usd));
     setMaxTradesPerHour(asString(next.max_trades_per_hour));
-    setPaperBalance(asString(next.paper_balance_usd));
+    const balance = next.paper_balance_usd ?? null;
+    setPaperBalance(balance);
+    setPaperBalanceInput(balance != null ? balance.toFixed(2) : '');
     setLiveConfirmed(next.mode === 'LIVE');
     setHydrated(true);
 
     if (process.env.NODE_ENV === 'development') {
       console.log('hydrated settings', next);
+      console.log(
+        'balances',
+        next.paper_balance_usd ?? '—',
+        next.paper_pnl_usd ?? '—'
+      );
     }
   };
 
@@ -71,6 +102,8 @@ export default function OperatorControlsCard() {
     setSaving(true);
     setMessage(null);
 
+    const roundedBalance = commitPaperBalance();
+
     try {
       const response = await fetch('/api/bot-settings', {
         method: 'POST',
@@ -85,7 +118,7 @@ export default function OperatorControlsCard() {
           edge_threshold: parseFloat(edgeThreshold) || 0,
           trade_size: parseFloat(tradeSize) || 0,
           max_trades_per_hour: parseInt(maxTradesPerHour, 10) || 0,
-          paper_balance_usd: parseFloat(paperBalance) || 0
+          paper_balance_usd: roundedBalance ?? 0
         })
       });
 
@@ -196,19 +229,28 @@ export default function OperatorControlsCard() {
         </label>
 
         <label className="operator-row operator-row--paper">
-          <span>Paper Balance</span>
+          <span>
+            Paper Balance
+            <span className="operator-subtitle" style={{ marginLeft: '0.5rem' }}>
+              {paperBalance != null ? formatUSD(paperBalance) : '—'}
+            </span>
+          </span>
           <div className="paper-input">
             <input
-              type="number"
-              step="1"
-              value={paperBalance}
-              onChange={(e) => setPaperBalance(e.target.value)}
+              type="text"
+              inputMode="decimal"
+              value={paperBalanceInput}
+              onChange={(e) => setPaperBalanceInput(e.target.value)}
+              onBlur={commitPaperBalance}
               disabled={mode === 'LIVE'}
             />
             <button
               type="button"
               className="operator-reset"
-              onClick={() => setPaperBalance('50')}
+              onClick={() => {
+                setPaperBalance(50);
+                setPaperBalanceInput('50.00');
+              }}
               disabled={mode === 'LIVE'}
             >
               Reset
