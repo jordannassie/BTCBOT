@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import type { BotSettings } from '@/lib/botData';
 import OperatorControlsCard from './OperatorControlsCard';
 
@@ -21,13 +22,40 @@ type ProfileCardsProps = {
 };
 
 export default function ProfileCards({ stats }: ProfileCardsProps) {
-  const paperBalance = stats.settings?.paper_balance_usd ?? 0;
-  const paperPnl = stats.settings?.paper_pnl_usd ?? 0;
+  const [confirmedSettings, setConfirmedSettings] = useState<BotSettings | null>(stats.settings ?? null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSettings = async () => {
+      try {
+        const response = await fetch('/api/bot-settings', { cache: 'no-store' });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (cancelled) return;
+        if (payload.ok && payload.settings) {
+          setConfirmedSettings(payload.settings);
+        }
+      } catch (error) {
+        console.error('Failed to refresh operator settings', error);
+      }
+    };
+
+    loadSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const settings = confirmedSettings ?? stats.settings;
+  const paperBalance = settings?.paper_balance_usd ?? 0;
+  const paperPnl = settings?.paper_pnl_usd ?? 0;
   const formattedPnl = formatUSD(paperPnl);
   const formattedBalance = formatUSD(paperBalance);
 
   if (process.env.NODE_ENV === 'development') {
-    console.log('balance loaded', stats.settings?.paper_balance_usd, stats.settings?.paper_pnl_usd);
+    console.log('balance loaded', settings?.paper_balance_usd, settings?.paper_pnl_usd);
   }
 
   return (
