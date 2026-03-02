@@ -4,20 +4,17 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { BotSettings } from '@/lib/botData';
 
-type OperatorControlsCardProps = {
-  settings?: BotSettings | null;
-};
-
-export default function OperatorControlsCard({ settings }: OperatorControlsCardProps) {
+export default function OperatorControlsCard() {
   const router = useRouter();
-  const [isEnabled, setIsEnabled] = useState(settings?.is_enabled ?? false);
-  const [mode, setMode] = useState<'PAPER' | 'LIVE'>(settings?.mode ?? 'PAPER');
-  const [edgeThreshold, setEdgeThreshold] = useState(String(settings?.edge_threshold ?? 0.02));
-  const [tradeSize, setTradeSize] = useState(String(settings?.trade_size ?? 10));
-  const [maxTradesPerHour, setMaxTradesPerHour] = useState(String(settings?.max_trades_per_hour ?? 5));
-  const [paperBalance, setPaperBalance] = useState(String(settings?.paper_balance_usd ?? 50));
-  const [liveConfirmed, setLiveConfirmed] = useState(mode === 'LIVE');
+  const [isEnabled, setIsEnabled] = useState<boolean | null>(null);
+  const [mode, setMode] = useState<'PAPER' | 'LIVE'>('PAPER');
+  const [edgeThreshold, setEdgeThreshold] = useState('0.02');
+  const [tradeSize, setTradeSize] = useState('0');
+  const [maxTradesPerHour, setMaxTradesPerHour] = useState('0');
+  const [paperBalance, setPaperBalance] = useState('0');
+  const [liveConfirmed, setLiveConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const applySettings = (next?: BotSettings | null) => {
@@ -31,15 +28,14 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
   };
 
   useEffect(() => {
-    applySettings(settings ?? null);
-  }, [settings]);
-
-  useEffect(() => {
     const loadSettings = async () => {
+      setLoading(true);
+
       try {
-        const response = await fetch('/api/bot-settings');
+        const response = await fetch('/api/bot-settings', { cache: 'no-store' });
 
         if (!response.ok) {
+          applySettings(null);
           return;
         }
 
@@ -47,6 +43,9 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
         applySettings(payload.settings ?? null);
       } catch (error) {
         console.error('Unable to load settings', error);
+        applySettings(null);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -63,6 +62,7 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
         headers: {
           'Content-Type': 'application/json'
         },
+        cache: 'no-store',
         body: JSON.stringify({
           bot_id: 'default',
           is_enabled: isEnabled,
@@ -76,13 +76,13 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
 
       const payload = await response.json();
 
-      if (payload.ok) {
-        setMessage({ text: 'Saved', type: 'success' });
-        applySettings(payload.settings ?? null);
-        router.refresh();
-      } else {
-        setMessage({ text: payload.error ?? 'Unable to save settings', type: 'error' });
-      }
+        if (payload.ok) {
+          setMessage({ text: 'Saved', type: 'success' });
+          applySettings(payload.settings ?? null);
+          router.refresh();
+        } else {
+          setMessage({ text: payload.error ?? 'Unable to save settings', type: 'error' });
+        }
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : 'Unexpected error', type: 'error' });
     } finally {
@@ -91,6 +91,17 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
   };
 
   const requiresLiveConfirmation = mode === 'LIVE' && !liveConfirmed;
+
+  if (loading) {
+    return (
+      <div className="profile-card operator-card">
+        <div className="operator-header">
+          <h3>Operator Controls</h3>
+          <p className="operator-subtitle">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="profile-card operator-card">
@@ -193,7 +204,7 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
       <button
         className="operator-save"
         onClick={handleSave}
-        disabled={saving || requiresLiveConfirmation}
+        disabled={saving || requiresLiveConfirmation || loading}
       >
         {saving ? 'Saving...' : 'Save Changes'}
       </button>

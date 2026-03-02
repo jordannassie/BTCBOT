@@ -280,6 +280,12 @@
   margin: 0;
 }
 
+.operator-subtitle {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0;
+}
+
 .operator-form {
   display: flex;
   flex-direction: column;
