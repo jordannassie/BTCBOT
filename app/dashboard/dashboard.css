@@ -235,6 +235,64 @@
   color: #60a5fa;
 }
 
+.profit-card .pnl-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.profit-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.profit-tab {
+  padding: 0.35rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.profit-tab.active {
+  border-color: transparent;
+  background: rgba(59, 130, 246, 0.25);
+  color: #f8fafc;
+}
+
+.profit-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  margin-right: 0.4rem;
+  background: #10b981;
+}
+
+.profit-tooltip {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.profit-balance {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.profit-balance strong {
+  font-size: 1rem;
+  color: #f8fafc;
+}
+
 .pnl-amount {
   font-size: 2rem;
   font-weight: 700;

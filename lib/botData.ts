@@ -181,6 +181,44 @@ export async function fetchPaperPnl(): Promise<PaperPnlResult> {
   }
 }
 
+export type PaperEquityResult = {
+  range: '1D' | '1W' | '1M' | 'ALL';
+  start_equity: number;
+  end_equity: number;
+  pnl: number;
+  points: { t: number; equity: number }[];
+};
+
+export async function fetchPaperEquity(range: '1D' | '1W' | '1M' | 'ALL'): Promise<PaperEquityResult | null> {
+  const baseUrl =
+    process.env.URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+
+  try {
+    const response = await fetch(`${baseUrl}/api/paper-equity?range=${range}`, { cache: 'no-store' });
+    if (!response.ok) {
+      console.error('paper equity API error', response.status, await response.text());
+      return null;
+    }
+
+    const payload = await response.json();
+    if (!payload.ok) {
+      console.error('paper equity payload error', payload.error);
+      return null;
+    }
+
+    return {
+      range: payload.range,
+      start_equity: Number(payload.start_equity ?? 0),
+      end_equity: Number(payload.end_equity ?? 0),
+      pnl: Number(payload.pnl ?? 0),
+      points: Array.isArray(payload.points) ? payload.points : []
+    };
+  } catch (error) {
+    console.error('Error fetching paper equity via API', error);
+    return null;
+  }
+}
+
 export async function getPositions(): Promise<PositionGroup[]> {
   const trades = await getBotTrades(1000);
 
