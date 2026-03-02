@@ -12,7 +12,7 @@ export default async function DashboardPage() {
     <div className="dashboard-container">
       <ProfileCards stats={stats} />
       <DashboardTabs activeTab="positions" />
-      <PositionsTable positions={stats.positions} />
+      <PositionsTable positions={stats.positions} paperPositions={stats.paperPositions} />
     </div>
   );
 }

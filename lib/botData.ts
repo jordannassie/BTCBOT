@@ -45,6 +45,17 @@ export type PositionGroup = {
   last_updated: string;
 };
 
+export type PaperPosition = {
+  id: string;
+  bot_id: string;
+  status: string;
+  market_slug: string;
+  side: 'yes' | 'no';
+  entry_price: number;
+  size_usd: number;
+  opened_at: string;
+};
+
 const BOT_ID = 'default';
 
 export async function getBotSettings(): Promise<BotSettings | null> {
@@ -117,6 +128,25 @@ export async function getBotTrades(limit = 100): Promise<BotTrade[]> {
   return (data as BotTrade[]) || [];
 }
 
+export async function fetchOpenPaperPositions(botId: string): Promise<PaperPosition[]> {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('paper_positions')
+    .select('id, bot_id, status, market_slug, side, entry_price, size_usd, opened_at')
+    .eq('bot_id', botId)
+    .eq('status', 'OPEN')
+    .order('opened_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
+    console.error('Error loading paper positions:', error);
+    return [];
+  }
+
+  return (data as PaperPosition[]) || [];
+}
+
 export async function getPositions(): Promise<PositionGroup[]> {
   const trades = await getBotTrades(1000);
 
@@ -161,6 +191,8 @@ export async function getDashboardStats() {
     getPositions()
   ]);
 
+  const paperPositions = await fetchOpenPaperPositions(BOT_ID);
+
   const positionsValue = positions.reduce((sum, p) => sum + p.total_size * p.avg_price, 0);
 
   const tradesLast30Days = trades.filter((t) => {
@@ -175,6 +207,7 @@ export async function getDashboardStats() {
     positionsValue,
     tradesLast30Days,
     totalTrades: trades.length,
-    positions
+    positions,
+    paperPositions
   };
 }
