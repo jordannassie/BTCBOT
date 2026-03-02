@@ -130,11 +130,16 @@ export async function getBotTrades(limit = 100): Promise<BotTrade[]> {
 
 export async function fetchOpenPaperPositions(botId: string): Promise<PaperPosition[]> {
   try {
-    const response = await fetch('/api/paper-positions', {
+    const baseUrl =
+      process.env.URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const response = await fetch(`${baseUrl}/api/paper-positions`, {
       cache: 'no-store'
     });
 
-    if (!response.ok) return [];
+    if (!response.ok) {
+      console.error('paper positions API error', response.status, await response.text());
+      return [];
+    }
 
     const payload = await response.json();
     return Array.isArray(payload.rows) ? payload.rows : [];
