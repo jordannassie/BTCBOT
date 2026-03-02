@@ -12,6 +12,12 @@ export default async function DashboardPage() {
     <div className="dashboard-container">
       <ProfileCards stats={stats} />
       <DashboardTabs activeTab="positions" />
+      <div className="debug-line">
+        paperPositions: {stats.paperPositions?.length ?? 0}
+        {stats.paperPositions && stats.paperPositions.length > 0 && (
+          <span> · first market: {stats.paperPositions[0].market_slug}</span>
+        )}
+      </div>
       <PositionsTable positions={stats.positions} paperPositions={stats.paperPositions} />
     </div>
   );
