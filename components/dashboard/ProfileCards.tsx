@@ -22,6 +22,8 @@ type ProfileCardsProps = {
 export default function ProfileCards({ stats }: ProfileCardsProps) {
   const paperBalance = stats.settings?.paper_balance_usd ?? 0;
   const paperPnl = stats.settings?.paper_pnl_usd ?? 0;
+  const formattedPnl = formatUSD(paperPnl);
+  const formattedBalance = formatUSD(paperBalance);
 
   if (process.env.NODE_ENV === 'development') {
     console.log('balance loaded', stats.settings?.paper_balance_usd, stats.settings?.paper_pnl_usd);
@@ -69,9 +71,9 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
             <button className="pnl-tab">ALL</button>
           </div>
         </div>
-        <div className="pnl-amount">{formatUSD(paperPnl)}</div>
+        <div className="pnl-amount">{formattedPnl}</div>
         <div className="pnl-period">Paper Balance</div>
-        <p className="pnl-subtext">{formatUSD(paperBalance)}</p>
+        <p className="pnl-subtext">{formattedBalance}</p>
         <div className="pnl-chart">
           <svg width="100%" height="100" viewBox="0 0 400 100" preserveAspectRatio="none">
             <defs>
