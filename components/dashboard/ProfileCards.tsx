@@ -13,6 +13,12 @@ type ProfileCardsProps = {
 };
 
 export default function ProfileCards({ stats }: ProfileCardsProps) {
+  const mode = stats.settings?.mode ?? 'PAPER';
+  const paperBalance = stats.settings?.paper_balance_usd ?? 0;
+  const isPaper = mode === 'PAPER';
+  const displayAmount = isPaper ? `$${paperBalance.toFixed(2)}` : '—';
+  const subtitle = isPaper ? 'Paper' : 'Live (placeholder)';
+
   return (
     <div className="profile-section">
       <div className="profile-card">
@@ -55,8 +61,8 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
             <button className="pnl-tab">ALL</button>
           </div>
         </div>
-        <div className="pnl-amount">$28,203.80</div>
-        <div className="pnl-period">Post Day</div>
+        <div className="pnl-amount">{displayAmount}</div>
+        <div className="pnl-period">{subtitle}</div>
         <div className="pnl-chart">
           <svg width="100%" height="100" viewBox="0 0 400 100" preserveAspectRatio="none">
             <defs>

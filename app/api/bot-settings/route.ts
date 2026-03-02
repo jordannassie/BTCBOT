@@ -51,7 +51,8 @@ export async function POST(request: Request) {
       mode,
       edge_threshold,
       trade_size,
-      max_trades_per_hour
+      max_trades_per_hour,
+      paper_balance_usd
     } = payload;
 
     if (bot_id !== BOT_ID) {
@@ -66,23 +67,31 @@ export async function POST(request: Request) {
       auth: { persistSession: false }
     });
 
-    const { error } = await client
+    const updates: Record<string, unknown> = {
+      is_enabled,
+      mode,
+      edge_threshold,
+      trade_size_usd: trade_size,
+      max_trades_per_hour,
+      updated_at: new Date().toISOString()
+    };
+
+    if (typeof paper_balance_usd === 'number') {
+      updates.paper_balance_usd = paper_balance_usd;
+    }
+
+    const { data, error } = await client
       .from('bot_settings')
-      .update({
-        is_enabled,
-        mode,
-        edge_threshold,
-        trade_size_usd: trade_size,
-        max_trades_per_hour,
-        updated_at: new Date().toISOString()
-      })
-      .eq('bot_id', BOT_ID);
+      .update(updates)
+      .eq('bot_id', BOT_ID)
+      .select('*')
+      .single();
 
     if (error) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, settings: data });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

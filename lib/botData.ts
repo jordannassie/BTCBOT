@@ -7,6 +7,7 @@ export type BotSettings = {
   edge_threshold: number;
   trade_size: number;
   max_trades_per_hour: number;
+  paper_balance_usd: number;
   created_at?: string;
   updated_at?: string;
 };

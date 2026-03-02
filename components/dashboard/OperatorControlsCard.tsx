@@ -15,6 +15,7 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
   const [edgeThreshold, setEdgeThreshold] = useState(String(settings?.edge_threshold ?? 0.02));
   const [tradeSize, setTradeSize] = useState(String(settings?.trade_size ?? 10));
   const [maxTradesPerHour, setMaxTradesPerHour] = useState(String(settings?.max_trades_per_hour ?? 5));
+  const [paperBalance, setPaperBalance] = useState(String(settings?.paper_balance_usd ?? 50));
   const [liveConfirmed, setLiveConfirmed] = useState(mode === 'LIVE');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -25,6 +26,7 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
     setEdgeThreshold(String(next?.edge_threshold ?? 0.02));
     setTradeSize(String(next?.trade_size ?? 10));
     setMaxTradesPerHour(String(next?.max_trades_per_hour ?? 5));
+    setPaperBalance(String(next?.paper_balance_usd ?? 50));
     setLiveConfirmed(next?.mode === 'LIVE');
   };
 
@@ -67,7 +69,8 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
           mode,
           edge_threshold: parseFloat(edgeThreshold) || 0,
           trade_size: parseFloat(tradeSize) || 0,
-          max_trades_per_hour: parseInt(maxTradesPerHour, 10) || 0
+          max_trades_per_hour: parseInt(maxTradesPerHour, 10) || 0,
+          paper_balance_usd: parseFloat(paperBalance) || 0
         })
       });
 
@@ -75,11 +78,7 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
 
       if (payload.ok) {
         setMessage({ text: 'Saved', type: 'success' });
-        await fetch('/api/bot-settings')
-          .then((res) => res.json())
-          .then((data) => {
-            applySettings(data.settings ?? null);
-          });
+        applySettings(payload.settings ?? null);
         router.refresh();
       } else {
         setMessage({ text: payload.error ?? 'Unable to save settings', type: 'error' });
@@ -151,6 +150,27 @@ export default function OperatorControlsCard({ settings }: OperatorControlsCardP
             value={tradeSize}
             onChange={(e) => setTradeSize(e.target.value)}
           />
+        </label>
+
+        <label className="operator-row operator-row--paper">
+          <span>Paper Balance</span>
+          <div className="paper-input">
+            <input
+              type="number"
+              step="1"
+              value={paperBalance}
+              onChange={(e) => setPaperBalance(e.target.value)}
+              disabled={mode === 'LIVE'}
+            />
+            <button
+              type="button"
+              className="operator-reset"
+              onClick={() => setPaperBalance('50')}
+              disabled={mode === 'LIVE'}
+            >
+              Reset
+            </button>
+          </div>
         </label>
 
         <label className="operator-row">
