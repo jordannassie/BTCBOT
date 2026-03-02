@@ -9,6 +9,7 @@ export type BotSettings = {
   paper_balance_usd?: number | null;
   trade_size?: number | null;
   trade_size_usd?: number | null;
+  paper_pnl_usd?: number | null;
   created_at?: string;
   updated_at?: string;
 };
