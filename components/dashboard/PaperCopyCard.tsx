@@ -188,14 +188,21 @@ export default function PaperCopyCard({ botId, label }: Props) {
   }
 
   const paperPnl = settings?.paper_pnl_usd;
+  const pnlValue = paperPnl != null ? formatUSD(paperPnl) : '--';
+  const pnlColor = paperPnl == null ? '#f8fafc' : paperPnl > 0 ? '#10b981' : paperPnl < 0 ? '#ef4444' : '#f8fafc';
 
   return (
     <div className="pnl-card paper-card">
       <div className="strategy-card-header">
         <div>
           <div className="strategy-card-title">
-            <span>{label}</span>
-            <span className="pnl-subtext">Paper P/L: {paperPnl != null ? formatUSD(paperPnl) : '--'}</span>
+            <span className="strategy-card-label">{label}</span>
+            <div className="strategy-card-pnl">
+              <span className="strategy-card-pnl-label">P/L</span>
+              <span className="strategy-card-pnl-value" style={{ color: pnlColor }}>
+                {pnlValue}
+              </span>
+            </div>
           </div>
           <div className="strategy-card-subtext">Balance: {formatUSD(paperBalance)}</div>
         </div>
