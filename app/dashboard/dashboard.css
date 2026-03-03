@@ -492,6 +492,62 @@
   transform: rotate(180deg);
 }
 
+.account-summary-card {
+  min-height: 180px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.account-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.account-summary-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.account-summary-subtext {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.account-summary-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.account-summary-pnl {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.account-summary-range {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.range-btn {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8fafc;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.range-btn.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+
 .paper-input {
   display: flex;
   align-items: center;
