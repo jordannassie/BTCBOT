@@ -1,5 +1,7 @@
 import { getDashboardStats } from '@/lib/botData';
 import ProfileCards from '@/components/dashboard/ProfileCards';
+import PaperStrategyCard from '@/components/dashboard/PaperStrategyCard';
+import LiveCard from '@/components/dashboard/LiveCard';
 import PositionsSection from '@/components/dashboard/PositionsSection';
 
 export const revalidate = 0;
@@ -9,7 +11,12 @@ export default async function DashboardPage() {
 
   return (
     <div className="dashboard-container">
-      <ProfileCards stats={stats} />
+      <div className="cards-grid">
+        <ProfileCards stats={stats} />
+        <PaperStrategyCard botId="paper_fastloop" label="PAPER — FASTLOOP" />
+        <PaperStrategyCard botId="paper_sniper" label="PAPER — SNIPER" />
+        <LiveCard />
+      </div>
       <PositionsSection />
     </div>
   );

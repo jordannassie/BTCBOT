@@ -1,9 +1,7 @@
-'use server';
-
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const BOT_ID = 'default';
+const PAPER_BOT_IDS = new Set(['default', 'paper_fastloop', 'paper_sniper']);
 
 export async function POST(request: Request) {
   const supabaseUrl =
@@ -18,10 +16,11 @@ export async function POST(request: Request) {
   }
 
   const payload = await request.json().catch(() => null);
-  if (!payload || payload.bot_id !== BOT_ID) {
-    return NextResponse.json({ ok: false, error: 'Invalid payload' }, { status: 400 });
+  if (!payload || !payload.bot_id || !PAPER_BOT_IDS.has(payload.bot_id)) {
+    return NextResponse.json({ ok: false, error: 'Invalid payload: bot_id must be a paper bot' }, { status: 400 });
   }
 
+  const botId: string = payload.bot_id;
   const balance = typeof payload.paper_balance_usd === 'number' ? payload.paper_balance_usd : 0;
   const roundedBalance = Math.round(balance * 100) / 100;
   const client = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
@@ -34,30 +33,13 @@ export async function POST(request: Request) {
         paper_pnl_usd: 0,
         updated_at: new Date().toISOString()
       })
-      .eq('bot_id', BOT_ID)
+      .eq('bot_id', botId)
       .select('*')
       .single();
 
     if (updateError) {
       return NextResponse.json({ ok: false, error: updateError.message }, { status: 500 });
     }
-
-    console.error(
-      'paper-reset -> wrote',
-      updatedSettings?.paper_balance_usd,
-      updatedSettings?.paper_pnl_usd
-    );
-
-    await client
-      .from('paper_positions')
-      .delete()
-      .eq('bot_id', BOT_ID);
-
-    await client
-      .from('bot_trades')
-      .delete()
-      .eq('bot_id', BOT_ID)
-      .ilike('status', 'PAPER_%');
 
     return NextResponse.json({
       ok: true,

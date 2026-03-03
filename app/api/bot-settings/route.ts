@@ -1,48 +1,47 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const BOT_ID = 'default';
+const ALLOWED_BOT_IDS = new Set(['default', 'live', 'paper_fastloop', 'paper_sniper']);
 
-export async function GET() {
-  const supabaseUrl =
-    (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
+function getSupabase() {
+  let supabaseUrl = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  let normalizedUrl = supabaseUrl;
+  if (supabaseUrl.startsWith('$')) supabaseUrl = '';
+  return { supabaseUrl, serviceKey };
+}
 
-  if (normalizedUrl.startsWith('$')) {
-    normalizedUrl = '';
-  }
+export async function GET(request: Request) {
+  const { supabaseUrl, serviceKey } = getSupabase();
 
-  if (!normalizedUrl.startsWith('http')) {
+  if (!supabaseUrl.startsWith('http')) {
     return NextResponse.json(
-      { ok: false, error: `SUPABASE_URL missing/invalid: "${normalizedUrl}"` },
+      { ok: false, error: `SUPABASE_URL missing/invalid: "${supabaseUrl}"` },
       { status: 500 }
     );
   }
-
   if (!serviceKey) {
     return NextResponse.json({ ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY missing' }, { status: 500 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const botId = searchParams.get('bot_id') || 'default';
+
   try {
-    const client = createClient(normalizedUrl, serviceKey, {
-      auth: { persistSession: false }
-    });
+    const client = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
     const { data, error } = await client
       .from('bot_settings')
       .select('*')
-      .eq('bot_id', BOT_ID)
+      .eq('bot_id', botId)
       .limit(1)
       .single();
 
     if (error) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
-
     if (!data) {
       return NextResponse.json(
-        { ok: false, error: 'bot_settings row not found for bot_id=default' },
+        { ok: false, error: `bot_settings row not found for bot_id=${botId}` },
         { status: 404 }
       );
     }
@@ -55,76 +54,50 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const { supabaseUrl, serviceKey } = getSupabase();
+
+  if (!supabaseUrl.startsWith('http')) {
+    return NextResponse.json(
+      { ok: false, error: `SUPABASE_URL missing/invalid: "${supabaseUrl}"` },
+      { status: 500 }
+    );
+  }
+  if (!serviceKey) {
+    return NextResponse.json({ ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY missing' }, { status: 500 });
+  }
+
   try {
-    let supabaseUrl =
-      (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
-    const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-
-    if (supabaseUrl.startsWith('$')) {
-      supabaseUrl = '';
-    }
-
-    if (!supabaseUrl.startsWith('http')) {
-      return NextResponse.json(
-        { ok: false, error: `SUPABASE_URL missing/invalid: "${supabaseUrl}"` },
-        { status: 500 }
-      );
-    }
-
-    if (!serviceKey) {
-      return NextResponse.json(
-        { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY missing' },
-        { status: 500 }
-      );
-    }
-
-    if (!supabaseUrl || !serviceKey) {
-      return NextResponse.json(
-        { ok: false, error: 'Supabase service credentials are missing.' },
-        { status: 500 }
-      );
-    }
-
     const payload = await request.json();
-    const {
-      bot_id,
-      is_enabled,
-      mode,
-      edge_threshold,
-      trade_size,
-      max_trades_per_hour,
-      paper_balance_usd
-    } = payload;
+    const { bot_id, is_enabled, mode, edge_threshold, trade_size, max_trades_per_hour, paper_balance_usd } =
+      payload;
 
-    if (bot_id !== BOT_ID) {
+    if (!bot_id || !ALLOWED_BOT_IDS.has(bot_id)) {
       return NextResponse.json({ ok: false, error: 'Invalid bot_id.' }, { status: 400 });
     }
 
-    if (mode !== 'PAPER' && mode !== 'LIVE') {
+    if (mode != null && mode !== 'PAPER' && mode !== 'LIVE') {
       return NextResponse.json({ ok: false, error: 'Mode must be PAPER or LIVE.' }, { status: 400 });
     }
 
-    const client = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false }
-    });
+    const client = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
     const updates: Record<string, unknown> = {
-      is_enabled,
-      mode,
-      edge_threshold,
-      trade_size_usd: trade_size,
-      max_trades_per_hour,
       updated_at: new Date().toISOString()
     };
 
+    if (is_enabled != null) updates.is_enabled = is_enabled;
+    if (mode != null) updates.mode = mode;
+    if (edge_threshold != null) updates.edge_threshold = edge_threshold;
+    if (trade_size != null) updates.trade_size_usd = trade_size;
+    if (max_trades_per_hour != null) updates.max_trades_per_hour = max_trades_per_hour;
     if (typeof paper_balance_usd === 'number') {
-      updates.paper_balance_usd = paper_balance_usd;
+      updates.paper_balance_usd = Math.round(paper_balance_usd * 100) / 100;
     }
 
     const { data, error } = await client
       .from('bot_settings')
       .update(updates)
-      .eq('bot_id', BOT_ID)
+      .eq('bot_id', bot_id)
       .select('*')
       .single();
 
