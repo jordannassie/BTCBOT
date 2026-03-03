@@ -95,14 +95,14 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
         </div>
       </div>
 
-      <div className="pnl-card">
+      <div className="pnl-card paper-card">
         <div className="pnl-header">
           <div className="pnl-header-left">
             <div className="pnl-indicator">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                 <circle cx="6" cy="6" r="5" fill="#10b981" />
               </svg>
-              <span>Profit/Loss</span>
+              <span>PAPER — FASTLOOP</span>
             </div>
             <div className="pnl-tabs">
               <button className="pnl-tab active">1D</button>
@@ -115,32 +115,40 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
         <div className="pnl-amount">{formattedPaper}</div>
         <div className="pnl-period">Paper Balance</div>
         <div className="balance-lines">
+          <span>Paper P/L: {formatUSD(paperPnl)}</span>
           <span>Live Balance (USDC): {liveBalance != null ? formattedLive : "--"}</span>
           <span>Paper Balance: {formattedPaper}</span>
-          <span>
-            Live Updated: {liveUpdatedAt ? new Date(liveUpdatedAt).toLocaleString() : "--"}
-          </span>
-        </div>
-        <div className="pnl-chart">
-          <svg width="100%" height="100" viewBox="0 0 400 100" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
-                <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0,80 Q50,75 100,70 T200,50 T300,40 T400,30"
-              fill="url(#chartGradient)"
-              stroke="#3b82f6"
-              strokeWidth="2"
-            />
-          </svg>
         </div>
         <div className="pnl-footer">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <rect x="2" y="2" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
-          </svg>
+          <span>Polymarket</span>
+        </div>
+      </div>
+
+      <div className="pnl-card paper-card">
+        <div className="pnl-header">
+          <div className="pnl-header-left">
+            <div className="pnl-indicator">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <circle cx="6" cy="6" r="5" fill="#10b981" />
+              </svg>
+              <span>PAPER — SNIPER</span>
+            </div>
+            <div className="pnl-tabs">
+              <button className="pnl-tab active">1D</button>
+              <button className="pnl-tab">1W</button>
+              <button className="pnl-tab">1M</button>
+              <button className="pnl-tab">ALL</button>
+            </div>
+          </div>
+        </div>
+        <div className="pnl-amount">{formattedPaper}</div>
+        <div className="pnl-period">Paper Balance</div>
+        <div className="balance-lines">
+          <span>Paper P/L: {formatUSD(paperPnl)}</span>
+          <span>Live Balance (USDC): {liveBalance != null ? formattedLive : "--"}</span>
+          <span>Paper Balance: {formattedPaper}</span>
+        </div>
+        <div className="pnl-footer">
           <span>Polymarket</span>
         </div>
       </div>
