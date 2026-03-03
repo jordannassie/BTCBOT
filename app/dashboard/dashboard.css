@@ -409,6 +409,55 @@
   width: auto;
 }
 
+.strategy-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.strategy-card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.strategy-card-subtext {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.strategy-card-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.strategy-card-header .operator-row {
+  margin: 0;
+  padding: 0;
+}
+
+.card-toggle-btn {
+  background: none;
+  border: none;
+  color: #f8fafc;
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.1rem;
+}
+
+.card-toggle-btn span {
+  display: inline-block;
+  transition: transform 0.25s ease;
+}
+
+.card-toggle-btn.expanded span {
+  transform: rotate(180deg);
+}
+
 .paper-input {
   display: flex;
   align-items: center;

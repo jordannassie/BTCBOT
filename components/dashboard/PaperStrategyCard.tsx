@@ -35,6 +35,24 @@ export default function PaperStrategyCard({ botId, label }: Props) {
   const [hydrated, setHydrated] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const storageKey = `strategy-card-expanded/${botId}`;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = window.localStorage.getItem(storageKey);
+    setExpanded(stored === 'true');
+  }, [storageKey]);
+
+  const toggleExpanded = useCallback(() => {
+    setExpanded((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(storageKey, next ? 'true' : 'false');
+      }
+      return next;
+    });
+  }, [storageKey]);
 
   const parsePaperBalance = (value: string) => {
     const trimmed = value.trim();
@@ -188,135 +206,128 @@ export default function PaperStrategyCard({ botId, label }: Props) {
 
   return (
     <div className="pnl-card paper-card">
-      <div className="pnl-header">
-        <div className="pnl-indicator">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <circle cx="6" cy="6" r="5" fill="#10b981" />
-          </svg>
-          <span>{label}</span>
+      <div className="strategy-card-header">
+        <div>
+          <div className="strategy-card-title">
+            <span>{label}</span>
+            <span className="pnl-subtext">Paper P/L: {paperPnl != null ? formatUSD(paperPnl) : '--'}</span>
+          </div>
+          <div className="strategy-card-subtext">Balance: {formatUSD(paperBalance)}</div>
         </div>
-      </div>
-
-      <div className="pnl-amount">{formatUSD(paperBalance)}</div>
-      <div className="pnl-period">Paper Balance</div>
-      <div className="balance-lines">
-        <span>Paper P/L: {paperPnl != null ? formatUSD(paperPnl) : '--'}</span>
-      </div>
-
-      {message && (
-        <div
-          style={{
-            fontSize: '0.8rem',
-            marginBottom: '0.5rem',
-            color: message.type === 'success' ? '#10b981' : '#ef4444'
-          }}
+        <div className="strategy-card-controls">
+          <label className="operator-row">
+            <span>Enabled</span>
+            <div className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={isEnabled}
+                onChange={(e) => setIsEnabled(e.target.checked)}
+                id={`${botId}-enabled`}
+              />
+              <label className="toggle-slider" htmlFor={`${botId}-enabled`}></label>
+            </div>
+          </label>
+          <label className="operator-row">
+            <span>ARM LIVE</span>
+            <div className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={armLive}
+                onChange={(e) => setArmLive(e.target.checked)}
+                id={`${botId}-arm-live`}
+              />
+              <label className="toggle-slider" htmlFor={`${botId}-arm-live`}></label>
+            </div>
+          </label>
+        </div>
+        <button
+          type="button"
+          className={`card-toggle-btn ${expanded ? 'expanded' : ''}`}
+          onClick={toggleExpanded}
+          aria-expanded={expanded}
         >
-          {message.text}
-        </div>
-      )}
-
-      <div className="operator-form">
-        <label className="operator-row">
-          <span>Enabled</span>
-          <div className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={isEnabled}
-              onChange={(e) => setIsEnabled(e.target.checked)}
-              id={`${botId}-enabled`}
-            />
-            <label className="toggle-slider" htmlFor={`${botId}-enabled`}></label>
-          </div>
-        </label>
-
-        <label className="operator-row">
-          <span>ARM LIVE</span>
-          <div className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={armLive}
-              onChange={(e) => setArmLive(e.target.checked)}
-              id={`${botId}-arm-live`}
-            />
-            <label className="toggle-slider" htmlFor={`${botId}-arm-live`}></label>
-          </div>
-        </label>
-        <p className="operator-subtitle" style={{ marginTop: '-0.4rem', marginBottom: '0.75rem' }}>
-          Strategy goes LIVE only when ARM LIVE + LIVE ON are enabled.
-        </p>
-
-        <label className="operator-row">
-          <span>Edge Threshold</span>
-          <input
-            type="number"
-            step="0.01"
-            value={edgeThreshold}
-            onChange={(e) => setEdgeThreshold(e.target.value)}
-          />
-        </label>
-        <p className="operator-subtitle" style={{ marginTop: '-0.35rem', marginBottom: '0.75rem' }}>
-          Trades only happen when YES_ask + NO_ask &lt; 1 - threshold.
-        </p>
-
-        <label className="operator-row">
-          <span>Trade Size</span>
-          <input
-            type="number"
-            step="1"
-            value={tradeSize}
-            onChange={(e) => setTradeSize(e.target.value)}
-          />
-        </label>
-        {sizingHint && (
-          <p className="operator-subtitle" style={{ marginTop: '-0.35rem', marginBottom: '0.75rem' }}>
-            {sizingHint}
-          </p>
-        )}
-
-        <label className="operator-row">
-          <span>Max Trades/Hr</span>
-          <input
-            type="number"
-            step="1"
-            value={maxTradesPerHour}
-            onChange={(e) => setMaxTradesPerHour(e.target.value)}
-          />
-        </label>
-
-        <label className="operator-row operator-row--paper">
-          <span>
-            Paper Balance
-            <span className="operator-subtitle" style={{ marginLeft: '0.5rem' }}>
-              {paperBalance != null ? formatUSD(paperBalance) : '—'}
-            </span>
-          </span>
-          <div className="paper-input">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={paperBalanceInput}
-              onChange={(e) => setPaperBalanceInput(e.target.value)}
-              onBlur={commitPaperBalance}
-            />
-            <button
-              type="button"
-              className="operator-reset"
-              onClick={handleReset}
-              disabled={resetting}
-            >
-              {resetting ? '…' : 'Reset'}
-            </button>
-          </div>
-        </label>
+          <span>▾</span>
+        </button>
       </div>
 
-      <button
-        className="operator-save"
-        onClick={handleSave}
-        disabled={saving || !hydrated}
-      >
-        {saving ? 'Saving…' : 'Save Changes'}
-      </button>
+      {expanded && (
+        <>
+          {message && (
+            <div
+              style={{
+                fontSize: '0.8rem',
+                marginBottom: '0.5rem',
+                color: message.type === 'success' ? '#10b981' : '#ef4444'
+              }}
+            >
+              {message.text}
+            </div>
+          )}
+          <div className="operator-form">
+            <p className="operator-subtitle" style={{ marginTop: '-0.35rem', marginBottom: '0.75rem' }}>
+              Strategy goes LIVE only when ARM LIVE + LIVE ON are enabled.
+            </p>
+            <label className="operator-row">
+              <span>Edge Threshold</span>
+              <input
+                type="number"
+                step="0.01"
+                value={edgeThreshold}
+                onChange={(e) => setEdgeThreshold(e.target.value)}
+              />
+            </label>
+            <p className="operator-subtitle" style={{ marginTop: '-0.35rem', marginBottom: '0.75rem' }}>
+              Trades only happen when YES_ask + NO_ask &lt; 1 - threshold.
+            </p>
+            <label className="operator-row">
+              <span>Trade Size</span>
+              <input
+                type="number"
+                step="1"
+                value={tradeSize}
+                onChange={(e) => setTradeSize(e.target.value)}
+              />
+            </label>
+            {sizingHint && (
+              <p className="operator-subtitle" style={{ marginTop: '-0.35rem', marginBottom: '0.75rem' }}>
+                {sizingHint}
+              </p>
+            )}
+            <label className="operator-row">
+              <span>Max Trades/Hr</span>
+              <input
+                type="number"
+                step="1"
+                value={maxTradesPerHour}
+                onChange={(e) => setMaxTradesPerHour(e.target.value)}
+              />
+            </label>
+            <label className="operator-row operator-row--paper">
+              <span>
+                Paper Balance
+                <span className="operator-subtitle" style={{ marginLeft: '0.5rem' }}>
+                  {paperBalance != null ? formatUSD(paperBalance) : '—'}
+                </span>
+              </span>
+              <div className="paper-input">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={paperBalanceInput}
+                  onChange={(e) => setPaperBalanceInput(e.target.value)}
+                  onBlur={commitPaperBalance}
+                />
+                <button type="button" className="operator-reset" onClick={handleReset} disabled={resetting}>
+                  {resetting ? '…' : 'Reset'}
+                </button>
+              </div>
+            </label>
+          </div>
+          <button className="operator-save" onClick={handleSave} disabled={saving || !hydrated}>
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        </>
+      )}
     </div>
   );
 }
