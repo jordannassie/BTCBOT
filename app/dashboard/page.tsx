@@ -2,7 +2,7 @@ import { getDashboardStats } from '@/lib/botData';
 import ProfileCards from '@/components/dashboard/ProfileCards';
 import PaperStrategyCard from '@/components/dashboard/PaperStrategyCard';
 import LiveCard from '@/components/dashboard/LiveCard';
-import PositionsSection from '@/components/dashboard/PositionsSection';
+import DashboardContent from '@/components/dashboard/DashboardContent';
 
 export const revalidate = 0;
 
@@ -17,7 +17,7 @@ export default async function DashboardPage() {
         <PaperStrategyCard botId="paper_sniper" label="PAPER — SNIPER" />
         <LiveCard />
       </div>
-      <PositionsSection />
+      <DashboardContent />
     </div>
   );
 }
