@@ -503,7 +503,11 @@
   font-weight: 600;
   color: rgba(255, 255, 255, 0.5);
   text-decoration: none;
+  border: none;
   border-bottom: 2px solid transparent;
+  background: none;
+  border-radius: 0;
+  cursor: pointer;
   transition: all 0.2s;
 }
 
