@@ -123,7 +123,7 @@ export default function LiveCard() {
 
       <div className="operator-form" style={{ marginTop: '1rem' }}>
         <label className="operator-row">
-          <span>Live Enabled</span>
+          <span>LIVE ON (Master)</span>
           <div className="toggle-switch">
             <input
               type="checkbox"
@@ -135,6 +135,9 @@ export default function LiveCard() {
             <label className="toggle-slider" htmlFor="live-enabled"></label>
           </div>
         </label>
+        <p className="operator-subtitle" style={{ marginTop: '-0.35rem' }}>
+          Master toggle that authorizes strategies to go LIVE when ARM LIVE is enabled.
+        </p>
       </div>
 
       <button

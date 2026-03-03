@@ -10,6 +10,7 @@ export type BotSettings = {
   trade_size?: number | null;
   trade_size_usd?: number | null;
   paper_pnl_usd?: number | null;
+  arm_live?: boolean | null;
   live_balance_usd?: number | null;
   live_updated_at?: string | null;
   created_at?: string;

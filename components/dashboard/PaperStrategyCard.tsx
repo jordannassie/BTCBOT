@@ -26,6 +26,7 @@ export default function PaperStrategyCard({ botId, label }: Props) {
   const [edgeThreshold, setEdgeThreshold] = useState('');
   const [tradeSize, setTradeSize] = useState('');
   const [maxTradesPerHour, setMaxTradesPerHour] = useState('');
+  const [armLive, setArmLive] = useState(false);
   const [paperBalance, setPaperBalance] = useState<number | null>(null);
   const [paperBalanceInput, setPaperBalanceInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -63,6 +64,7 @@ export default function PaperStrategyCard({ botId, label }: Props) {
     const balance = next.paper_balance_usd ?? null;
     setPaperBalance(balance);
     setPaperBalanceInput(balance != null ? balance.toFixed(2) : '');
+    setArmLive(next.arm_live ?? false);
     setLoadError(null);
     setHydrated(true);
   };
@@ -92,6 +94,17 @@ export default function PaperStrategyCard({ botId, label }: Props) {
     setSaving(true);
     setMessage(null);
     const roundedBalance = commitPaperBalance();
+    const thresholdValue = parseFloat(edgeThreshold) || 0;
+    if (thresholdValue < 0) {
+      const confirmed = window.confirm(
+        'Negative edge thresholds are discouraged. Confirm that this is a debugging scenario before continuing.'
+      );
+      if (!confirmed) {
+        setMessage({ text: 'Negative threshold was cancelled', type: 'error' });
+        setSaving(false);
+        return;
+      }
+    }
     try {
       const res = await fetch('/api/bot-settings', {
         method: 'POST',
@@ -100,10 +113,11 @@ export default function PaperStrategyCard({ botId, label }: Props) {
         body: JSON.stringify({
           bot_id: botId,
           is_enabled: isEnabled,
-          edge_threshold: parseFloat(edgeThreshold) || 0,
+          edge_threshold: thresholdValue,
           trade_size: parseFloat(tradeSize) || 0,
           max_trades_per_hour: parseInt(maxTradesPerHour, 10) || 0,
-          paper_balance_usd: roundedBalance ?? 0
+          paper_balance_usd: roundedBalance ?? 0,
+          arm_live: armLive
         })
       });
       const payload = await res.json();
@@ -164,6 +178,13 @@ export default function PaperStrategyCard({ botId, label }: Props) {
   }
 
   const paperPnl = settings?.paper_pnl_usd;
+  const tradeSizeValue = Number(tradeSize) || 0;
+  const sizingHint =
+    botId === 'paper_sniper'
+      ? tradeSizeValue <= 1
+        ? 'Percent of balance (0.02 = 2%)'
+        : 'Fixed USD'
+      : null;
 
   return (
     <div className="pnl-card paper-card">
@@ -209,6 +230,22 @@ export default function PaperStrategyCard({ botId, label }: Props) {
         </label>
 
         <label className="operator-row">
+          <span>ARM LIVE</span>
+          <div className="toggle-switch">
+            <input
+              type="checkbox"
+              checked={armLive}
+              onChange={(e) => setArmLive(e.target.checked)}
+              id={`${botId}-arm-live`}
+            />
+            <label className="toggle-slider" htmlFor={`${botId}-arm-live`}></label>
+          </div>
+        </label>
+        <p className="operator-subtitle" style={{ marginTop: '-0.4rem', marginBottom: '0.75rem' }}>
+          Strategy goes LIVE only when ARM LIVE + LIVE ON are enabled.
+        </p>
+
+        <label className="operator-row">
           <span>Edge Threshold</span>
           <input
             type="number"
@@ -217,6 +254,9 @@ export default function PaperStrategyCard({ botId, label }: Props) {
             onChange={(e) => setEdgeThreshold(e.target.value)}
           />
         </label>
+        <p className="operator-subtitle" style={{ marginTop: '-0.35rem', marginBottom: '0.75rem' }}>
+          Trades only happen when YES_ask + NO_ask &lt; 1 - threshold.
+        </p>
 
         <label className="operator-row">
           <span>Trade Size</span>
@@ -227,6 +267,11 @@ export default function PaperStrategyCard({ botId, label }: Props) {
             onChange={(e) => setTradeSize(e.target.value)}
           />
         </label>
+        {sizingHint && (
+          <p className="operator-subtitle" style={{ marginTop: '-0.35rem', marginBottom: '0.75rem' }}>
+            {sizingHint}
+          </p>
+        )}
 
         <label className="operator-row">
           <span>Max Trades/Hr</span>

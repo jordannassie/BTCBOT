@@ -68,8 +68,16 @@ export async function POST(request: Request) {
 
   try {
     const payload = await request.json();
-    const { bot_id, is_enabled, mode, edge_threshold, trade_size, max_trades_per_hour, paper_balance_usd } =
-      payload;
+    const {
+      bot_id,
+      is_enabled,
+      mode,
+      edge_threshold,
+      trade_size,
+      max_trades_per_hour,
+      paper_balance_usd,
+      arm_live
+    } = payload;
 
     if (!bot_id || !ALLOWED_BOT_IDS.has(bot_id)) {
       return NextResponse.json({ ok: false, error: 'Invalid bot_id.' }, { status: 400 });
@@ -92,6 +100,9 @@ export async function POST(request: Request) {
     if (max_trades_per_hour != null) updates.max_trades_per_hour = max_trades_per_hour;
     if (typeof paper_balance_usd === 'number') {
       updates.paper_balance_usd = Math.round(paper_balance_usd * 100) / 100;
+    }
+    if (typeof arm_live === 'boolean') {
+      updates.arm_live = arm_live;
     }
 
     const { data, error } = await client
