@@ -206,18 +206,12 @@ export default function PaperStrategyCard({ botId, label }: Props) {
 
   const pnlValue = paperPnl != null ? formatUSD(paperPnl) : '--';
   const pnlColor =
-    paperPnl == null
-      ? '#f8fafc'
-      : paperPnl > 0
-      ? '#10b981'
-      : paperPnl < 0
-      ? '#ef4444'
-      : '#f8fafc';
+    paperPnl == null ? '#f8fafc' : paperPnl > 0 ? '#10b981' : paperPnl < 0 ? '#ef4444' : '#f8fafc';
 
   return (
     <div className="pnl-card paper-card">
       <div className="strategy-card-header">
-        <div>
+        <div className="strategy-card-pl">
           <div className="strategy-card-title">
             <span className="strategy-card-label">{label}</span>
             <div className="strategy-card-pnl">
@@ -227,7 +221,9 @@ export default function PaperStrategyCard({ botId, label }: Props) {
               </span>
             </div>
           </div>
-          <div className="strategy-card-subtext">Balance: {formatUSD(paperBalance)}</div>
+          <div className="strategy-card-pl-subtext">
+            <span>Past Day</span>
+          </div>
         </div>
         <div className="strategy-card-controls">
           <label className="operator-row">

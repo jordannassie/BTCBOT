@@ -202,7 +202,7 @@ export default function PaperScalperCard({ botId, label }: Props) {
   return (
     <div className="pnl-card paper-card">
       <div className="strategy-card-header">
-        <div>
+        <div className="strategy-card-pl">
           <div className="strategy-card-title">
             <span className="strategy-card-label">{label}</span>
             <div className="strategy-card-pnl">
@@ -212,7 +212,9 @@ export default function PaperScalperCard({ botId, label }: Props) {
               </span>
             </div>
           </div>
-          <div className="strategy-card-subtext">Balance: {formatUSD(paperBalance)}</div>
+          <div className="strategy-card-pl-subtext">
+            <span>Past Day</span>
+          </div>
         </div>
         <div className="strategy-card-controls">
           <label className="operator-row">
