@@ -135,6 +135,12 @@
   gap: 1.5rem;
 }
 
+@media (min-width: 1280px) {
+  .profile-section {
+    grid-template-columns: repeat(4, minmax(250px, 1fr));
+  }
+}
+
 .profile-card,
 .pnl-card,
 .operator-card {
@@ -142,6 +148,19 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 1rem;
   padding: 1.75rem;
+}
+
+.live-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  flex-direction: column;
+}
+
+.live-balance {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
 .profile-avatar {

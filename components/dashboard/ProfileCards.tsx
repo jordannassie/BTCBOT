@@ -54,27 +54,19 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
     setLiveUpdatedAt(settings?.live_updated_at ?? null);
   }, [settings]);
 
-  useEffect(() => {
-    const refresh = async () => {
-      try {
-        const response = await fetch('/api/live-balance', { cache: 'no-store' });
-        if (!response.ok) return;
-        const payload = await response.json();
-        if (payload.ok) {
-          setLiveBalance(payload.live_balance_usd ?? null);
-          setLiveUpdatedAt(payload.live_updated_at ?? null);
-        }
-      } catch (error) {
-        console.error('Failed to refresh live balance', error);
-      } finally {
-        loadSettings();
-      }
-    };
-
-    refresh();
-    const interval = setInterval(refresh, 60_000);
-    return () => clearInterval(interval);
+  const refreshLiveBalance = useCallback(async () => {
+    try {
+      await fetch('/api/live-balance', { cache: 'no-store' });
+    } finally {
+      await loadSettings();
+    }
   }, [loadSettings]);
+
+  useEffect(() => {
+    refreshLiveBalance();
+    const interval = setInterval(refreshLiveBalance, 60_000);
+    return () => clearInterval(interval);
+  }, [refreshLiveBalance]);
 
   return (
     <div className="profile-section">
@@ -153,6 +145,24 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
         </div>
       </div>
 
+      <div className="live-card profile-card">
+        <div className="pnl-indicator">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <circle cx="6" cy="6" r="5" fill="#10b981" />
+          </svg>
+          <span>LIVE</span>
+        </div>
+        <div className="live-balance">
+          <div className="pnl-amount">{formattedLive}</div>
+          <p className="pnl-subtext">USDC (Polygon)</p>
+          <p className="pnl-subtext">
+            Updated: {liveUpdatedAt ? new Date(liveUpdatedAt).toLocaleString() : "--"}
+          </p>
+          <button className="operator-save" onClick={refreshLiveBalance}>
+            Refresh
+          </button>
+        </div>
+      </div>
       <OperatorControlsCard />
 
     </div>
