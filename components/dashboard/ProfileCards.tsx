@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { BotSettings } from '@/lib/botData';
 import OperatorControlsCard from './OperatorControlsCard';
 
@@ -23,39 +23,31 @@ type ProfileCardsProps = {
 
 export default function ProfileCards({ stats }: ProfileCardsProps) {
   const [confirmedSettings, setConfirmedSettings] = useState<BotSettings | null>(stats.settings ?? null);
-  const [liveMode, setLiveMode] = useState(false);
   const [liveBalance, setLiveBalance] = useState<number | null>(stats.settings?.live_balance_usd ?? null);
   const [liveUpdatedAt, setLiveUpdatedAt] = useState<string | null>(stats.settings?.live_updated_at ?? null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadSettings = async () => {
-      try {
-        const response = await fetch('/api/bot-settings', { cache: 'no-store' });
-        if (!response.ok) return;
-        const payload = await response.json();
-        if (cancelled) return;
-        if (payload.ok && payload.settings) {
-          setConfirmedSettings(payload.settings);
-        }
-      } catch (error) {
-        console.error('Failed to refresh operator settings', error);
+  const loadSettings = useCallback(async () => {
+    try {
+      const response = await fetch('/api/bot-settings', { cache: 'no-store' });
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (payload.ok && payload.settings) {
+        setConfirmedSettings(payload.settings);
       }
-    };
-
-    loadSettings();
-
-    return () => {
-      cancelled = true;
-    };
+    } catch (error) {
+      console.error('Failed to refresh operator settings', error);
+    }
   }, []);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   const settings = confirmedSettings ?? stats.settings;
   const paperBalance = settings?.paper_balance_usd ?? 0;
   const paperPnl = settings?.paper_pnl_usd ?? 0;
-  const formattedPnl = formatUSD(liveMode && liveBalance != null ? liveBalance : paperPnl);
-  const formattedBalance = formatUSD(liveMode && liveBalance != null ? liveBalance : paperBalance);
+  const formattedLive = formatUSD(liveBalance);
+  const formattedPaper = formatUSD(paperBalance);
 
   useEffect(() => {
     setLiveBalance(settings?.live_balance_usd ?? null);
@@ -63,23 +55,26 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
   }, [settings]);
 
   useEffect(() => {
-    if (!liveMode) return;
-    const fetchLive = async () => {
+    const refresh = async () => {
       try {
         const response = await fetch('/api/live-balance', { cache: 'no-store' });
         if (!response.ok) return;
         const payload = await response.json();
         if (payload.ok) {
-          setLiveBalance(payload.live_balance_usd);
-          setLiveUpdatedAt(payload.live_updated_at);
+          setLiveBalance(payload.live_balance_usd ?? null);
+          setLiveUpdatedAt(payload.live_updated_at ?? null);
         }
       } catch (error) {
         console.error('Failed to refresh live balance', error);
+      } finally {
+        loadSettings();
       }
     };
 
-    fetchLive();
-  }, [liveMode]);
+    refresh();
+    const interval = setInterval(refresh, 60_000);
+    return () => clearInterval(interval);
+  }, [loadSettings]);
 
   return (
     <div className="profile-section">
@@ -124,19 +119,16 @@ export default function ProfileCards({ stats }: ProfileCardsProps) {
               <button className="pnl-tab">ALL</button>
             </div>
           </div>
-          <div className="pnl-toggle">
-            <button className="pnl-toggle-btn active" onClick={() => setLiveMode(false)}>
-              PAPER
-            </button>
-            <button className="pnl-toggle-btn" disabled>
-              LIVE
-            </button>
-          </div>
         </div>
-        <div className="pnl-amount">{formattedPnl}</div>
+        <div className="pnl-amount">{formattedPaper}</div>
         <div className="pnl-period">Paper Balance</div>
-        <p className="pnl-subtext">Paper P/L: {formatUSD(paperPnl)}</p>
-        <p className="pnl-subtext">{formattedBalance}</p>
+        <div className="balance-lines">
+          <span>Live Balance (USDC): {liveBalance != null ? formattedLive : "--"}</span>
+          <span>Paper Balance: {formattedPaper}</span>
+          <span>
+            Live Updated: {liveUpdatedAt ? new Date(liveUpdatedAt).toLocaleString() : "--"}
+          </span>
+        </div>
         <div className="pnl-chart">
           <svg width="100%" height="100" viewBox="0 0 400 100" preserveAspectRatio="none">
             <defs>

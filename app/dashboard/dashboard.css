@@ -296,6 +296,15 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
+.balance-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
 .operator-header {
   display: flex;
   flex-direction: column;
