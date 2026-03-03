@@ -463,6 +463,18 @@
   color: rgba(255, 255, 255, 0.55);
 }
 
+.strategy-card-pnl-row {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.4rem;
+}
+
+.strategy-card-pnl-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
 .strategy-card-controls {
   display: flex;
   align-items: center;
@@ -524,6 +536,26 @@
 }
 
 .account-summary-pnl {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.account-summary-pnls {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.account-summary-pnl-label {
+  display: block;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.account-summary-pnl-value {
   font-size: 1rem;
   font-weight: 600;
 }

@@ -36,6 +36,7 @@ export default function PaperStrategyCard({ botId, label }: Props) {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [pnl24h, setPnl24h] = useState<number | null>(null);
   const storageKey = `strategy-card-expanded/${botId}`;
 
   useEffect(() => {
@@ -107,6 +108,26 @@ export default function PaperStrategyCard({ botId, label }: Props) {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchPnl24h = async () => {
+      try {
+        const res = await fetch(`/api/strategy-pnl?bot_id=${botId}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const payload = await res.json();
+        if (mounted && payload?.pnl_24h != null) {
+          setPnl24h(Number(payload.pnl_24h));
+        }
+      } catch {
+        // ignore
+      }
+    };
+    fetchPnl24h();
+    return () => {
+      mounted = false;
+    };
+  }, [botId]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -207,6 +228,9 @@ export default function PaperStrategyCard({ botId, label }: Props) {
   const pnlValue = paperPnl != null ? formatUSD(paperPnl) : '--';
   const pnlColor =
     paperPnl == null ? '#f8fafc' : paperPnl > 0 ? '#10b981' : paperPnl < 0 ? '#ef4444' : '#f8fafc';
+  const pnl24hValue = pnl24h != null ? formatUSD(pnl24h) : '--';
+  const pnl24hColor =
+    pnl24h == null ? '#f8fafc' : pnl24h > 0 ? '#10b981' : pnl24h < 0 ? '#ef4444' : '#f8fafc';
 
   return (
     <div className="pnl-card paper-card">
@@ -214,15 +238,23 @@ export default function PaperStrategyCard({ botId, label }: Props) {
         <div className="strategy-card-pl">
           <div className="strategy-card-title">
             <span className="strategy-card-label">{label}</span>
-            <div className="strategy-card-pnl">
-              <span className="strategy-card-pnl-label">P/L</span>
-              <span className="strategy-card-pnl-value" style={{ color: pnlColor }}>
-                {pnlValue}
-              </span>
+            <div className="strategy-card-pnl-row">
+              <div className="strategy-card-pnl-block">
+                <span className="strategy-card-pnl-label">P/L (24h)</span>
+                <span className="strategy-card-pnl-value" style={{ color: pnl24hColor }}>
+                  {pnl24hValue}
+                </span>
+              </div>
+              <div className="strategy-card-pnl-block">
+                <span className="strategy-card-pnl-label">P/L (All)</span>
+                <span className="strategy-card-pnl-value" style={{ color: pnlColor }}>
+                  {pnlValue}
+                </span>
+              </div>
             </div>
           </div>
           <div className="strategy-card-pl-subtext">
-            <span>Past Day</span>
+            <span>Balance: {formatUSD(paperBalance)}</span>
           </div>
         </div>
         <div className="strategy-card-controls">

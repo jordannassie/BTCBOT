@@ -1,6 +1,7 @@
 'use server';
 
 import { getPaperSummary } from '@/lib/paperSummary';
+import { getAllStrategyPnl24h } from '@/lib/strategyPnl';
 
 const formatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -15,7 +16,10 @@ export default async function AccountSummaryCard() {
   const rows = await getPaperSummary();
   const totalBalance = rows.reduce((sum, row) => sum + Number(row.paper_balance_usd ?? 0), 0);
   const totalPnl = rows.reduce((sum, row) => sum + Number(row.paper_pnl_usd ?? 0), 0);
+  const totals24h = await getAllStrategyPnl24h();
+  const totalPnl24h = Object.values(totals24h).reduce((sum, value) => sum + value, 0);
   const pnlColor = totalPnl > 0 ? '#10b981' : totalPnl < 0 ? '#ef4444' : '#f8fafc';
+  const pnl24hColor = totalPnl24h > 0 ? '#10b981' : totalPnl24h < 0 ? '#ef4444' : '#f8fafc';
 
   return (
     <div className="profile-card account-summary-card">
@@ -33,8 +37,19 @@ export default async function AccountSummaryCard() {
       </div>
 
       <div className="account-summary-value">{formatUSD(totalBalance)}</div>
-      <div className="account-summary-pnl" style={{ color: pnlColor }}>
-        P/L {formatUSD(totalPnl)}
+      <div className="account-summary-pnls">
+        <div>
+          <span className="account-summary-pnl-label">24h P/L</span>
+          <span className="account-summary-pnl-value" style={{ color: pnl24hColor }}>
+            {formatUSD(totalPnl24h)}
+          </span>
+        </div>
+        <div>
+          <span className="account-summary-pnl-label">All-time P/L</span>
+          <span className="account-summary-pnl-value" style={{ color: pnlColor }}>
+            {formatUSD(totalPnl)}
+          </span>
+        </div>
       </div>
     </div>
   );
