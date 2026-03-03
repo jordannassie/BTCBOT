@@ -13,6 +13,11 @@ export type BotSettings = {
   arm_live?: boolean | null;
   live_balance_usd?: number | null;
   live_updated_at?: string | null;
+  copy_target_wallet?: string | null;
+  scalper_entry_price?: number | null;
+  scalper_take_profit_delta?: number | null;
+  scalper_stop_loss_delta?: number | null;
+  scalper_max_hold_seconds?: number | null;
   created_at?: string;
   updated_at?: string;
 };

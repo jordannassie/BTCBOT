@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const ALLOWED_BOT_IDS = new Set(['default', 'live', 'paper_fastloop', 'paper_sniper']);
+const ALLOWED_BOT_IDS = new Set([
+  'default',
+  'live',
+  'paper_fastloop',
+  'paper_sniper',
+  'paper_copy',
+  'paper_scalper'
+]);
 
 function getSupabase() {
   let supabaseUrl = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
