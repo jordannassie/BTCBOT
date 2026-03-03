@@ -44,38 +44,98 @@ export async function GET() {
     );
   }
 
-  const rpcUrl = (process.env.POLYGON_RPC_URL || "https://polygon-rpc.com").trim();
+  const RPCS = [
+    process.env.POLYGON_RPC_URL?.trim(),
+    "https://polygon-rpc.com",
+    "https://rpc.ankr.com/polygon",
+    "https://polygon-bor.publicnode.com",
+    "https://1rpc.io/matic",
+  ].filter(Boolean) as string[];
 
-  const callRpc = async (data: string) => {
-    const resp = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "eth_call",
-        params: [
-          {
-            to: USDCe_ADDRESS,
-            data,
-          },
-          "latest",
-        ],
-        id: 1,
-      }),
-    });
-    if (!resp.ok) {
-      throw new Error(`Polygon RPC error: ${resp.status}`);
+  type ErrorRecord = {
+    rpc: string;
+    status: number;
+    body: string;
+  };
+
+  const rpcPost = async (method: string, params: any[]): Promise<any> => {
+    let lastError: ErrorRecord | null = null;
+    for (const rpcUrl of RPCS) {
+      try {
+        const resp = await fetch(rpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            method,
+            params,
+            id: 1,
+          }),
+        });
+
+        const body = await resp.text();
+        if (resp.ok) {
+          const parsed = JSON.parse(body);
+          if (parsed.error) {
+            lastError = {
+              rpc: rpcUrl,
+              status: resp.status,
+              body: parsed.error.message ?? JSON.stringify(parsed.error),
+            };
+            continue;
+          }
+          if (parsed.result === undefined) {
+            lastError = {
+              rpc: rpcUrl,
+              status: resp.status,
+              body: "missing result",
+            };
+            continue;
+          }
+          return parsed.result;
+        } else {
+          lastError = {
+            rpc: rpcUrl,
+            status: resp.status,
+            body: body || "no body",
+          };
+          continue;
+        }
+      } catch (ex) {
+        const message = ex instanceof Error ? ex.message : "unknown";
+        lastError = {
+          rpc: rpcUrl,
+          status: 0,
+          body: message,
+        };
+        continue;
+      }
     }
-    const body = await resp.json();
-    if (body.error) throw new Error(`Polygon RPC error: ${body.error.message || body.error}`);
-    return body.result;
+    if (lastError) {
+      throw new Error(
+        `Polygon RPC error: ${lastError.status} via ${lastError.rpc} — ${lastError.body}`,
+      );
+    }
+    throw new Error("Polygon RPC error: no RPC endpoints available");
   };
 
   try {
-    const balanceHex = await callRpc(formatRequestData(balanceOfSig, funderAddress));
+    const balanceHex = await rpcPost("eth_call", [
+      {
+        to: USDCe_ADDRESS,
+        data: formatRequestData(balanceOfSig, funderAddress),
+      },
+      "latest",
+    ]);
     let decimals = 6;
     try {
-      const decimalsHex = await callRpc(decimalsSig);
+      const decimalsHex = await rpcPost("eth_call", [
+        {
+          to: USDCe_ADDRESS,
+          data: decimalsSig,
+        },
+        "latest",
+      ]);
       const decBig = hexToBigInt(decimalsHex);
       decimals = Number(decBig);
     } catch {
