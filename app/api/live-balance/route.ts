@@ -5,6 +5,7 @@ export const runtime = "nodejs";
 
 const BOT_ID = "default";
 const USDCe_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+const USDC_NATIVE_ADDRESS = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
 
 const HEX_ZERO = "0x";
 
@@ -120,9 +121,16 @@ export async function GET() {
   };
 
   try {
-    const balanceHex = await rpcPost("eth_call", [
+    const balanceHexE = await rpcPost("eth_call", [
       {
         to: USDCe_ADDRESS,
+        data: formatRequestData(balanceOfSig, funderAddress),
+      },
+      "latest",
+    ]);
+    const balanceHexNative = await rpcPost("eth_call", [
+      {
+        to: USDC_NATIVE_ADDRESS,
         data: formatRequestData(balanceOfSig, funderAddress),
       },
       "latest",
@@ -142,17 +150,20 @@ export async function GET() {
       decimals = 6;
     }
 
-    const balanceBig = hexToBigInt(balanceHex);
-    const live_balance_usd = Number(
-      (Number(balanceBig) / Math.pow(10, decimals)).toFixed(decimals),
+    const balanceBigE = hexToBigInt(balanceHexE);
+    const balanceBigNative = hexToBigInt(balanceHexNative);
+    const usdc_e = Number((Number(balanceBigE) / Math.pow(10, decimals)).toFixed(decimals));
+    const usdc_native = Number(
+      (Number(balanceBigNative) / Math.pow(10, decimals)).toFixed(decimals),
     );
+    const total = Number((usdc_e + usdc_native).toFixed(decimals));
     const live_updated_at = new Date().toISOString();
 
     const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
     const { error: upsertErr } = await supabase
       .from("bot_settings")
       .upsert(
-        { bot_id: BOT_ID, live_balance_usd, live_updated_at },
+        { bot_id: BOT_ID, live_balance_usd: total, live_updated_at },
         { onConflict: "bot_id" },
       );
 
@@ -160,7 +171,10 @@ export async function GET() {
       ok: true,
       source: "onchain-usdce",
       funder: funderAddress,
-      live_balance_usd,
+      usdc_e,
+      usdc_native,
+      total,
+      live_balance_usd: total,
       live_updated_at,
       warning: upsertErr ? upsertErr.message : undefined,
     });
