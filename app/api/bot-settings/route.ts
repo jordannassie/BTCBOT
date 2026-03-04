@@ -134,8 +134,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await client
       .from('bot_settings')
-      .update(updates)
-      .eq('bot_id', bot_id)
+      .upsert({ bot_id, ...updates }, { onConflict: 'bot_id' })
       .select('*')
       .single();
 

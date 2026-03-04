@@ -1,8 +1,7 @@
 'use server';
 
-import { getDefaultStrategySettings, getPaperSummary } from '@/lib/paperSummary';
+import { getPaperSummary } from '@/lib/paperSummary';
 import { getAllStrategyPnl24h } from '@/lib/strategyPnl';
-import TradeModeToggle from './TradeModeToggle';
 
 const formatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -21,9 +20,6 @@ export default async function AccountSummaryCard() {
   const totalPnl24h = Object.values(totals24h).reduce((sum, value) => sum + value, 0);
   const pnlColor = totalPnl > 0 ? '#10b981' : totalPnl < 0 ? '#ef4444' : '#f8fafc';
   const pnl24hColor = totalPnl24h > 0 ? '#10b981' : totalPnl24h < 0 ? '#ef4444' : '#f8fafc';
-
-  const strategySettings = await getDefaultStrategySettings();
-  const tradeMode = (strategySettings.trade_mode as 'ALL' | 'ONE') ?? 'ONE';
 
   return (
     <div className="profile-card account-summary-card">
@@ -57,7 +53,6 @@ export default async function AccountSummaryCard() {
             </div>
           </div>
         </div>
-        <TradeModeToggle />
       </div>
     </div>
   );

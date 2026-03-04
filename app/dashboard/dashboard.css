@@ -631,6 +631,93 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
+.mode-bar {
+  width: 100%;
+  padding: 0.4rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: center;
+  background: rgba(10, 14, 26, 0.9);
+}
+
+.mode-bar-content {
+  width: 100%;
+  max-width: 1100px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.mode-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.mode-bar-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mode-bar-helper,
+.mode-bar-status {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.mode-bar-status {
+  text-align: right;
+}
+
+.mode-bar-btn {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+  color: #f8fafc;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.mode-bar-btn.active {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  border-color: transparent;
+}
+
+.mode-bar-btn:disabled {
+  opacity: 0.6;
+}
+
+.mode-bar-helper span {
+  display: inline-block;
+  margin-right: 0.35rem;
+}
+
+.mode-bar-status.saved {
+  color: #10b981;
+}
+
+.mode-bar-status.error {
+  color: #f87171;
+}
+
+@media (max-width: 768px) {
+  .mode-bar {
+    padding: 0.6rem 1rem;
+  }
+  .mode-bar-content {
+    justify-content: center;
+  }
+  .mode-bar-status {
+    width: 100%;
+    text-align: left;
+  }
+}
+
 @media (max-width: 768px) {
   .account-summary-content {
     grid-template-columns: 1fr;
