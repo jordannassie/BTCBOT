@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { BotSettings } from '@/lib/botData';
+import { useLastSave } from './LastSaveContext';
 
 const formatUSD = (value?: number | null) =>
   new Intl.NumberFormat('en-US', {
@@ -42,6 +43,11 @@ export default function PaperScalperCard({ botId, label }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [pnl24h, setPnl24h] = useState<number | null>(null);
   const storageKey = `strategy-card-expanded/${botId}`;
+  const { setLastSave } = useLastSave();
+  const [toggleStatus, setToggleStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'mismatch'>(
+    'idle'
+  );
+  const [toggleMessage, setToggleMessage] = useState('');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -106,20 +112,23 @@ export default function PaperScalperCard({ botId, label }: Props) {
   };
 
   const loadSettings = useCallback(
-    async (opts?: { skipLoading?: boolean }) => {
+    async (opts?: { skipLoading?: boolean; ts?: number }) => {
       if (!opts?.skipLoading) {
         setLoading(true);
       }
+      const queryTs = opts?.ts ?? Date.now();
       try {
-        const res = await fetch(`/api/bot-settings?bot_id=${botId}`, { cache: 'no-store' });
+        const res = await fetch(`/api/bot-settings?bot_id=${botId}&_ts=${queryTs}`, { cache: 'no-store' });
         if (!res.ok) {
           setLoadError('Unable to load settings.');
-          return;
+          return null;
         }
         const payload = await res.json();
         applySettings(payload.settings ?? null);
+        return payload.settings ?? null;
       } catch {
         setLoadError('Unable to load settings.');
+        return null;
       } finally {
         if (!opts?.skipLoading) {
           setLoading(false);
@@ -128,6 +137,70 @@ export default function PaperScalperCard({ botId, label }: Props) {
     },
     [botId]
   );
+
+  const autoSaveToggles = useCallback(
+    async (nextEnabled: boolean, nextArmLive: boolean) => {
+      setToggleStatus('saving');
+      setToggleMessage('');
+      try {
+        const res = await fetch('/api/bot-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: JSON.stringify({
+            bot_id: botId,
+            is_enabled: nextEnabled,
+            arm_live: nextArmLive
+          })
+        });
+        const payload = await res.json();
+        if (!payload.ok) {
+          throw new Error(payload.error || 'Save failed');
+        }
+        const updated = await loadSettings({ skipLoading: true });
+        if (!updated) {
+          throw new Error('Readback failed');
+        }
+        const serverEnabled = Boolean(updated.is_enabled);
+        const serverArmLive = Boolean(updated.arm_live);
+        const timestamp = new Date().toISOString();
+        setLastSave({
+          botId,
+          enabled: serverEnabled,
+          armLive: serverArmLive,
+          timestamp
+        });
+        if (serverEnabled !== nextEnabled || serverArmLive !== nextArmLive) {
+          setToggleStatus('mismatch');
+          setToggleMessage(
+            `Mismatch after save (server returned enabled=${serverEnabled} arm_live=${serverArmLive})`
+          );
+        } else {
+          const displayTime = new Date(timestamp).toLocaleTimeString();
+          setToggleStatus('saved');
+          setToggleMessage(
+            `Saved: bot_id=${botId} enabled=${serverEnabled} arm_live=${serverArmLive} at ${displayTime}`
+          );
+        }
+      } catch (error) {
+        setToggleStatus('error');
+        setToggleMessage(
+          `Save failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+      }
+    },
+    [botId, loadSettings, setLastSave]
+  );
+
+  const handleEnabledChange = (checked: boolean) => {
+    setIsEnabled(checked);
+    autoSaveToggles(checked, armLive);
+  };
+
+  const handleArmLiveChange = (checked: boolean) => {
+    setArmLive(checked);
+    autoSaveToggles(isEnabled, checked);
+  };
 
   useEffect(() => {
     loadSettings();
@@ -279,7 +352,7 @@ export default function PaperScalperCard({ botId, label }: Props) {
               <input
                 type="checkbox"
                 checked={isEnabled}
-                onChange={(e) => setIsEnabled(e.target.checked)}
+                onChange={(e) => handleEnabledChange(e.target.checked)}
                 id={`${botId}-enabled`}
               />
               <label className="toggle-slider" htmlFor={`${botId}-enabled`}></label>
@@ -291,13 +364,18 @@ export default function PaperScalperCard({ botId, label }: Props) {
               <input
                 type="checkbox"
                 checked={armLive}
-                onChange={(e) => setArmLive(e.target.checked)}
+                onChange={(e) => handleArmLiveChange(e.target.checked)}
                 id={`${botId}-arm-live`}
               />
               <label className="toggle-slider" htmlFor={`${botId}-arm-live`}></label>
             </div>
           </label>
         </div>
+        {(toggleStatus !== 'idle' || toggleMessage) && (
+          <p className={`toggle-status ${toggleStatus}`}>
+            {toggleStatus === 'saving' ? 'Saving…' : toggleMessage}
+          </p>
+        )}
         <button
           type="button"
           className={`card-toggle-btn ${expanded ? 'expanded' : ''}`}

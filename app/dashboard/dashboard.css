@@ -562,6 +562,25 @@
   gap: 0.5rem;
 }
 
+.toggle-status {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.toggle-status.saving {
+  color: #fbbf24;
+}
+
+.toggle-status.saved {
+  color: #10b981;
+}
+
+.toggle-status.mismatch,
+.toggle-status.error {
+  color: #f87171;
+}
+
 .strategy-card-header .operator-row {
   margin: 0;
   padding: 0;
@@ -750,6 +769,19 @@
 }
 
 .mode-bar-status {
+  text-align: right;
+}
+
+.mode-bar-status-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.mode-bar-last-save {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.65);
   text-align: right;
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLastSave } from './LastSaveContext';
 
 type TradeMode = 'ONE' | 'ALL';
 
@@ -15,6 +16,7 @@ export default function ModeBar() {
   const [mode, setMode] = useState<TradeMode>('ALL');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSource, setLastSource] = useState<'server' | 'local' | 'default'>('default');
+  const { lastSave } = useLastSave();
 
   useEffect(() => {
     let active = true;
@@ -120,11 +122,20 @@ export default function ModeBar() {
             <span>{helperText[mode]}</span>
           </p>
         </div>
-        <div className={`mode-bar-status ${status}`}>
-          <span className="mode-bar-debug">mode source: {lastSource}</span>
-          {status === 'saving' && 'Saving…'}
-          {status === 'saved' && 'Saved'}
-          {status === 'error' && 'Save failed'}
+        <div className="mode-bar-status-group">
+          <div className={`mode-bar-status ${status}`}>
+            <span className="mode-bar-debug">mode source: {lastSource}</span>
+            {status === 'saving' && 'Saving…'}
+            {status === 'saved' && 'Saved'}
+            {status === 'error' && 'Save failed'}
+          </div>
+          <div className="mode-bar-last-save">
+            {lastSave
+              ? `Last save: ${lastSave.botId} enabled=${lastSave.enabled} arm_live=${lastSave.armLive} at ${new Date(
+                  lastSave.timestamp
+                ).toLocaleTimeString()}`
+              : 'Last save: waiting'}
+          </div>
         </div>
       </div>
     </div>
