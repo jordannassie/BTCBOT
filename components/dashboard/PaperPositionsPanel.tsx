@@ -105,6 +105,9 @@ export default function PaperPositionsPanel({ strategy }: PaperPositionsPanelPro
         {status === 'CLOSED' && position.closed_at && (
           <div className="amount-time">{new Date(position.closed_at).toLocaleString()}</div>
         )}
+        {status === 'OPEN' && position.opened_at && (
+          <div className="amount-time">Opened: {new Date(position.opened_at).toLocaleString()}</div>
+        )}
       </div>
     </div>
   );

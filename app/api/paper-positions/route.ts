@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const BOT_ID = 'default';
+const PAPER_BOT_IDS = ['paper_fastloop', 'paper_sniper', 'paper_copy', 'paper_scalper'];
 
 export async function GET(req: Request) {
   const supabaseUrl =
@@ -27,11 +27,11 @@ export async function GET(req: Request) {
       .select(
         'id, bot_id, status, market_slug, side, entry_price, size_usd, opened_at, resolved_side, pnl_usd, closed_at, strategy_id'
       )
-      .eq('bot_id', BOT_ID)
+      .in('bot_id', PAPER_BOT_IDS)
       .eq('status', status)
       .limit(50);
 
-    if (strategyParam && ['FASTLOOP', 'SNIPER'].includes(strategyParam)) {
+    if (strategyParam && strategyParam !== 'ALL') {
       query.eq('strategy_id', strategyParam);
     }
     if (status === 'OPEN') {
