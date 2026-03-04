@@ -13,6 +13,7 @@ const formatUSD = (value?: number | null) =>
   }).format(value ?? 0);
 
 const asString = (value?: number | null): string => (value == null ? '' : String(value));
+const tradeSizeHelper = 'If Trade Size ≤ 1, it is treated as a percent (0.02 = 2%). If > 1, it is fixed USD.';
 
 type Props = {
   botId: 'paper_copy';
@@ -311,6 +312,9 @@ export default function PaperCopyCard({ botId, label }: Props) {
                 onChange={(e) => setTradeSize(e.target.value)}
               />
             </label>
+        <p className="operator-subtitle" style={{ marginTop: '-0.35rem', marginBottom: '0.75rem' }}>
+          {tradeSizeHelper}
+        </p>
             <label className="operator-row">
               <span>Max Trades/Hr</span>
               <input

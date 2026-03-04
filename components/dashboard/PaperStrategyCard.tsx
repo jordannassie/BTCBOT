@@ -217,13 +217,8 @@ export default function PaperStrategyCard({ botId, label }: Props) {
   }
 
   const paperPnl = settings?.paper_pnl_usd;
-  const tradeSizeValue = Number(tradeSize) || 0;
-  const sizingHint =
-    botId === 'paper_sniper'
-      ? tradeSizeValue <= 1
-        ? 'Percent of balance (0.02 = 2%)'
-        : 'Fixed USD'
-      : null;
+  const tradeSizeHelper =
+    'If Trade Size ≤ 1, it is treated as a percent (0.02 = 2%). If > 1, it is fixed USD.';
 
   const pnlValue = paperPnl != null ? formatUSD(paperPnl) : '--';
   const pnlColor =
@@ -331,11 +326,9 @@ export default function PaperStrategyCard({ botId, label }: Props) {
                 onChange={(e) => setTradeSize(e.target.value)}
               />
             </label>
-            {sizingHint && (
-              <p className="operator-subtitle" style={{ marginTop: '-0.35rem', marginBottom: '0.75rem' }}>
-                {sizingHint}
-              </p>
-            )}
+            <p className="operator-subtitle" style={{ marginTop: '-0.35rem', marginBottom: '0.75rem' }}>
+              {tradeSizeHelper}
+            </p>
             <label className="operator-row">
               <span>Max Trades/Hr</span>
               <input
