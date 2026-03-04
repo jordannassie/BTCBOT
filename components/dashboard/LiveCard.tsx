@@ -100,13 +100,17 @@ export default function LiveCard() {
         <div className="pnl-amount">
           {settings?.live_balance_usd != null ? formatUSD(settings.live_balance_usd) : '--'}
         </div>
-        <p className="pnl-subtext">USDC (Polygon)</p>
+        <p className="pnl-subtext">Live Bankroll (USDC Polygon)</p>
         <p className="pnl-subtext">
-          Updated:{' '}
-          {settings?.live_updated_at
-            ? new Date(settings.live_updated_at).toLocaleString()
-            : '--'}
+          Last Updated:{' '}
+          {settings?.live_updated_at ? new Date(settings.live_updated_at).toLocaleString() : '--'}
         </p>
+      </div>
+
+      <div className={`live-status ${settings?.live_balance_usd ? 'ok' : 'warn'}`}>
+        {settings?.live_balance_usd
+          ? 'LIVE bankroll OK'
+          : 'LIVE bankroll not updating (check worker)'}
       </div>
 
       {message && (

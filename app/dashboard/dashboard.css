@@ -183,6 +183,16 @@
   gap: 0.4rem;
 }
 
+.live-status {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #10b981;
+}
+
+.live-status.warn {
+  color: #f87171;
+}
+
 .profile-avatar {
   width: 80px;
   height: 80px;
