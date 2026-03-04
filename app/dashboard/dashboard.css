@@ -672,6 +672,12 @@
   text-align: right;
 }
 
+.mode-bar-status .mode-bar-debug {
+  display: block;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
 .mode-bar-btn {
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: transparent;
