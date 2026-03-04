@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await client
       .from('bot_settings')
-      .select('*')
+      .select('*, arm_live')
       .eq('bot_id', botId)
       .limit(1)
       .single();
@@ -120,6 +120,14 @@ export async function POST(request: Request) {
       updates.arm_live = armLiveValue;
     }
 
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('BOT_SETTINGS_SAVE', {
+        bot_id,
+        arm_live: armLiveValue,
+        keys: Object.keys(updates)
+      });
+    }
+
     if (
       bot_id === 'paper_scalper' &&
       strategy_settings &&
@@ -146,6 +154,10 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
+      console.error('BOT_SETTINGS_SAVE_ERROR', {
+        bot_id,
+        error: error.message
+      });
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 
