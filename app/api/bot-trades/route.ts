@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+const PAPER_BOT_IDS = ['paper_fastloop', 'paper_sniper', 'paper_copy', 'paper_scalper'];
+
 export async function GET(request: Request) {
   const supabaseUrl =
     (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
@@ -20,11 +22,11 @@ export async function GET(request: Request) {
   const query = client
     .from('bot_trades')
     .select('*')
-    .eq('bot_id', 'default')
+    .in('bot_id', PAPER_BOT_IDS)
     .order('created_at', { ascending: false })
     .limit(100);
 
-  if (strategyParam && ['FASTLOOP', 'SNIPER'].includes(strategyParam)) {
+  if (strategyParam && strategyParam !== 'ALL') {
     query.eq('strategy_id', strategyParam);
   }
 

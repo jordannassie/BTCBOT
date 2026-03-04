@@ -19,7 +19,7 @@ type PaperPositionRow = {
 };
 
 const STATUS_LABELS: Record<'OPEN' | 'CLOSED', string> = {
-  OPEN: 'Paper Positions',
+  OPEN: 'Positions',
   CLOSED: 'Closed'
 };
 

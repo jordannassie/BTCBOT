@@ -22,13 +22,16 @@ export async function GET(req: Request) {
   try {
     const client = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
+    const desiredStatuses =
+      status === 'OPEN' ? ['OPEN'] : ['CLOSED', 'FORCED_CLOSE'];
+
     const query = client
       .from('paper_positions')
       .select(
         'id, bot_id, status, market_slug, side, entry_price, size_usd, opened_at, resolved_side, pnl_usd, closed_at, strategy_id'
       )
       .in('bot_id', PAPER_BOT_IDS)
-      .eq('status', status)
+      .in('status', desiredStatuses)
       .limit(50);
 
     if (strategyParam && strategyParam !== 'ALL') {
