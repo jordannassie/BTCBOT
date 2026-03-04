@@ -17,11 +17,11 @@ export default async function DashboardPage() {
       <div className="cards-grid">
         <ProfileCards stats={stats} />
         <AccountSummaryCard />
+        <LiveCard />
         <PaperStrategyCard botId="paper_fastloop" label="PAPER — FASTLOOP" />
         <PaperStrategyCard botId="paper_sniper" label="PAPER — SNIPER" />
         <PaperCopyCard botId="paper_copy" label="PAPER — COPY" />
         <PaperScalperCard botId="paper_scalper" label="PAPER — SCALPER" />
-        <LiveCard />
       </div>
       <DashboardContent />
     </div>
