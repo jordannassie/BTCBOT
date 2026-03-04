@@ -18,6 +18,9 @@ export default function LiveCard() {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [allowance, setAllowance] = useState<number | null>(null);
+  const [copyStatus, setCopyStatus] = useState<string>('');
 
   const loadSettings = useCallback(async () => {
     try {
@@ -25,8 +28,13 @@ export default function LiveCard() {
       if (!res.ok) return;
       const payload = await res.json();
       if (payload.ok && payload.settings) {
-        setSettings(payload.settings);
-        setIsEnabled(payload.settings.is_enabled ?? false);
+        const nextSettings: BotSettings = payload.settings;
+        setSettings(nextSettings);
+        setIsEnabled(nextSettings.is_enabled ?? false);
+        const strategySettings = (nextSettings.strategy_settings ?? {}) as Record<string, unknown>;
+        setWalletAddress((strategySettings.live_wallet_address as string) ?? null);
+        const strategyAllowance = strategySettings.live_allowance_usd as number | undefined;
+        setAllowance(typeof strategyAllowance === 'number' ? strategyAllowance : null);
       }
     } finally {
       setLoading(false);
@@ -67,6 +75,10 @@ export default function LiveCard() {
       if (payload.ok) {
         setSettings(payload.settings);
         setMessage({ text: 'Saved', type: 'success' });
+        const strategySettings = (payload.settings?.strategy_settings ?? {}) as Record<string, unknown>;
+        setWalletAddress((strategySettings.live_wallet_address as string) ?? null);
+        const strategyAllowance = strategySettings.live_allowance_usd as number | undefined;
+        setAllowance(typeof strategyAllowance === 'number' ? strategyAllowance : null);
       } else {
         setMessage({ text: payload.error ?? 'Save failed', type: 'error' });
         setIsEnabled(!enabled);
@@ -108,10 +120,46 @@ export default function LiveCard() {
         </p>
       </div>
 
-      <div className={`live-status ${settings?.live_balance_usd ? 'ok' : 'warn'}`}>
-        {settings?.live_balance_usd
-          ? 'LIVE bankroll OK'
-          : 'LIVE bankroll not updating (check worker)'}
+      <div
+        className={`live-status ${walletAddress ? 'ok' : 'warn'}`}
+        aria-live="polite"
+      >
+        {walletAddress
+          ? settings?.live_balance_usd
+            ? 'LIVE bankroll OK'
+            : 'LIVE bankroll not updating (check worker)'
+          : 'LIVE wallet unknown'}
+        {allowance != null &&
+          settings?.live_balance_usd != null &&
+          allowance < (settings.live_balance_usd ?? 0) &&
+          ' — Allowance low'}
+      </div>
+
+      <div className="live-wallet-row">
+        <span>Bot Wallet:</span>
+        {walletAddress ? (
+          <div className="live-wallet-value">
+            <span>{`${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`}</span>
+            <button
+              type="button"
+              className="live-wallet-copy"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(walletAddress);
+                  setCopyStatus('Copied!');
+                } catch {
+                  setCopyStatus('Copy failed');
+                }
+                setTimeout(() => setCopyStatus(''), 2000);
+              }}
+            >
+              Copy
+            </button>
+            {copyStatus && <span className="copy-feedback">{copyStatus}</span>}
+          </div>
+        ) : (
+          <span className="live-wallet-missing">Unknown (waiting for worker)</span>
+        )}
       </div>
 
       {message && (

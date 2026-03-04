@@ -226,6 +226,49 @@
   color: #10b981;
 }
 
+.live-status.ok {
+  color: #10b981;
+}
+
+.live-status.warn {
+  color: #f87171;
+}
+
+.live-wallet-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.65rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.live-wallet-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.live-wallet-copy {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f8fafc;
+  padding: 0.2rem 0.65rem;
+  border-radius: 0.45rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.copy-feedback {
+  font-size: 0.7rem;
+  color: #a5b4fc;
+}
+
+.live-wallet-missing {
+  color: #fbbf24;
+}
+
 .live-card-featured .pnl-amount {
   font-size: 2.5rem;
   letter-spacing: 0.5px;
