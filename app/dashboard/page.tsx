@@ -14,15 +14,19 @@ export default async function DashboardPage() {
 
   return (
     <div className="dashboard-container">
-      <div className="cards-grid">
+      <section className="overview-row">
         <ProfileCards stats={stats} />
-        <AccountSummaryCard />
         <LiveCard />
+        <AccountSummaryCard />
+      </section>
+
+      <section className="strategy-grid">
         <PaperStrategyCard botId="paper_fastloop" label="PAPER — FASTLOOP" />
         <PaperStrategyCard botId="paper_sniper" label="PAPER — SNIPER" />
         <PaperCopyCard botId="paper_copy" label="PAPER — COPY" />
         <PaperScalperCard botId="paper_scalper" label="PAPER — SCALPER" />
-      </div>
+      </section>
+
       <DashboardContent />
     </div>
   );

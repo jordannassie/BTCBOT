@@ -27,8 +27,8 @@ export default async function AccountSummaryCard() {
         <div className="account-summary-main">
           <div className="account-summary-header">
             <div className="account-summary-title">
-              <span>Account Summary</span>
-              <p className="account-summary-subtext">Live paper totals</p>
+              <span>PAPER BANKROLL</span>
+              <p className="account-summary-subtext">Shared paper total balance &amp; P/L</p>
             </div>
             <div className="account-summary-range">
               <button className="range-btn active">1D</button>

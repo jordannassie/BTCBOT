@@ -89,11 +89,12 @@ export default function LiveCard() {
 
   return (
     <div className="profile-card live-card">
-      <div className="pnl-indicator" style={{ marginBottom: '0.75rem' }}>
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <circle cx="6" cy="6" r="5" fill="#f59e0b" />
-        </svg>
-        <span>LIVE</span>
+      <div className="live-card-header">
+        <span className="live-card-label">LIVE BANKROLL</span>
+        <div className="pnl-indicator">
+          <span className={`live-dot ${isEnabled ? 'active' : ''}`} />
+          <span>LIVE</span>
+        </div>
       </div>
 
       <div className="live-balance">
