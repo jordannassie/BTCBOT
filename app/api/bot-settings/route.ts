@@ -83,7 +83,8 @@ export async function POST(request: Request) {
       trade_size,
       max_trades_per_hour,
       paper_balance_usd,
-      arm_live
+      arm_live,
+      strategy_settings
     } = payload;
 
     if (!bot_id || !ALLOWED_BOT_IDS.has(bot_id)) {
@@ -110,6 +111,25 @@ export async function POST(request: Request) {
     }
     if (typeof arm_live === 'boolean') {
       updates.arm_live = arm_live;
+    }
+
+    if (
+      bot_id === 'paper_scalper' &&
+      strategy_settings &&
+      typeof strategy_settings === 'object' &&
+      !Array.isArray(strategy_settings)
+    ) {
+      const { data: existing } = await client
+        .from('bot_settings')
+        .select('strategy_settings')
+        .eq('bot_id', bot_id)
+        .limit(1)
+        .single();
+      const mergedStrategySettings = {
+        ...(existing?.strategy_settings ?? {}),
+        ...strategy_settings
+      };
+      updates.strategy_settings = mergedStrategySettings;
     }
 
     const { data, error } = await client

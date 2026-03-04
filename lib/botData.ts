@@ -18,6 +18,7 @@ export type BotSettings = {
   scalper_take_profit_delta?: number | null;
   scalper_stop_loss_delta?: number | null;
   scalper_max_hold_seconds?: number | null;
+  strategy_settings?: Record<string, unknown> | null;
   created_at?: string;
   updated_at?: string;
 };

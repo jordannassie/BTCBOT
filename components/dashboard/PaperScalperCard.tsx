@@ -86,10 +86,21 @@ export default function PaperScalperCard({ botId, label }: Props) {
     setMaxTradesPerHour(asString(next.max_trades_per_hour));
     setPaperBalance(next.paper_balance_usd ?? null);
     setPaperBalanceInput(next.paper_balance_usd ? next.paper_balance_usd.toFixed(2) : '');
-    setEntryPrice(asString(next.scalper_entry_price));
-    setTakeProfitDelta(asString(next.scalper_take_profit_delta));
-    setStopLossDelta(asString(next.scalper_stop_loss_delta));
-    setMaxHoldSeconds(asString(next.scalper_max_hold_seconds));
+    const strategySettings = (next.strategy_settings ?? {}) as Record<string, unknown>;
+    const entrySetting =
+      (strategySettings.scalper_entry_cheap_price as number | undefined) ?? next.scalper_entry_price;
+    const takeProfitSetting =
+      (strategySettings.scalper_take_profit_delta as number | undefined) ??
+      next.scalper_take_profit_delta;
+    const stopLossSetting =
+      (strategySettings.scalper_stop_loss_delta as number | undefined) ??
+      next.scalper_stop_loss_delta;
+    const maxHoldSetting =
+      (strategySettings.scalper_max_hold_seconds as number | undefined) ?? next.scalper_max_hold_seconds;
+    setEntryPrice(asString(entrySetting));
+    setTakeProfitDelta(asString(takeProfitSetting));
+    setStopLossDelta(asString(stopLossSetting));
+    setMaxHoldSeconds(asString(maxHoldSetting));
     setLoadError(null);
   };
 
@@ -139,6 +150,12 @@ export default function PaperScalperCard({ botId, label }: Props) {
     setMessage(null);
     const roundedBalance = commitPaperBalance();
     try {
+      const strategySettings = {
+        scalper_entry_cheap_price: parseFloat(entryPrice) || null,
+        scalper_take_profit_delta: parseFloat(takeProfitDelta) || null,
+        scalper_stop_loss_delta: parseFloat(stopLossDelta) || null,
+        scalper_max_hold_seconds: parseInt(maxHoldSeconds, 10) || null
+      };
       const res = await fetch('/api/bot-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -154,7 +171,8 @@ export default function PaperScalperCard({ botId, label }: Props) {
           scalper_entry_price: parseFloat(entryPrice) || null,
           scalper_take_profit_delta: parseFloat(takeProfitDelta) || null,
           scalper_stop_loss_delta: parseFloat(stopLossDelta) || null,
-          scalper_max_hold_seconds: parseInt(maxHoldSeconds, 10) || null
+          scalper_max_hold_seconds: parseInt(maxHoldSeconds, 10) || null,
+          strategy_settings: strategySettings
         })
       });
       const payload = await res.json();
