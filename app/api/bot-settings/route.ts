@@ -17,6 +17,12 @@ function getSupabase() {
   return { supabaseUrl, serviceKey };
 }
 
+const normalizeBoolean = (value: unknown): boolean | undefined => {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return undefined;
+};
+
 export async function GET(request: Request) {
   const { supabaseUrl, serviceKey } = getSupabase();
 
@@ -109,24 +115,17 @@ export async function POST(request: Request) {
     if (typeof paper_balance_usd === 'number') {
       updates.paper_balance_usd = Math.round(paper_balance_usd * 100) / 100;
     }
-    const normalizeBoolean = (value: unknown): boolean | undefined => {
-      if (value === true || value === 'true') return true;
-      if (value === false || value === 'false') return false;
-      return undefined;
-    };
-
-    const armLiveValue = normalizeBoolean(arm_live);
-    if (armLiveValue !== undefined) {
+    const hasArmLive = Object.prototype.hasOwnProperty.call(payload, 'arm_live');
+    const armLiveValue = hasArmLive ? normalizeBoolean(arm_live) : undefined;
+    if (hasArmLive && armLiveValue !== undefined) {
       updates.arm_live = armLiveValue;
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.debug('BOT_SETTINGS_SAVE', {
-        bot_id,
-        arm_live: armLiveValue,
-        keys: Object.keys(updates)
-      });
-    }
+    console.info(
+      `BOT_SETTINGS_SAVE bot_id=${bot_id} arm_live_in_body=${hasArmLive} arm_live_value=${
+        armLiveValue ?? 'undefined'
+      }`
+    );
 
     if (
       bot_id === 'paper_scalper' &&
