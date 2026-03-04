@@ -88,7 +88,7 @@ export default function LiveCard() {
   }
 
   return (
-    <div className="profile-card live-card">
+    <div className="profile-card live-card live-card-featured">
       <div className="live-card-header">
         <span className="live-card-label">LIVE BANKROLL</span>
         <div className="pnl-indicator">
