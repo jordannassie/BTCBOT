@@ -109,8 +109,15 @@ export async function POST(request: Request) {
     if (typeof paper_balance_usd === 'number') {
       updates.paper_balance_usd = Math.round(paper_balance_usd * 100) / 100;
     }
-    if (typeof arm_live === 'boolean') {
-      updates.arm_live = arm_live;
+    const normalizeBoolean = (value: unknown): boolean | undefined => {
+      if (value === true || value === 'true') return true;
+      if (value === false || value === 'false') return false;
+      return undefined;
+    };
+
+    const armLiveValue = normalizeBoolean(arm_live);
+    if (armLiveValue !== undefined) {
+      updates.arm_live = armLiveValue;
     }
 
     if (

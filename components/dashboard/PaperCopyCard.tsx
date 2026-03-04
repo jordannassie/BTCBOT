@@ -89,22 +89,29 @@ export default function PaperCopyCard({ botId, label }: Props) {
     setLoadError(null);
   };
 
-  const loadSettings = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/bot-settings?bot_id=${botId}`, { cache: 'no-store' });
-      if (!res.ok) {
-        setLoadError('Unable to load settings.');
-        return;
+  const loadSettings = useCallback(
+    async (opts?: { skipLoading?: boolean }) => {
+      if (!opts?.skipLoading) {
+        setLoading(true);
       }
-      const payload = await res.json();
-      applySettings(payload.settings ?? null);
-    } catch {
-      setLoadError('Unable to load settings.');
-    } finally {
-      setLoading(false);
-    }
-  }, [botId]);
+      try {
+        const res = await fetch(`/api/bot-settings?bot_id=${botId}`, { cache: 'no-store' });
+        if (!res.ok) {
+          setLoadError('Unable to load settings.');
+          return;
+        }
+        const payload = await res.json();
+        applySettings(payload.settings ?? null);
+      } catch {
+        setLoadError('Unable to load settings.');
+      } finally {
+        if (!opts?.skipLoading) {
+          setLoading(false);
+        }
+      }
+    },
+    [botId]
+  );
 
   useEffect(() => {
     loadSettings();
@@ -153,7 +160,7 @@ export default function PaperCopyCard({ botId, label }: Props) {
       const payload = await res.json();
       if (payload.ok) {
         setMessage({ text: 'Saved', type: 'success' });
-        applySettings(payload.settings ?? null);
+        await loadSettings({ skipLoading: true });
         router.refresh();
       } else {
         setMessage({ text: payload.error ?? 'Save failed', type: 'error' });
