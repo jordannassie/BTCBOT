@@ -560,6 +560,149 @@
   font-weight: 600;
 }
 
+.account-summary-content {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.trade-mode-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+}
+
+.trade-mode-top {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.trade-mode-bubble {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981, #3b82f6);
+  opacity: 0.85;
+}
+
+.trade-mode-btn {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.trade-mode-btn.active {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+}
+
+.trade-mode-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.trade-mode-helper {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.65);
+  text-align: right;
+  max-width: 260px;
+}
+
+.trade-mode-error {
+  font-size: 0.75rem;
+  color: #f87171;
+  text-align: right;
+}
+
+.trade-mode-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+@media (max-width: 768px) {
+  .account-summary-content {
+    grid-template-columns: 1fr;
+  }
+
+  .trade-mode-toggle {
+    align-items: flex-start;
+  }
+}
+
+.trade-mode-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.trade-mode-top {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.trade-mode-bubble {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981, #3b82f6);
+  opacity: 0.85;
+}
+
+.trade-mode-btn {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.trade-mode-btn.active {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+}
+
+.trade-mode-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.trade-mode-helper {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.65);
+  text-align: right;
+  max-width: 220px;
+}
+
+.trade-mode-error {
+  font-size: 0.75rem;
+  color: #f87171;
+  text-align: right;
+}
+
+.trade-mode-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.6);
+}
 .trade-mode-toggle {
   display: flex;
   flex-direction: column;

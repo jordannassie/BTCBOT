@@ -1,27 +1,45 @@
 'use client';
 
-import { useState } from 'react';
+'use client';
+
+import { useEffect, useState } from 'react';
 
 type TradeMode = 'ONE' | 'ALL';
-
-type Props = {
-  initialMode: TradeMode;
-};
 
 const helperText: Record<TradeMode, string> = {
   ONE: 'Only one strategy may open per market window.',
   ALL: 'All strategies may trade the same window (used for comparison).'
 };
 
-export default function TradeModeToggle({ initialMode }: Props) {
-  const [mode, setMode] = useState<TradeMode>(initialMode);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export default function TradeModeToggle() {
+  const [mode, setMode] = useState<TradeMode>('ONE');
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  useEffect(() => {
+    let active = true;
+    const loadMode = async () => {
+      try {
+        const res = await fetch('/api/bot-settings?bot_id=default', { cache: 'no-store' });
+        if (!res.ok) return;
+        const payload = await res.json();
+        const settings = payload?.settings?.strategy_settings;
+        const tradeMode = settings?.trade_mode;
+        if (active && (tradeMode === 'ONE' || tradeMode === 'ALL')) {
+          setMode(tradeMode);
+        }
+      } catch {
+        //
+      }
+    };
+    loadMode();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleChange = async (nextMode: TradeMode) => {
     if (nextMode === mode) return;
-    setSaving(true);
-    setError(null);
+    setStatus('saving');
     try {
       const response = await fetch('/api/bot-settings', {
         method: 'POST',
@@ -36,35 +54,40 @@ export default function TradeModeToggle({ initialMode }: Props) {
       const payload = await response.json();
       if (payload.ok) {
         setMode(nextMode);
+        setStatus('saved');
+        setTimeout(() => setStatus('idle'), 1500);
       } else {
-        setError(payload.error ?? 'Failed to save');
+        setStatus('error');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unexpected error');
-    } finally {
-      setSaving(false);
+    } catch {
+      setStatus('error');
     }
   };
 
   return (
     <div className="trade-mode-toggle">
-      <div className="trade-mode-label">
-        <span>Trade Mode</span>
+      <div className="trade-mode-top">
+        <div className="trade-mode-label">
+          <span>Trade Mode</span>
+        </div>
+        <div className="trade-mode-bubble" />
       </div>
       <div className="trade-mode-buttons">
         {(['ONE', 'ALL'] as TradeMode[]).map((option) => (
           <button
             key={option}
-            className={`range-btn ${mode === option ? 'active' : ''}`}
+            className={`trade-mode-btn ${mode === option ? 'active' : ''}`}
             onClick={() => handleChange(option)}
-            disabled={saving}
+            disabled={status === 'saving'}
           >
             {option === 'ONE' ? 'ONE TRADE' : 'ALL'}
           </button>
         ))}
       </div>
       <div className="trade-mode-helper">{helperText[mode]}</div>
-      {error && <div className="trade-mode-error">{error}</div>}
+      {status === 'saving' && <div className="trade-mode-status">Saving…</div>}
+      {status === 'saved' && <div className="trade-mode-status saved">Saved</div>}
+      {status === 'error' && <div className="trade-mode-error">Save failed</div>}
     </div>
   );
 }

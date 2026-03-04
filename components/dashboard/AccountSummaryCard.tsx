@@ -27,34 +27,37 @@ export default async function AccountSummaryCard() {
 
   return (
     <div className="profile-card account-summary-card">
-      <div className="account-summary-header">
-        <div className="account-summary-title">
-          <span>Account Summary</span>
-          <p className="account-summary-subtext">Live paper totals</p>
+      <div className="account-summary-content">
+        <div className="account-summary-main">
+          <div className="account-summary-header">
+            <div className="account-summary-title">
+              <span>Account Summary</span>
+              <p className="account-summary-subtext">Live paper totals</p>
+            </div>
+            <div className="account-summary-range">
+              <button className="range-btn active">1D</button>
+              <button className="range-btn">1W</button>
+              <button className="range-btn">1M</button>
+              <button className="range-btn">ALL</button>
+            </div>
+          </div>
+          <div className="account-summary-value">{formatUSD(totalBalance)}</div>
+          <div className="account-summary-pnls">
+            <div>
+              <span className="account-summary-pnl-label">24h P/L</span>
+              <span className="account-summary-pnl-value" style={{ color: pnl24hColor }}>
+                {formatUSD(totalPnl24h)}
+              </span>
+            </div>
+            <div>
+              <span className="account-summary-pnl-label">All-time P/L</span>
+              <span className="account-summary-pnl-value" style={{ color: pnlColor }}>
+                {formatUSD(totalPnl)}
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="account-summary-range">
-          <button className="range-btn active">1D</button>
-          <button className="range-btn">1W</button>
-          <button className="range-btn">1M</button>
-          <button className="range-btn">ALL</button>
-        </div>
-        <TradeModeToggle initialMode={tradeMode} />
-      </div>
-
-      <div className="account-summary-value">{formatUSD(totalBalance)}</div>
-      <div className="account-summary-pnls">
-        <div>
-          <span className="account-summary-pnl-label">24h P/L</span>
-          <span className="account-summary-pnl-value" style={{ color: pnl24hColor }}>
-            {formatUSD(totalPnl24h)}
-          </span>
-        </div>
-        <div>
-          <span className="account-summary-pnl-label">All-time P/L</span>
-          <span className="account-summary-pnl-value" style={{ color: pnlColor }}>
-            {formatUSD(totalPnl)}
-          </span>
-        </div>
+        <TradeModeToggle />
       </div>
     </div>
   );
