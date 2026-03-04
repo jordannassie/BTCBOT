@@ -37,3 +37,20 @@ export async function getPaperSummary(): Promise<PaperSummaryRow[]> {
 
   return Array.isArray(data) ? (data as PaperSummaryRow[]) : [];
 }
+
+export async function getDefaultStrategySettings(): Promise<Record<string, unknown>> {
+  const client = getServiceClient();
+  const { data, error } = await client
+    .from('bot_settings')
+    .select('strategy_settings')
+    .eq('bot_id', 'default')
+    .limit(1)
+    .single();
+
+  if (error) {
+    console.error('Unable to fetch default strategy settings', error);
+    return {};
+  }
+
+  return data?.strategy_settings ?? {};
+}

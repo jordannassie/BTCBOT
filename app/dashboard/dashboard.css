@@ -560,6 +560,30 @@
   font-weight: 600;
 }
 
+.trade-mode-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.trade-mode-helper {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.65);
+  text-align: right;
+}
+
+.trade-mode-error {
+  font-size: 0.75rem;
+  color: #ef4444;
+}
+
+.trade-mode-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.6);
+}
 .account-summary-range {
   display: flex;
   gap: 0.25rem;

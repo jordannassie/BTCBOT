@@ -1,7 +1,8 @@
 'use server';
 
-import { getPaperSummary } from '@/lib/paperSummary';
+import { getDefaultStrategySettings, getPaperSummary } from '@/lib/paperSummary';
 import { getAllStrategyPnl24h } from '@/lib/strategyPnl';
+import TradeModeToggle from './TradeModeToggle';
 
 const formatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -21,6 +22,9 @@ export default async function AccountSummaryCard() {
   const pnlColor = totalPnl > 0 ? '#10b981' : totalPnl < 0 ? '#ef4444' : '#f8fafc';
   const pnl24hColor = totalPnl24h > 0 ? '#10b981' : totalPnl24h < 0 ? '#ef4444' : '#f8fafc';
 
+  const strategySettings = await getDefaultStrategySettings();
+  const tradeMode = (strategySettings.trade_mode as 'ALL' | 'ONE') ?? 'ONE';
+
   return (
     <div className="profile-card account-summary-card">
       <div className="account-summary-header">
@@ -34,6 +38,7 @@ export default async function AccountSummaryCard() {
           <button className="range-btn">1M</button>
           <button className="range-btn">ALL</button>
         </div>
+        <TradeModeToggle initialMode={tradeMode} />
       </div>
 
       <div className="account-summary-value">{formatUSD(totalBalance)}</div>
