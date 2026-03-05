@@ -37,5 +37,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ trades: [] }, { status: 500 });
   }
 
+  if (data) {
+    const strategyIds = Array.from(new Set(data.map((item) => (item.strategy_id ?? 'UNKNOWN').toUpperCase())));
+    console.info('ACTIVITY_FETCH', {
+      rows_count: data.length,
+      strategy_ids: strategyIds
+    });
+  }
+
   return NextResponse.json({ trades: data ?? [] });
 }

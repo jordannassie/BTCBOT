@@ -269,6 +269,29 @@
   color: #fbbf24;
 }
 
+.live-wallet-status {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.live-wallet-status.match {
+  color: #10b981;
+}
+
+.live-wallet-status.mismatch {
+  color: #f87171;
+}
+
+.live-wallet-status.unknown {
+  color: #fbbf24;
+}
+
+.live-wallet-copy-feedback {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .live-card-featured .pnl-amount {
   font-size: 2.5rem;
   letter-spacing: 0.5px;

@@ -83,7 +83,9 @@ export default function ActivityList({ trades }: ActivityListProps) {
         {safeTrades.map((trade) => {
           const typeLabel = getTypeLabel(trade.status, trade.side);
           const badgeClass = getBadgeColor(trade.side);
-          const marketSlug = formatMarketName(trade.market_slug ?? trade.market ?? null);
+          const rawMarketSlug = trade.market_slug ?? trade.market;
+          const formattedMarket = formatMarketName(rawMarketSlug ?? null);
+          const marketSlug = formattedMarket === 'Unknown' ? rawMarketSlug ?? 'Unknown' : formattedMarket;
           const resolvedPnl = typeof trade.pnl_usd === 'number' ? `$${trade.pnl_usd.toFixed(2)}` : null;
           const formattedSize = typeof trade.size === 'number' ? `$${trade.size.toFixed(2)}` : null;
           const formattedPnl = typeof trade.pnl_usd === 'number' ? `$${trade.pnl_usd.toFixed(2)}` : null;
