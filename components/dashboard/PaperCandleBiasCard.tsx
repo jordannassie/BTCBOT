@@ -23,6 +23,11 @@ const parseDirectionMode = (value: unknown): 'normal' | 'reverse' => {
   return normalized === 'reverse' ? 'reverse' : 'normal';
 };
 
+const parseBiasSide = (value: unknown): 'YES' | 'NO' => {
+  const normalized = typeof value === 'string' ? value.toUpperCase() : '';
+  return normalized === 'NO' ? 'NO' : 'YES';
+};
+
 export default function PaperCandleBiasCard() {
   const router = useRouter();
   const botId = 'paper_candle_bias';
@@ -30,6 +35,7 @@ export default function PaperCandleBiasCard() {
   const [isEnabled, setIsEnabled] = useState(false);
   const [armLive, setArmLive] = useState(false);
   const [directionMode, setDirectionMode] = useState<'normal' | 'reverse'>('normal');
+  const [biasSide, setBiasSide] = useState<'YES' | 'NO'>('YES');
   const [tradeSize, setTradeSize] = useState('');
   const [maxTradesPerHour, setMaxTradesPerHour] = useState('');
   const [paperBalance, setPaperBalance] = useState<number | null>(null);
@@ -57,6 +63,7 @@ export default function PaperCandleBiasCard() {
     setPaperBalanceInput(balance != null ? balance.toFixed(2) : '');
     const strategySettings = (next.strategy_settings ?? {}) as Record<string, unknown>;
     setDirectionMode(parseDirectionMode(strategySettings.direction_mode));
+    setBiasSide(parseBiasSide(strategySettings.bias_side));
   };
 
   const loadSettings = useCallback(async () => {
@@ -90,7 +97,8 @@ export default function PaperCandleBiasCard() {
         max_trades_per_hour: parseInt(maxTradesPerHour, 10) || 0,
         paper_balance_usd: roundedBalance,
         strategy_settings: {
-          direction_mode: directionMode
+          direction_mode: directionMode,
+          bias_side: biasSide
         }
       };
       const res = await fetch('/api/bot-settings', {
@@ -167,6 +175,13 @@ export default function PaperCandleBiasCard() {
           <select value={directionMode} onChange={(event) => setDirectionMode((event.target.value as 'normal' | 'reverse') ?? 'normal')}>
             <option value="normal">Normal</option>
             <option value="reverse">Reverse</option>
+          </select>
+        </label>
+        <label className="operator-row">
+          <span>Bias Side</span>
+          <select value={biasSide} onChange={(event) => setBiasSide((event.target.value as 'YES' | 'NO') ?? 'YES')}>
+            <option value="YES">YES</option>
+            <option value="NO">NO</option>
           </select>
         </label>
         <label className="operator-row">
