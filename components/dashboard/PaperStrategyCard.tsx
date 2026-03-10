@@ -15,6 +15,18 @@ const formatUSD = (value?: number | null) =>
 
 const asString = (value?: number | null): string => (value == null ? '' : String(value));
 
+const parseDirectionMode = (value: unknown): 'normal' | 'reverse' => {
+  const normalized = typeof value === 'string' ? value.toLowerCase() : '';
+  return normalized === 'reverse' ? 'reverse' : 'normal';
+};
+
+const parseBiasMode = (value: unknown): 'off' | 'yes_only' | 'no_only' => {
+  const normalized = typeof value === 'string' ? value.toLowerCase() : '';
+  if (normalized === 'yes_only') return 'yes_only';
+  if (normalized === 'no_only') return 'no_only';
+  return 'off';
+};
+
 type Props = {
   botId: 'paper_fastloop' | 'paper_sniper';
   label: string;
@@ -97,10 +109,8 @@ export default function PaperStrategyCard({ botId, label }: Props) {
       const nextStrategySettings = (next.strategy_settings ?? {}) as Record<string, unknown>;
       setStrategySettings(nextStrategySettings);
       if (botId === 'paper_sniper') {
-        const nextDirection = (nextStrategySettings.direction_mode as 'normal' | 'reverse') ?? 'normal';
-        const nextBias = (nextStrategySettings.bias_mode as 'off' | 'yes_only' | 'no_only') ?? 'off';
-        setDirectionMode(nextDirection);
-        setBiasMode(nextBias);
+        setDirectionMode(parseDirectionMode(nextStrategySettings.direction_mode));
+        setBiasMode(parseBiasMode(nextStrategySettings.bias_mode));
       } else {
         setDirectionMode('normal');
         setBiasMode('off');
