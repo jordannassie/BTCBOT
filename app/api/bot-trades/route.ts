@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const PAPER_BOT_IDS = ['paper_fastloop', 'paper_sniper', 'paper_copy', 'paper_scalper'];
+const PAPER_BOT_IDS = ['paper_fastloop', 'paper_sniper'];
 
 export async function GET(request: Request) {
   const supabaseUrl =

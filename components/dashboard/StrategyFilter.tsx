@@ -1,13 +1,13 @@
 'use client';
 
-export type StrategyOption = 'ALL' | 'FASTLOOP' | 'SNIPER' | 'COPY' | 'SCALPER';
+export type StrategyOption = 'ALL' | 'FASTLOOP' | 'SNIPER';
 
 type StrategyFilterProps = {
   value: StrategyOption;
   onChange: (value: StrategyOption) => void;
 };
 
-const OPTIONS: StrategyOption[] = ['ALL', 'FASTLOOP', 'SNIPER', 'COPY', 'SCALPER'];
+const OPTIONS: StrategyOption[] = ['ALL', 'FASTLOOP', 'SNIPER'];
 
 export default function StrategyFilter({ value, onChange }: StrategyFilterProps) {
   return (

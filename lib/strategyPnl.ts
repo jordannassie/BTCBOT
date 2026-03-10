@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const STRATEGY_BOT_IDS = ['paper_fastloop', 'paper_sniper', 'paper_copy', 'paper_scalper'];
+const STRATEGY_BOT_IDS = ['paper_fastloop', 'paper_sniper'];
 
 function getSupabaseClient() {
   const supabaseUrl = (
