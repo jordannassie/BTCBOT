@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { BotSettings } from '@/lib/botData';
 
 const formatUSD = (value?: number | null) =>
@@ -11,20 +11,6 @@ const formatUSD = (value?: number | null) =>
     maximumFractionDigits: 2
   }).format(value ?? 0);
 
-const EXPECTED_LIVE_WALLET = '0x48c04C990182B23FD17c911D18c42605FaD3312e';
-
-const truncate = (addr: string) => `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-
-const copyAddress = async (address: string, label: string, setCopyStatus: (value: string) => void) => {
-  try {
-    await navigator.clipboard.writeText(address);
-    setCopyStatus(`${label} copied!`);
-  } catch {
-    setCopyStatus(`${label} copy failed`);
-  }
-  setTimeout(() => setCopyStatus(''), 2000);
-};
-
 export default function LiveCard() {
   const [settings, setSettings] = useState<BotSettings | null>(null);
   const [isEnabled, setIsEnabled] = useState(false);
@@ -32,19 +18,7 @@ export default function LiveCard() {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [allowance, setAllowance] = useState<number | null>(null);
-  const [copyStatus, setCopyStatus] = useState<string>('');
-  const walletMatchStatus = useMemo(() => {
-    if (!walletAddress) {
-      return { text: '⚠️ BOT WALLET UNKNOWN', variant: 'unknown' };
-    }
-    const normalizedExisting = walletAddress.toLowerCase();
-    if (normalizedExisting === EXPECTED_LIVE_WALLET.toLowerCase()) {
-      return { text: '✅ WALLET MATCH', variant: 'match' };
-    }
-    return { text: '❌ WALLET MISMATCH', variant: 'mismatch' };
-  }, [walletAddress]);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -56,7 +30,6 @@ export default function LiveCard() {
         setSettings(nextSettings);
         setIsEnabled(nextSettings.is_enabled ?? false);
         const strategySettings = (nextSettings.strategy_settings ?? {}) as Record<string, unknown>;
-        setWalletAddress((strategySettings.live_wallet_address as string) ?? null);
         const strategyAllowance = strategySettings.live_allowance_usd as number | undefined;
         setAllowance(typeof strategyAllowance === 'number' ? strategyAllowance : null);
       }
@@ -100,7 +73,6 @@ export default function LiveCard() {
         setSettings(payload.settings);
         setMessage({ text: 'Saved', type: 'success' });
         const strategySettings = (payload.settings?.strategy_settings ?? {}) as Record<string, unknown>;
-        setWalletAddress((strategySettings.live_wallet_address as string) ?? null);
         const strategyAllowance = strategySettings.live_allowance_usd as number | undefined;
         setAllowance(typeof strategyAllowance === 'number' ? strategyAllowance : null);
       } else {
@@ -144,57 +116,14 @@ export default function LiveCard() {
         </p>
       </div>
 
-      <div
-        className={`live-status ${walletAddress ? 'ok' : 'warn'}`}
-        aria-live="polite"
-      >
-        {walletAddress
-          ? settings?.live_balance_usd
-            ? 'LIVE bankroll OK'
-            : 'LIVE bankroll not updating (check worker)'
-          : 'LIVE wallet unknown'}
+      <div className="live-status" aria-live="polite">
+        {settings?.live_balance_usd
+          ? 'LIVE bankroll OK'
+          : 'LIVE bankroll not updating (check worker)'}
         {allowance != null &&
           settings?.live_balance_usd != null &&
           allowance < (settings.live_balance_usd ?? 0) &&
           ' — Allowance low'}
-      </div>
-
-      <div className="live-wallet-row">
-        <span>Expected Wallet:</span>
-        <div className="live-wallet-value">
-          <span>{truncate(EXPECTED_LIVE_WALLET)}</span>
-          <button
-            type="button"
-            className="live-wallet-copy"
-            onClick={() => copyAddress(EXPECTED_LIVE_WALLET, 'Expected wallet', setCopyStatus)}
-          >
-            Copy
-          </button>
-        </div>
-      </div>
-
-      <div className="live-wallet-row">
-        <span>Bot Wallet:</span>
-        {walletAddress ? (
-          <div className="live-wallet-value">
-            <span>{truncate(walletAddress)}</span>
-            <button
-              type="button"
-              className="live-wallet-copy"
-              onClick={() => copyAddress(walletAddress, 'Bot wallet', setCopyStatus)}
-            >
-              Copy
-            </button>
-          </div>
-        ) : (
-          <span className="live-wallet-missing">Unknown (waiting for worker)</span>
-        )}
-      </div>
-
-      {copyStatus && <div className="copy-feedback live-wallet-copy-feedback">{copyStatus}</div>}
-
-      <div className={`live-wallet-status ${walletMatchStatus.variant}`}>
-        {walletMatchStatus.text}
       </div>
 
       {message && (
