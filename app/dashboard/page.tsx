@@ -4,6 +4,7 @@ import AccountSummaryCard from '@/components/dashboard/AccountSummaryCard';
 import PaperStrategyCard from '@/components/dashboard/PaperStrategyCard';
 import LiveCard from '@/components/dashboard/LiveCard';
 import DashboardContent from '@/components/dashboard/DashboardContent';
+import PaperCandleBiasCard from '@/components/dashboard/PaperCandleBiasCard';
 
 export const revalidate = 0;
 
@@ -21,6 +22,7 @@ export default async function DashboardPage() {
       <section className="strategy-grid">
         <PaperStrategyCard botId="paper_fastloop" label="PAPER — FASTLOOP" />
         <PaperStrategyCard botId="paper_sniper" label="PAPER — SNIPER" />
+        <PaperCandleBiasCard />
       </section>
 
       <DashboardContent />
