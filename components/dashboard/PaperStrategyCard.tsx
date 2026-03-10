@@ -349,7 +349,18 @@ export default function PaperStrategyCard({ botId, label }: Props) {
       <div className="strategy-card-header">
         <div className="strategy-card-pl">
           <div className="strategy-card-title">
-            <span className="strategy-card-label">{label}</span>
+            <span className="strategy-card-label">
+              {label.includes('—') ? (
+                <>
+                  {label.split('—')[0].trim()} —{' '}
+                  <span
+                    className={`strategy-badge strategy-${label.split('—')[1].trim().toLowerCase()}`}
+                  >
+                    {label.split('—')[1].trim()}
+                  </span>
+                </>
+              ) : label}
+            </span>
             <div className="strategy-card-pnl-row">
               <div className="strategy-card-pnl-block">
                 <span className="strategy-card-pnl-label">P/L (24h)</span>

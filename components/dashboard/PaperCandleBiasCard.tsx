@@ -160,7 +160,10 @@ export default function PaperCandleBiasCard() {
       <div className="strategy-card-header">
         <div className="strategy-card-pl">
           <div className="strategy-card-title">
-            <span className="strategy-card-label">PAPER — CANDLE_BIAS</span>
+            <span className="strategy-card-label">
+              PAPER —{' '}
+              <span className="strategy-badge strategy-candle_bias">CANDLE_BIAS</span>
+            </span>
             <div className="strategy-card-pnl-row">
               <div className="strategy-card-pnl-block">
                 <span className="strategy-card-pnl-label">P/L (24h)</span>
