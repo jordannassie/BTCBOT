@@ -109,8 +109,16 @@ export default function PaperStrategyCard({ botId, label }: Props) {
       const nextStrategySettings = (next.strategy_settings ?? {}) as Record<string, unknown>;
       setStrategySettings(nextStrategySettings);
       if (botId === 'paper_sniper') {
-        setDirectionMode(parseDirectionMode(nextStrategySettings.direction_mode));
-        setBiasMode(parseBiasMode(nextStrategySettings.bias_mode));
+        console.log(
+          `[SNIPER] applySettings raw direction_mode=${nextStrategySettings.direction_mode} bias_mode=${nextStrategySettings.bias_mode}`
+        );
+        const normalizedDirection = parseDirectionMode(nextStrategySettings.direction_mode);
+        const normalizedBias = parseBiasMode(nextStrategySettings.bias_mode);
+        console.log(
+          `[SNIPER] normalized direction_mode=${normalizedDirection} bias_mode=${normalizedBias}`
+        );
+        setDirectionMode(normalizedDirection);
+        setBiasMode(normalizedBias);
       } else {
         setDirectionMode('normal');
         setBiasMode('off');
@@ -147,6 +155,12 @@ export default function PaperStrategyCard({ botId, label }: Props) {
     },
     [botId, applySettings]
   );
+
+  useEffect(() => {
+    if (botId === 'paper_sniper') {
+      console.log(`[SNIPER] final select state direction=${directionMode} bias=${biasMode}`);
+    }
+  }, [botId, directionMode, biasMode]);
 
   const autoSaveToggles = useCallback(
     async (nextEnabled: boolean, nextArmLive: boolean) => {
