@@ -128,22 +128,25 @@ export async function POST(request: Request) {
     );
 
     if (
-      bot_id === 'paper_scalper' &&
       strategy_settings &&
       typeof strategy_settings === 'object' &&
       !Array.isArray(strategy_settings)
     ) {
-      const { data: existing } = await client
-        .from('bot_settings')
-        .select('strategy_settings')
-        .eq('bot_id', bot_id)
-        .limit(1)
-        .single();
-      const mergedStrategySettings = {
-        ...(existing?.strategy_settings ?? {}),
-        ...strategy_settings
-      };
-      updates.strategy_settings = mergedStrategySettings;
+      if (bot_id === 'paper_scalper') {
+        const { data: existing } = await client
+          .from('bot_settings')
+          .select('strategy_settings')
+          .eq('bot_id', bot_id)
+          .limit(1)
+          .single();
+        const mergedStrategySettings = {
+          ...(existing?.strategy_settings ?? {}),
+          ...strategy_settings
+        };
+        updates.strategy_settings = mergedStrategySettings;
+      } else {
+        updates.strategy_settings = strategy_settings;
+      }
     }
 
     const { data, error } = await client
