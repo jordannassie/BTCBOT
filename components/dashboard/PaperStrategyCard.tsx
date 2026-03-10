@@ -28,10 +28,13 @@ export default function PaperStrategyCard({ botId, label }: Props) {
   const [tradeSize, setTradeSize] = useState('');
   const [maxTradesPerHour, setMaxTradesPerHour] = useState('');
   const [armLive, setArmLive] = useState(false);
+  const [directionMode, setDirectionMode] = useState<'normal' | 'reverse'>('normal');
+  const [biasMode, setBiasMode] = useState<'off' | 'yes_only' | 'no_only'>('off');
   const { setLastSave } = useLastSave();
   const [paperBalance, setPaperBalance] = useState<number | null>(null);
   const [paperBalanceInput, setPaperBalanceInput] = useState('');
   const [loading, setLoading] = useState(true);
+  const [strategySettings, setStrategySettings] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -76,23 +79,37 @@ export default function PaperStrategyCard({ botId, label }: Props) {
     return rounded;
   };
 
-  const applySettings = (next?: BotSettings | null) => {
-    if (!next) {
-      setLoadError('Unable to load settings.');
-      return;
-    }
-    setSettings(next);
-    setIsEnabled(next.is_enabled);
-    setEdgeThreshold(asString(next.edge_threshold));
-    setTradeSize(asString(next.trade_size ?? next.trade_size_usd));
-    setMaxTradesPerHour(asString(next.max_trades_per_hour));
-    const balance = next.paper_balance_usd ?? null;
-    setPaperBalance(balance);
-    setPaperBalanceInput(balance != null ? balance.toFixed(2) : '');
-    setArmLive(next.arm_live ?? false);
-    setLoadError(null);
-    setHydrated(true);
-  };
+  const applySettings = useCallback(
+    (next?: BotSettings | null) => {
+      if (!next) {
+        setLoadError('Unable to load settings.');
+        return;
+      }
+      setSettings(next);
+      setIsEnabled(next.is_enabled);
+      setEdgeThreshold(asString(next.edge_threshold));
+      setTradeSize(asString(next.trade_size ?? next.trade_size_usd));
+      setMaxTradesPerHour(asString(next.max_trades_per_hour));
+      const balance = next.paper_balance_usd ?? null;
+      setPaperBalance(balance);
+      setPaperBalanceInput(balance != null ? balance.toFixed(2) : '');
+      setArmLive(next.arm_live ?? false);
+      const nextStrategySettings = (next.strategy_settings ?? {}) as Record<string, unknown>;
+      setStrategySettings(nextStrategySettings);
+      if (botId === 'paper_sniper') {
+        const nextDirection = (nextStrategySettings.direction_mode as 'normal' | 'reverse') ?? 'normal';
+        const nextBias = (nextStrategySettings.bias_mode as 'off' | 'yes_only' | 'no_only') ?? 'off';
+        setDirectionMode(nextDirection);
+        setBiasMode(nextBias);
+      } else {
+        setDirectionMode('normal');
+        setBiasMode('off');
+      }
+      setLoadError(null);
+      setHydrated(true);
+    },
+    [botId]
+  );
 
   const loadSettings = useCallback(
     async (opts?: { skipLoading?: boolean; ts?: number }) => {
@@ -118,7 +135,7 @@ export default function PaperStrategyCard({ botId, label }: Props) {
         }
       }
     },
-    [botId]
+    [botId, applySettings]
   );
 
   const autoSaveToggles = useCallback(
@@ -225,19 +242,27 @@ export default function PaperStrategyCard({ botId, label }: Props) {
       }
     }
     try {
+      const payloadBody: Record<string, unknown> = {
+        bot_id: botId,
+        is_enabled: isEnabled,
+        edge_threshold: thresholdValue,
+        trade_size: parseFloat(tradeSize) || 0,
+        max_trades_per_hour: parseInt(maxTradesPerHour, 10) || 0,
+        paper_balance_usd: roundedBalance ?? 0,
+        arm_live: armLive
+      };
+      if (botId === 'paper_sniper') {
+        payloadBody.strategy_settings = {
+          ...strategySettings,
+          direction_mode: directionMode,
+          bias_mode: biasMode
+        };
+      }
       const res = await fetch('/api/bot-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({
-          bot_id: botId,
-          is_enabled: isEnabled,
-          edge_threshold: thresholdValue,
-          trade_size: parseFloat(tradeSize) || 0,
-          max_trades_per_hour: parseInt(maxTradesPerHour, 10) || 0,
-          paper_balance_usd: roundedBalance ?? 0,
-          arm_live: armLive
-        })
+        body: JSON.stringify(payloadBody)
       });
       const payload = await res.json();
       if (payload.ok) {
@@ -423,6 +448,39 @@ export default function PaperStrategyCard({ botId, label }: Props) {
                 onChange={(e) => setMaxTradesPerHour(e.target.value)}
               />
             </label>
+            {botId === 'paper_sniper' && (
+              <>
+                <label className="operator-row">
+                  <span>Direction Mode</span>
+                  <select
+                    value={directionMode}
+                    onChange={(event) =>
+                      setDirectionMode(
+                        (event.target.value as 'normal' | 'reverse') ?? 'normal'
+                      )
+                    }
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="reverse">Reverse</option>
+                  </select>
+                </label>
+                <label className="operator-row">
+                  <span>Bias Mode</span>
+                  <select
+                    value={biasMode}
+                    onChange={(event) =>
+                      setBiasMode(
+                        (event.target.value as 'off' | 'yes_only' | 'no_only') ?? 'off'
+                      )
+                    }
+                  >
+                    <option value="off">Off</option>
+                    <option value="yes_only">Yes Only</option>
+                    <option value="no_only">No Only</option>
+                  </select>
+                </label>
+              </>
+            )}
             <label className="operator-row operator-row--paper">
               <span>
                 Paper Balance
