@@ -2,6 +2,7 @@
 
 import { getPaperSummary } from '@/lib/paperSummary';
 import { getAllStrategyPnl24h } from '@/lib/strategyPnl';
+import ResetPaperBankrollButton from '@/components/dashboard/ResetPaperBankrollButton';
 
 const formatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -37,6 +38,7 @@ export default async function AccountSummaryCard() {
               <button className="range-btn">ALL</button>
             </div>
           </div>
+          <ResetPaperBankrollButton />
           <div className="account-summary-value">{formatUSD(totalBalance)}</div>
           <div className="account-summary-pnls">
             <div>
