@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+
 const PAPER_BOT_IDS = [
   'paper_fastloop',
   'paper_sniper',
@@ -46,13 +48,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ trades: [] }, { status: 500 });
   }
 
-  if (data) {
-    const strategyIds = Array.from(new Set(data.map((item) => (item.strategy_id ?? 'UNKNOWN').toUpperCase())));
+  const trades = data ?? [];
+  if (trades.length > 0) {
+    const newest = trades[0];
+    const strategyIds = Array.from(new Set(trades.map((item) => (item.strategy_id ?? 'UNKNOWN').toUpperCase())));
     console.info('ACTIVITY_FETCH', {
-      rows_count: data.length,
-      strategy_ids: strategyIds
+      rows_count: trades.length,
+      strategy_ids: strategyIds,
+      newest_created_at: newest.created_at,
+      newest_bot_id: newest.bot_id,
+      newest_strategy_id: newest.strategy_id ?? null
     });
   }
 
-  return NextResponse.json({ trades: data ?? [] });
+  const res = NextResponse.json({ trades });
+  res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.headers.set('Pragma', 'no-cache');
+  return res;
 }

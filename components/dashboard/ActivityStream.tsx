@@ -24,8 +24,11 @@ export default function ActivityStream({ initialTrades, strategy }: ActivityStre
 
     const fetchTrades = async () => {
       try {
-        const params = strategy === 'ALL' ? '' : `?strategy=${strategy}`;
-        const response = await fetch(`/api/bot-trades${params}`, { cache: 'no-store' });
+        const base = '/api/bot-trades';
+        const params = new URLSearchParams();
+        if (strategy !== 'ALL') params.set('strategy', strategy);
+        params.set('_t', String(Date.now()));
+        const response = await fetch(`${base}?${params.toString()}`, { cache: 'no-store' });
         if (!response.ok) return;
         const payload = await response.json();
         if (isMounted && payload.trades) {
