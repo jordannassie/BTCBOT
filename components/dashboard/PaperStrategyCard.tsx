@@ -27,8 +27,17 @@ const parseBiasMode = (value: unknown): 'off' | 'yes_only' | 'no_only' => {
   return 'off';
 };
 
+type BotId =
+  | 'paper_fastloop'
+  | 'paper_sniper'
+  | 'paper_sweep_reclaim'
+  | 'paper_breakout_close'
+  | 'paper_engulfing_level'
+  | 'paper_rejection_wick'
+  | 'paper_follow_through';
+
 type Props = {
-  botId: 'paper_fastloop' | 'paper_sniper';
+  botId: BotId;
   label: string;
 };
 

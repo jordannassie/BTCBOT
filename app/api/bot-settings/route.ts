@@ -8,7 +8,12 @@ const ALLOWED_BOT_IDS = new Set([
   'paper_sniper',
   'paper_copy',
   'paper_scalper',
-  'paper_candle_bias'
+  'paper_candle_bias',
+  'paper_sweep_reclaim',
+  'paper_breakout_close',
+  'paper_engulfing_level',
+  'paper_rejection_wick',
+  'paper_follow_through'
 ]);
 
 function getSupabase() {

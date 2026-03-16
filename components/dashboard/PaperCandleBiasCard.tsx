@@ -44,6 +44,7 @@ export default function PaperCandleBiasCard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   const commitPaperBalance = () => {
     const rounded = parseNumberInput(paperBalanceInput);
@@ -138,6 +139,32 @@ export default function PaperCandleBiasCard() {
       setMessage({ text: error instanceof Error ? error.message : 'Unexpected error', type: 'error' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleReset = async () => {
+    setResetting(true);
+    setMessage(null);
+    const roundedBalance = commitPaperBalance() ?? 0;
+    try {
+      const res = await fetch('/api/paper-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ bot_id: botId, paper_balance_usd: roundedBalance })
+      });
+      const payload = await res.json();
+      if (payload.ok) {
+        await loadSettings();
+        router.refresh();
+        setMessage({ text: 'Reset', type: 'success' });
+      } else {
+        setMessage({ text: payload.error ?? 'Reset failed', type: 'error' });
+      }
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : 'Unexpected error', type: 'error' });
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -245,8 +272,13 @@ export default function PaperCandleBiasCard() {
               onChange={(e) => setPaperBalanceInput(e.target.value)}
               onBlur={commitPaperBalance}
             />
-            <button type="button" className="operator-reset" onClick={() => setPaperBalanceInput('')}>
-              Reset
+            <button
+              type="button"
+              className="operator-reset"
+              onClick={handleReset}
+              disabled={resetting}
+            >
+              {resetting ? '…' : 'Reset'}
             </button>
           </div>
         </label>

@@ -1,7 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const PAPER_BOT_IDS = new Set(['default', 'paper_fastloop', 'paper_sniper']);
+const PAPER_BOT_IDS = new Set([
+  'default',
+  'paper_fastloop',
+  'paper_sniper',
+  'paper_sweep_reclaim',
+  'paper_breakout_close',
+  'paper_engulfing_level',
+  'paper_rejection_wick',
+  'paper_follow_through'
+]);
 
 export async function POST(request: Request) {
   const supabaseUrl =
