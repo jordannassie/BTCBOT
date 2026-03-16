@@ -20,7 +20,10 @@ export async function GET(request: Request) {
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 
   if (!supabaseUrl.startsWith('http') || !serviceKey) {
-    return NextResponse.json({ trades: [] });
+    const empty = NextResponse.json({ trades: [] });
+    empty.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    empty.headers.set('Pragma', 'no-cache');
+    return empty;
   }
 
   const client = createClient(supabaseUrl, serviceKey, {
@@ -45,20 +48,18 @@ export async function GET(request: Request) {
 
   if (error) {
     console.error('Failed to load trades:', error);
-    return NextResponse.json({ trades: [] }, { status: 500 });
+    const errRes = NextResponse.json({ trades: [] }, { status: 500 });
+    errRes.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    errRes.headers.set('Pragma', 'no-cache');
+    return errRes;
   }
 
   const trades = data ?? [];
   if (trades.length > 0) {
     const newest = trades[0];
-    const strategyIds = Array.from(new Set(trades.map((item) => (item.strategy_id ?? 'UNKNOWN').toUpperCase())));
-    console.info('ACTIVITY_FETCH', {
-      rows_count: trades.length,
-      strategy_ids: strategyIds,
-      newest_created_at: newest.created_at,
-      newest_bot_id: newest.bot_id,
-      newest_strategy_id: newest.strategy_id ?? null
-    });
+    console.info(
+      `ACTIVITY_FETCH rows_count=${trades.length} newest_created_at=${newest.created_at ?? ''} newest_bot_id=${newest.bot_id ?? ''} newest_strategy_id=${newest.strategy_id ?? ''}`
+    );
   }
 
   const res = NextResponse.json({ trades });
