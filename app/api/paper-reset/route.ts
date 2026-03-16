@@ -5,6 +5,7 @@ const PAPER_BOT_IDS = new Set([
   'default',
   'paper_fastloop',
   'paper_sniper',
+  'paper_candle_bias',
   'paper_sweep_reclaim',
   'paper_breakout_close',
   'paper_engulfing_level',

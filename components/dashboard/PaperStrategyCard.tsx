@@ -61,7 +61,7 @@ export default function PaperStrategyCard({ botId, label }: Props) {
   const [hydrated, setHydrated] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [pnl24h, setPnl24h] = useState<number | null>(null);
   const storageKey = `strategy-card-expanded/${botId}`;
   const [toggleStatus, setToggleStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'mismatch'>(
@@ -72,7 +72,11 @@ export default function PaperStrategyCard({ botId, label }: Props) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const stored = window.localStorage.getItem(storageKey);
-    setExpanded(stored === 'true');
+    if (stored === null) {
+      setExpanded(true);
+    } else {
+      setExpanded(stored === 'true');
+    }
   }, [storageKey]);
 
   const toggleExpanded = useCallback(() => {
