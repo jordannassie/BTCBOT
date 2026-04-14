@@ -15,6 +15,23 @@ type GlobalSettings = {
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
+function IconShield() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>
+  );
+}
+
+function IconWarning() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+  );
+}
+
 export default function GlobalSettingsPanel() {
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,6 +82,10 @@ export default function GlobalSettingsPanel() {
   }, [applySettings]);
 
   const handleLiveToggle = (checked: boolean) => {
+    const msg = checked
+      ? 'Enable the master live-trading gate? Live bots with ARM LIVE set will begin executing real orders.'
+      : 'Disable the master live-trading gate? All live copy execution will stop.';
+    if (!window.confirm(msg)) return;
     patch({ live_on: checked });
   };
 
@@ -72,8 +93,8 @@ export default function GlobalSettingsPanel() {
     if (!settings) return;
     const next = !settings.emergency_stop;
     const msg = next
-      ? 'Enable emergency stop? This will halt all live copy-trading immediately.'
-      : 'Clear emergency stop? Live trading will resume if the master gate is on.';
+      ? 'ACTIVATE emergency stop? This immediately halts ALL live copy-trading regardless of bot settings.'
+      : 'Clear the emergency stop? Live trading will resume if the master gate is on.';
     if (!window.confirm(msg)) return;
     patch({ emergency_stop: next });
   };
@@ -117,6 +138,9 @@ export default function GlobalSettingsPanel() {
     );
   }
 
+  const isLive = settings.live_on;
+  const isEstop = settings.emergency_stop;
+
   return (
     <div className="copy-section">
       <div className="copy-section-head">
@@ -131,25 +155,74 @@ export default function GlobalSettingsPanel() {
       </div>
 
       <div className="copy-settings-body">
-        {/* Master live-trading gate */}
-        <div className="copy-settings-toggle-row">
-          <div className="copy-settings-toggle-label">
-            <div className="copy-settings-label">Live Trading Gate</div>
-            <div className="copy-settings-sub">Must be ON for any live copy order to execute, regardless of individual bot settings.</div>
+
+        {/* ── System Safety Block ── */}
+        <div className="copy-safety-block">
+          <div className="copy-safety-block-head">
+            <span className="copy-safety-block-icon"><IconShield /></span>
+            <span className="copy-safety-block-title">System Safety</span>
           </div>
-          <div className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={settings.live_on}
-              onChange={(e) => handleLiveToggle(e.target.checked)}
-              id="global-live-on"
-              disabled={status === 'saving'}
-            />
-            <label className="toggle-slider" htmlFor="global-live-on" />
+
+          <div className="copy-safety-rows">
+            {/* Live Trading Gate */}
+            <div className={`copy-safety-row copy-safety-row-live`}>
+              <div className="copy-safety-label-group">
+                <span className="copy-safety-label">Live Trading Gate</span>
+                <span className="copy-safety-sublabel">
+                  Master switch for all live copy execution. Must be ON for any live bot to place real orders.
+                  Disable to safely pause all live activity without changing individual bot state.
+                </span>
+              </div>
+              <div className="copy-safety-controls">
+                <span className={`copy-gate-pill ${isLive ? 'copy-gate-pill-on' : 'copy-gate-pill-off'}`}>
+                  <span className={`copy-gate-dot ${isLive ? 'copy-gate-dot-on' : 'copy-gate-dot-off'}`} />
+                  {isLive ? 'ON' : 'OFF'}
+                </span>
+                <div className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={settings.live_on}
+                    onChange={(e) => handleLiveToggle(e.target.checked)}
+                    id="global-live-on"
+                    disabled={status === 'saving'}
+                  />
+                  <label className="toggle-slider" htmlFor="global-live-on" />
+                </div>
+              </div>
+            </div>
+
+            {/* Emergency Stop */}
+            <div className={`copy-safety-row copy-safety-row-stop${isEstop ? ' danger' : ''}`}>
+              <div className="copy-safety-label-group">
+                <span className="copy-safety-label">Emergency Stop</span>
+                <span className="copy-safety-sublabel">
+                  Immediately halts all live copy-trading regardless of bot state or master gate.
+                  {isEstop ? ' ⚠ Emergency stop is currently ACTIVE — no live orders will execute.' : ' Not active.'}
+                </span>
+              </div>
+              <div className="copy-safety-controls">
+                <span className={`copy-gate-pill ${isEstop ? 'copy-estop-pill-active' : 'copy-estop-pill-inactive'}`}>
+                  {isEstop
+                    ? <><span className="copy-gate-dot copy-gate-dot-danger" />ACTIVE</>
+                    : 'Clear'}
+                </span>
+                <button
+                  className={`copy-estop-btn${isEstop ? ' active' : ''}`}
+                  onClick={handleEmergencyStop}
+                  disabled={status === 'saving'}
+                >
+                  {isEstop ? (
+                    <><IconWarning /> Clear Stop</>
+                  ) : (
+                    <><IconWarning /> Activate Stop</>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Numeric defaults */}
+        {/* ── Risk Defaults ── */}
         <div>
           <div className="copy-form-title">Risk Defaults</div>
           <div className="copy-settings-field-row">
@@ -210,29 +283,13 @@ export default function GlobalSettingsPanel() {
             onClick={handleSaveNumeric}
             disabled={status === 'saving'}
           >
-            {status === 'saving' ? 'Saving…' : 'Save Settings'}
+            {status === 'saving' ? 'Saving…' : 'Save Risk Defaults'}
           </button>
           <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.25)' }}>
-            Last updated: {new Date(settings.updated_at).toLocaleString()}
+            Updated: {new Date(settings.updated_at).toLocaleString()}
           </span>
         </div>
 
-        {/* Emergency Stop */}
-        <div className="copy-danger-zone">
-          <div>
-            <div className="copy-danger-label">Emergency Stop</div>
-            <div className="copy-danger-sub">
-              When active, halts all live copy-trading immediately regardless of individual bot state.
-            </div>
-          </div>
-          <button
-            className={`copy-btn copy-btn-danger ${settings.emergency_stop ? 'active' : ''}`}
-            onClick={handleEmergencyStop}
-            disabled={status === 'saving'}
-          >
-            {settings.emergency_stop ? '⛔ ACTIVE — Click to Clear' : 'Activate Emergency Stop'}
-          </button>
-        </div>
       </div>
     </div>
   );

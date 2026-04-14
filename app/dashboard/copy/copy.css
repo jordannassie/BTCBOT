@@ -794,3 +794,447 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIVE COPY — Safety, Readiness, and Operator Controls
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── System Safety block (GlobalSettingsPanel) ───────────────────────────── */
+
+.copy-safety-block {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.85rem;
+  overflow: hidden;
+}
+
+.copy-safety-block-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.copy-safety-block-icon {
+  color: rgba(248, 250, 252, 0.35);
+  display: flex;
+  align-items: center;
+}
+
+.copy-safety-block-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(248, 250, 252, 0.4);
+}
+
+.copy-safety-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.copy-safety-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.15s;
+}
+
+.copy-safety-row:last-child {
+  border-bottom: none;
+}
+
+.copy-safety-row-live:has(input:checked) {
+  background: rgba(16, 185, 129, 0.04);
+}
+
+.copy-safety-row-stop.danger {
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.copy-safety-label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.copy-safety-label {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.copy-safety-sublabel {
+  font-size: 0.73rem;
+  color: rgba(248, 250, 252, 0.4);
+  line-height: 1.4;
+  max-width: 360px;
+}
+
+.copy-safety-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+/* Gate indicator pill (Live ON / OFF) */
+.copy-gate-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  min-width: 60px;
+  justify-content: center;
+}
+
+.copy-gate-pill-on {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.copy-gate-pill-off {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: rgba(248, 250, 252, 0.35);
+}
+
+.copy-gate-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.copy-gate-dot-on {
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
+  animation: copyDotPulse 2s ease-in-out infinite;
+}
+
+.copy-gate-dot-off {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Emergency stop specific */
+.copy-estop-pill-inactive {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: rgba(248, 250, 252, 0.35);
+}
+
+.copy-estop-pill-active {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  animation: estopFlash 1.5s ease-in-out infinite;
+}
+
+@keyframes estopFlash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+.copy-estop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.08);
+  color: #f87171;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.copy-estop-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.copy-estop-btn.active {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.45);
+}
+
+.copy-estop-btn.active:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55);
+}
+
+.copy-estop-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ─── Live Readiness badge ────────────────────────────────────────────────── */
+
+.copy-readiness {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 0.4rem;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.copy-readiness-paper {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  color: #60a5fa;
+}
+
+.copy-readiness-blocked {
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  color: #fbbf24;
+}
+
+.copy-readiness-ready {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.copy-readiness-stopped {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #f87171;
+}
+
+.copy-readiness-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.copy-readiness-dot-ready {
+  background: #10b981;
+  box-shadow: 0 0 5px rgba(16, 185, 129, 0.6);
+  animation: copyDotPulse 2s ease-in-out infinite;
+}
+
+.copy-readiness-dot-blocked { background: #f59e0b; }
+.copy-readiness-dot-paper   { background: #3b82f6; }
+.copy-readiness-dot-stopped { background: #ef4444; animation: copyDotPulse 1.2s ease-in-out infinite; }
+
+/* ─── Live summary bar (inside CopyBotsSection) ───────────────────────────── */
+
+.copy-live-summary {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.12);
+  flex-wrap: wrap;
+}
+
+.copy-live-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: rgba(248, 250, 252, 0.5);
+}
+
+.copy-live-summary-value {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.copy-live-summary-value-green  { color: #34d399; }
+.copy-live-summary-value-yellow { color: #fbbf24; }
+.copy-live-summary-value-gray   { color: rgba(248, 250, 252, 0.4); }
+.copy-live-summary-value-red    { color: #f87171; }
+
+.copy-live-summary-sep {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ─── Attempt mode/status filter tabs ────────────────────────────────────── */
+
+.copy-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.copy-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.32rem 0.7rem;
+  border-radius: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(248, 250, 252, 0.4);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.copy-tab:hover {
+  color: rgba(248, 250, 252, 0.75);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.copy-tab.active {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f8fafc;
+}
+
+.copy-tab.active-paper  { border-color: rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.08); color: #60a5fa; }
+.copy-tab.active-live   { border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); color: #34d399; }
+.copy-tab.active-copied { border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); color: #34d399; }
+.copy-tab.active-skipped { border-color: rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); color: rgba(248, 250, 252, 0.55); }
+.copy-tab.active-failed { border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.07); color: #f87171; }
+
+.copy-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(248, 250, 252, 0.6);
+}
+
+/* ─── Attempt row mode indicator ──────────────────────────────────────────── */
+
+.copy-attempt-mode-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.copy-attempt-mode-dot-live   { color: #34d399; }
+.copy-attempt-mode-dot-paper  { color: #60a5fa; }
+
+/* ─── Live Safety Card ────────────────────────────────────────────────────── */
+
+.copy-safety-card {
+  background: rgba(234, 179, 8, 0.04);
+  border: 1px solid rgba(234, 179, 8, 0.15);
+  border-radius: 1rem;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.copy-safety-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.2);
+  color: #fbbf24;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.copy-safety-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.copy-safety-card-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fbbf24;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.65rem;
+}
+
+.copy-safety-card-reqs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.copy-safety-card-req {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.79rem;
+  color: rgba(248, 250, 252, 0.6);
+  line-height: 1.45;
+}
+
+.copy-safety-card-req-icon {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  color: rgba(248, 250, 252, 0.3);
+}
+
+.copy-safety-card-req strong {
+  color: rgba(248, 250, 252, 0.85);
+  font-weight: 600;
+}
+
+.copy-safety-card-note {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(234, 179, 8, 0.1);
+  font-size: 0.72rem;
+  color: rgba(248, 250, 252, 0.35);
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .copy-safety-card {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .copy-live-summary {
+    gap: 0.75rem;
+  }
+
+  .copy-tab-bar {
+    gap: 0.2rem;
+  }
+}

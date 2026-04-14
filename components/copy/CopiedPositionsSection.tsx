@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type CopiedPosition = {
   id: string;
@@ -19,6 +19,8 @@ type CopiedPosition = {
   pnl: number;
 };
 
+type BotMap = Record<string, { mode: 'PAPER' | 'LIVE'; name: string }>;
+
 const truncate = (addr: string) =>
   addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
 const fmtDate = (d: string | null | undefined) =>
@@ -35,6 +37,7 @@ type Filter = 'ALL' | 'OPEN' | 'CLOSED' | 'CANCELLED';
 
 export default function CopiedPositionsSection() {
   const [rows, setRows] = useState<CopiedPosition[]>([]);
+  const [botMap, setBotMap] = useState<BotMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('ALL');
@@ -44,10 +47,23 @@ export default function CopiedPositionsSection() {
     setError(null);
     try {
       const qs = statusFilter !== 'ALL' ? `?status=${statusFilter}` : '';
-      const res = await fetch(`/api/copy/positions${qs}`, { cache: 'no-store' });
-      const payload = await res.json();
-      if (payload.ok) setRows(payload.rows ?? []);
-      else setError(payload.error ?? 'Failed to load positions');
+      const [posRes, botsRes] = await Promise.all([
+        fetch(`/api/copy/positions${qs}`, { cache: 'no-store' }),
+        fetch('/api/copy/bots', { cache: 'no-store' }),
+      ]);
+      const posPayload = await posRes.json();
+      const botsPayload = await botsRes.json();
+
+      if (posPayload.ok) setRows(posPayload.rows ?? []);
+      else setError(posPayload.error ?? 'Failed to load positions');
+
+      if (botsPayload.ok) {
+        const map: BotMap = {};
+        for (const b of botsPayload.rows ?? []) {
+          map[b.id] = { mode: b.mode, name: b.name };
+        }
+        setBotMap(map);
+      }
     } catch {
       setError('Network error');
     } finally {
@@ -56,6 +72,11 @@ export default function CopiedPositionsSection() {
   }, []);
 
   useEffect(() => { load(filter); }, [load, filter]);
+
+  const totalPnl = useMemo(() =>
+    rows.filter((r) => r.status !== 'OPEN').reduce((sum, r) => sum + r.pnl, 0),
+    [rows]
+  );
 
   const filters: Filter[] = ['ALL', 'OPEN', 'CLOSED', 'CANCELLED'];
 
@@ -66,6 +87,15 @@ export default function CopiedPositionsSection() {
           <h2 className="copy-section-title">Copied Positions</h2>
           {!loading && rows.length > 0 && (
             <span className="copy-section-count">{rows.length}</span>
+          )}
+          {!loading && rows.some((r) => r.status !== 'OPEN') && (
+            <span
+              className={totalPnl >= 0 ? 'copy-num-pos' : 'copy-num-neg'}
+              style={{ fontSize: '0.78rem', fontWeight: 700, marginLeft: '0.25rem' }}
+              title="Total realised P/L across closed positions in current view"
+            >
+              {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)} P/L
+            </span>
           )}
         </div>
         <div className="copy-section-actions">
@@ -108,7 +138,7 @@ export default function CopiedPositionsSection() {
             No {filter !== 'ALL' ? filter.toLowerCase() + ' ' : ''}copied positions
           </p>
           <p className="copy-empty-sub">
-            Positions appear here once the copy worker successfully places orders on your behalf.
+            Positions appear here once the copy worker successfully places orders.
           </p>
         </div>
       ) : (
@@ -117,54 +147,70 @@ export default function CopiedPositionsSection() {
             <thead>
               <tr>
                 <th>Opened</th>
+                <th>Bot / Mode</th>
                 <th>Wallet</th>
                 <th>Market</th>
                 <th>Outcome</th>
                 <th>Side</th>
                 <th>Entry</th>
-                <th>Size</th>
+                <th>Size ($)</th>
                 <th>Status</th>
                 <th>P / L</th>
-                <th>Exit Price</th>
+                <th>Exit</th>
                 <th>Closed</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(r.opened_at)}</td>
-                  <td>
-                    <span className="copy-mono" title={r.wallet_address}>{truncate(r.wallet_address)}</span>
-                  </td>
-                  <td>
-                    <span className="copy-td-truncate" title={r.market_title ?? r.market_slug ?? undefined}>
-                      {r.market_title ?? r.market_slug ?? '—'}
-                    </span>
-                  </td>
-                  <td>
-                    {r.outcome ? (
-                      <span className={`copy-badge ${r.outcome.toUpperCase() === 'YES' ? 'copy-badge-green' : 'copy-badge-red'}`}>
-                        {r.outcome.toUpperCase()}
+              {rows.map((r) => {
+                const bot = botMap[r.copy_bot_id];
+                return (
+                  <tr key={r.id}>
+                    <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(r.opened_at)}</td>
+                    <td>
+                      {bot ? (
+                        <>
+                          <span className={`copy-attempt-mode-dot copy-attempt-mode-dot-${bot.mode.toLowerCase()}`}>
+                            {bot.mode}
+                          </span>
+                          <span className="copy-td-sub">{bot.name}</span>
+                        </>
+                      ) : (
+                        <span className="copy-td-muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <span className="copy-mono" title={r.wallet_address}>{truncate(r.wallet_address)}</span>
+                    </td>
+                    <td>
+                      <span className="copy-td-truncate" title={r.market_title ?? r.market_slug ?? undefined}>
+                        {r.market_title ?? r.market_slug ?? '—'}
                       </span>
-                    ) : <span className="copy-td-muted">—</span>}
-                  </td>
-                  <td className="copy-td-muted">{r.side ?? '—'}</td>
-                  <td className="copy-td-num">{r.entry_price != null ? r.entry_price.toFixed(3) : '—'}</td>
-                  <td className="copy-td-num">{r.size != null ? `$${r.size.toFixed(2)}` : '—'}</td>
-                  <td>{statusBadge(r.status)}</td>
-                  <td className="copy-td-num">
-                    {r.status === 'OPEN' ? (
-                      <span className="copy-td-muted">—</span>
-                    ) : (
-                      <span className={r.pnl > 0 ? 'copy-num-pos' : r.pnl < 0 ? 'copy-num-neg' : 'copy-num-neu'}>
-                        {r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}
-                      </span>
-                    )}
-                  </td>
-                  <td className="copy-td-num copy-td-muted">{r.exit_price != null ? r.exit_price.toFixed(3) : '—'}</td>
-                  <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(r.closed_at)}</td>
-                </tr>
-              ))}
+                    </td>
+                    <td>
+                      {r.outcome ? (
+                        <span className={`copy-badge ${r.outcome.toUpperCase() === 'YES' ? 'copy-badge-green' : 'copy-badge-red'}`}>
+                          {r.outcome.toUpperCase()}
+                        </span>
+                      ) : <span className="copy-td-muted">—</span>}
+                    </td>
+                    <td className="copy-td-muted">{r.side ?? '—'}</td>
+                    <td className="copy-td-num">{r.entry_price != null ? r.entry_price.toFixed(3) : '—'}</td>
+                    <td className="copy-td-num">{r.size != null ? `$${r.size.toFixed(2)}` : '—'}</td>
+                    <td>{statusBadge(r.status)}</td>
+                    <td className="copy-td-num">
+                      {r.status === 'OPEN' ? (
+                        <span className="copy-td-muted">Open</span>
+                      ) : (
+                        <span className={r.pnl > 0 ? 'copy-num-pos' : r.pnl < 0 ? 'copy-num-neg' : 'copy-num-neu'}>
+                          {r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="copy-td-num copy-td-muted">{r.exit_price != null ? r.exit_price.toFixed(3) : '—'}</td>
+                    <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(r.closed_at)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
