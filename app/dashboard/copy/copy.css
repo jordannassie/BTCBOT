@@ -1238,3 +1238,137 @@
     gap: 0.2rem;
   }
 }
+
+/* ─── Leaderboard table ──────────────────────────────────────────────────────── */
+
+.copy-table-leaderboard {
+  min-width: 1020px;
+}
+
+/* Rank column */
+.copy-th-rank {
+  width: 32px;
+  text-align: center;
+  color: rgba(248, 250, 252, 0.25);
+  font-weight: 500;
+}
+
+.copy-td-rank {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 0.2);
+  letter-spacing: 0.02em;
+}
+
+/* Inactive rows are visually dimmed */
+.copy-row-inactive td {
+  opacity: 0.45;
+}
+.copy-row-inactive td:nth-child(3) {
+  opacity: 1; /* keep toggle fully visible */
+}
+
+/* ─── Sortable column headers ────────────────────────────────────────────────── */
+
+.copy-th-sort {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color 0.12s;
+}
+
+.copy-th-sort:hover {
+  color: rgba(248, 250, 252, 0.75);
+}
+
+.copy-th-sort::after {
+  content: ' ⇅';
+  font-size: 0.6em;
+  opacity: 0.35;
+  vertical-align: middle;
+}
+
+.copy-th-sort.asc::after {
+  content: ' ▲';
+  opacity: 0.75;
+  color: #60a5fa;
+}
+
+.copy-th-sort.desc::after {
+  content: ' ▼';
+  opacity: 0.75;
+  color: #60a5fa;
+}
+
+/* ─── Copy score badge ───────────────────────────────────────────────────────── */
+
+.copy-score-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.copy-score-high {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.copy-score-mid {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.18);
+}
+
+.copy-score-low {
+  color: rgba(248, 250, 252, 0.4);
+  background: rgba(248, 250, 252, 0.04);
+  border: 1px solid rgba(248, 250, 252, 0.06);
+}
+
+.copy-score-none {
+  color: rgba(248, 250, 252, 0.2);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+/* ─── Sparkline cell ─────────────────────────────────────────────────────────── */
+
+.copy-td-sparkline {
+  padding: 0 0.5rem;
+  vertical-align: middle;
+  width: 96px;
+  min-width: 92px;
+}
+
+/* ─── Win rate mini bar ──────────────────────────────────────────────────────── */
+
+.copy-winrate {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.copy-winrate-bar {
+  width: 30px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.copy-winrate-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}

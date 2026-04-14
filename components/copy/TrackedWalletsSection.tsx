@@ -1,13 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import WalletSparkline from './WalletSparkline';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type WalletMetrics = {
   copy_score: number | null;
   pnl_7d: number | null;
   pnl_30d: number | null;
+  pnl_all: number | null;
+  win_rate: number | null;
   trade_count: number | null;
+  volume: number | null;
+  avg_hold_minutes: number | null;
+  max_drawdown: number | null;
   category_focus: string | null;
+  last_trade_at: string | null;
   updated_at: string | null;
 };
 
@@ -23,12 +32,61 @@ type WalletRow = {
   metrics: WalletMetrics | null;
 };
 
-const fmtUSD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
-const fmt = (v: number | null | undefined) => (v == null ? '—' : fmtUSD.format(v));
+type SeriesPoint = { x: string; y: number };
+type WalletSeries = { wallet_address: string; points: SeriesPoint[] };
+
+type SortKey = 'copy_score' | 'pnl_7d' | 'pnl_30d' | 'pnl_all' | 'win_rate' | 'trade_count' | 'volume';
+type SortDir = 'desc' | 'asc';
+
+// ─── Formatters ───────────────────────────────────────────────────────────────
+
+function fmtCompact(v: number | null | undefined): string {
+  if (v == null) return '—';
+  const abs = Math.abs(v);
+  const prefix = v < 0 ? '-$' : '$';
+  if (abs >= 1_000_000) return `${prefix}${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${prefix}${(abs / 1_000).toFixed(1)}K`;
+  return `${prefix}${abs.toFixed(2)}`;
+}
+
+function fmtNum(v: number | null | undefined): string {
+  if (v == null) return '—';
+  return v.toLocaleString();
+}
+
+function fmtPct(v: number | null | undefined): string {
+  if (v == null) return '—';
+  return `${(v * 100).toFixed(1)}%`;
+}
+
+function fmtRelative(d: string | null | undefined): string {
+  if (!d) return '—';
+  const diff = Date.now() - new Date(d).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
 const truncate = (addr: string) =>
   addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
-const fmtDate = (d: string | null | undefined) =>
-  d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
+function scoreColor(score: number | null | undefined): string {
+  if (score == null) return 'copy-score-none';
+  if (score >= 70) return 'copy-score-high';
+  if (score >= 40) return 'copy-score-mid';
+  return 'copy-score-low';
+}
+
+function pnlClass(v: number | null | undefined): string {
+  if (v == null) return 'copy-td-muted';
+  return v >= 0 ? 'copy-num-pos' : 'copy-num-neg';
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function EmptyWallets({ onAdd }: { onAdd: () => void }) {
   return (
@@ -47,13 +105,41 @@ function EmptyWallets({ onAdd }: { onAdd: () => void }) {
   );
 }
 
+interface SortHeaderProps {
+  label: string;
+  sortKey: SortKey;
+  active: SortKey;
+  dir: SortDir;
+  onSort: (k: SortKey) => void;
+}
+function SortHeader({ label, sortKey, active, dir, onSort }: SortHeaderProps) {
+  const isActive = active === sortKey;
+  return (
+    <th
+      className={`copy-th-sort${isActive ? ` ${dir}` : ''}`}
+      onClick={() => onSort(sortKey)}
+      title={`Sort by ${label}`}
+    >
+      {label}
+    </th>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export default function TrackedWalletsSection() {
   const [wallets, setWallets] = useState<WalletRow[]>([]);
+  const [seriesMap, setSeriesMap] = useState<Map<string, SeriesPoint[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
+  // Sort state — default: sort by copy_score descending
+  const [sortKey, setSortKey] = useState<SortKey>('copy_score');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  // Add wallet form state
   const [fAddress, setFAddress] = useState('');
   const [fName, setFName] = useState('');
   const [fSaving, setFSaving] = useState(false);
@@ -64,10 +150,28 @@ export default function TrackedWalletsSection() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/copy/wallets', { cache: 'no-store' });
-      const payload = await res.json();
-      if (payload.ok) setWallets(payload.rows ?? []);
-      else setError(payload.error ?? 'Failed to load wallets');
+      const [walletsRes, seriesRes] = await Promise.all([
+        fetch('/api/copy/wallets', { cache: 'no-store' }),
+        fetch('/api/copy/wallet-series', { cache: 'no-store' }),
+      ]);
+
+      const walletsPayload = await walletsRes.json();
+      if (walletsPayload.ok) {
+        setWallets(walletsPayload.rows ?? []);
+      } else {
+        setError(walletsPayload.error ?? 'Failed to load wallets');
+      }
+
+      if (seriesRes.ok) {
+        const seriesPayload = await seriesRes.json();
+        if (seriesPayload.ok) {
+          const map = new Map<string, SeriesPoint[]>();
+          for (const entry of (seriesPayload.series ?? []) as WalletSeries[]) {
+            map.set(entry.wallet_address, entry.points);
+          }
+          setSeriesMap(map);
+        }
+      }
     } catch {
       setError('Network error loading wallets');
     } finally {
@@ -76,6 +180,23 @@ export default function TrackedWalletsSection() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleSort = (key: SortKey) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  };
+
+  const sorted = useMemo(() => {
+    return [...wallets].sort((a, b) => {
+      const av = a.metrics?.[sortKey] ?? -Infinity;
+      const bv = b.metrics?.[sortKey] ?? -Infinity;
+      return sortDir === 'desc' ? (bv as number) - (av as number) : (av as number) - (bv as number);
+    });
+  }, [wallets, sortKey, sortDir]);
 
   const handleToggleActive = async (wallet: WalletRow) => {
     setTogglingId(wallet.wallet_address);
@@ -126,6 +247,7 @@ export default function TrackedWalletsSection() {
 
   return (
     <div className="copy-section">
+      {/* ── Section header ── */}
       <div className="copy-section-head">
         <div className="copy-section-title-row">
           <h2 className="copy-section-title">Tracked Wallets</h2>
@@ -143,12 +265,15 @@ export default function TrackedWalletsSection() {
         </div>
       </div>
 
+      {/* ── Add wallet form ── */}
       {showForm && (
         <form className="copy-add-form" onSubmit={handleAddWallet}>
           <div className="copy-form-title">Add Tracked Wallet</div>
           <div className="copy-form-grid">
             <div className="copy-form-field copy-form-grid-wide">
-              <label className="copy-form-label">Wallet Address <span style={{ color: '#f87171' }}>*</span></label>
+              <label className="copy-form-label">
+                Wallet Address <span style={{ color: '#f87171' }}>*</span>
+              </label>
               <input
                 className="copy-form-input"
                 value={fAddress}
@@ -180,6 +305,7 @@ export default function TrackedWalletsSection() {
         </form>
       )}
 
+      {/* ── Table / states ── */}
       {loading ? (
         <div className="copy-loading">Loading wallets…</div>
       ) : error ? (
@@ -190,62 +316,139 @@ export default function TrackedWalletsSection() {
         <EmptyWallets onAdd={() => setShowForm(true)} />
       ) : (
         <div className="copy-table-wrap">
-          <table className="copy-table">
+          <table className="copy-table copy-table-leaderboard">
             <thead>
               <tr>
-                <th>Wallet</th>
-                <th>Active</th>
-                <th>Score</th>
-                <th>7d P/L</th>
-                <th>30d P/L</th>
-                <th>Trades</th>
+                <th className="copy-th-rank">#</th>
+                <th style={{ minWidth: 180 }}>Wallet</th>
+                <th style={{ minWidth: 50 }}>Active</th>
+                <SortHeader label="Score"    sortKey="copy_score"  active={sortKey} dir={sortDir} onSort={handleSort} />
+                <th style={{ minWidth: 92 }}>Trend</th>
+                <SortHeader label="7d P/L"   sortKey="pnl_7d"      active={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortHeader label="30d P/L"  sortKey="pnl_30d"     active={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortHeader label="All-time" sortKey="pnl_all"     active={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortHeader label="Win Rate" sortKey="win_rate"    active={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortHeader label="Trades"   sortKey="trade_count" active={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortHeader label="Volume"   sortKey="volume"      active={sortKey} dir={sortDir} onSort={handleSort} />
                 <th>Category</th>
-                <th>Metrics At</th>
+                <th style={{ minWidth: 80 }}>Last Trade</th>
               </tr>
             </thead>
             <tbody>
-              {wallets.map((w) => (
-                <tr key={w.wallet_address}>
-                  <td>
-                    <span className="copy-td-name">{w.display_name ?? <span className="copy-td-muted">Unnamed</span>}</span>
-                    <span className="copy-td-sub copy-mono" title={w.wallet_address}>{truncate(w.wallet_address)}</span>
-                  </td>
-                  <td>
-                    <div className="toggle-switch" style={{ width: 36, height: 20 }}>
-                      <input
-                        type="checkbox"
-                        checked={w.is_active}
-                        onChange={() => handleToggleActive(w)}
-                        disabled={togglingId === w.wallet_address}
-                        id={`wallet-active-${w.wallet_address}`}
+              {sorted.map((w, idx) => {
+                const m = w.metrics;
+                const points = seriesMap.get(w.wallet_address) ?? [];
+                const winRatePct = m?.win_rate != null ? m.win_rate * 100 : null;
+
+                return (
+                  <tr key={w.wallet_address} className={w.is_active ? '' : 'copy-row-inactive'}>
+                    {/* Rank */}
+                    <td className="copy-td-rank">
+                      {idx + 1}
+                    </td>
+
+                    {/* Wallet identity */}
+                    <td>
+                      <span className="copy-td-name">
+                        {w.display_name ?? <span className="copy-td-muted">Unnamed</span>}
+                      </span>
+                      <span
+                        className="copy-td-sub copy-mono"
+                        title={w.wallet_address}
+                        style={{ cursor: 'default' }}
+                      >
+                        {truncate(w.wallet_address)}
+                      </span>
+                    </td>
+
+                    {/* Active toggle */}
+                    <td>
+                      <div className="toggle-switch" style={{ width: 36, height: 20 }}>
+                        <input
+                          type="checkbox"
+                          checked={w.is_active}
+                          onChange={() => handleToggleActive(w)}
+                          disabled={togglingId === w.wallet_address}
+                          id={`wallet-active-${w.wallet_address}`}
+                        />
+                        <label className="toggle-slider" htmlFor={`wallet-active-${w.wallet_address}`} />
+                      </div>
+                    </td>
+
+                    {/* Copy score — prominent */}
+                    <td className="copy-td-num">
+                      {m?.copy_score != null ? (
+                        <span className={`copy-score-badge ${scoreColor(m.copy_score)}`}>
+                          {m.copy_score.toFixed(1)}
+                        </span>
+                      ) : (
+                        <span className="copy-td-muted">—</span>
+                      )}
+                    </td>
+
+                    {/* Sparkline */}
+                    <td className="copy-td-sparkline">
+                      <WalletSparkline
+                        points={points}
+                        walletAddress={w.wallet_address}
                       />
-                      <label className="toggle-slider" htmlFor={`wallet-active-${w.wallet_address}`} />
-                    </div>
-                  </td>
-                  <td className="copy-td-num">
-                    {w.metrics?.copy_score != null
-                      ? <span style={{ fontWeight: 600, color: '#f8fafc' }}>{w.metrics.copy_score.toFixed(1)}</span>
-                      : <span className="copy-td-muted">—</span>}
-                  </td>
-                  <td className="copy-td-num">
-                    <span className={(w.metrics?.pnl_7d ?? 0) >= 0 ? 'copy-num-pos' : 'copy-num-neg'}>
-                      {fmt(w.metrics?.pnl_7d)}
-                    </span>
-                  </td>
-                  <td className="copy-td-num">
-                    <span className={(w.metrics?.pnl_30d ?? 0) >= 0 ? 'copy-num-pos' : 'copy-num-neg'}>
-                      {fmt(w.metrics?.pnl_30d)}
-                    </span>
-                  </td>
-                  <td className="copy-td-num copy-td-muted">{w.metrics?.trade_count ?? '—'}</td>
-                  <td>
-                    {w.metrics?.category_focus
-                      ? <span className="copy-badge copy-badge-purple">{w.metrics.category_focus}</span>
-                      : <span className="copy-td-muted">—</span>}
-                  </td>
-                  <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(w.metrics?.updated_at)}</td>
-                </tr>
-              ))}
+                    </td>
+
+                    {/* P/L fields */}
+                    <td className={`copy-td-num ${pnlClass(m?.pnl_7d)}`}>
+                      {fmtCompact(m?.pnl_7d)}
+                    </td>
+                    <td className={`copy-td-num ${pnlClass(m?.pnl_30d)}`}>
+                      {fmtCompact(m?.pnl_30d)}
+                    </td>
+                    <td className={`copy-td-num ${pnlClass(m?.pnl_all)}`}>
+                      {fmtCompact(m?.pnl_all)}
+                    </td>
+
+                    {/* Win rate with mini bar */}
+                    <td className="copy-td-num">
+                      {winRatePct != null ? (
+                        <div className="copy-winrate">
+                          <span style={{ color: winRatePct >= 55 ? '#34d399' : winRatePct >= 40 ? '#fbbf24' : '#f87171' }}>
+                            {fmtPct(m?.win_rate)}
+                          </span>
+                          <div className="copy-winrate-bar">
+                            <div
+                              className="copy-winrate-fill"
+                              style={{
+                                width: `${Math.min(100, winRatePct)}%`,
+                                background: winRatePct >= 55 ? '#34d399' : winRatePct >= 40 ? '#fbbf24' : '#f87171',
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="copy-td-muted">—</span>
+                      )}
+                    </td>
+
+                    {/* Trades */}
+                    <td className="copy-td-num copy-td-muted">{fmtNum(m?.trade_count)}</td>
+
+                    {/* Volume */}
+                    <td className="copy-td-num copy-td-muted">{fmtCompact(m?.volume)}</td>
+
+                    {/* Category */}
+                    <td>
+                      {m?.category_focus ? (
+                        <span className="copy-badge copy-badge-purple">{m.category_focus}</span>
+                      ) : (
+                        <span className="copy-td-muted">—</span>
+                      )}
+                    </td>
+
+                    {/* Last trade */}
+                    <td className="copy-td-muted" style={{ fontSize: '0.71rem', whiteSpace: 'nowrap' }}>
+                      {fmtRelative(m?.last_trade_at)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
