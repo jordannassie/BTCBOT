@@ -1,5 +1,3 @@
-'use server';
-
 import { getPaperSummary } from '@/lib/paperSummary';
 import { getAllStrategyPnl24h } from '@/lib/strategyPnl';
 import ResetPaperBankrollButton from '@/components/dashboard/ResetPaperBankrollButton';

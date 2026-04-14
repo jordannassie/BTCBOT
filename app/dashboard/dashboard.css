@@ -73,6 +73,39 @@
   gap: 0.75rem;
 }
 
+/* ─── Header nav (Copy Trading link, etc.) ─────────────────────────────────── */
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.header-nav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.5rem;
+  font-size: 0.83rem;
+  font-weight: 500;
+  color: rgba(248, 250, 252, 0.65);
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.header-nav-link:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.header-nav-link.active {
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
 .header-btn {
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;

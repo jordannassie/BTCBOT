@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { StrategyOption } from './StrategyFilter';
+import { MARKET_DISPLAY } from '@/lib/config';
 
 type PaperPositionRow = {
   id: string;
@@ -73,13 +74,13 @@ export default function PaperPositionsPanel({ strategy }: PaperPositionsPanelPro
       <div className="col-market">
         <div className="market-icon">
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <circle cx="16" cy="16" r="15" fill="#F7931A" />
+            <circle cx="16" cy="16" r="15" fill={MARKET_DISPLAY.iconColor} />
             <path d="M20 14c0-1.5-1-2.5-2.5-2.5h-3v5h3c1.5 0 2.5-1 2.5-2.5z" fill="white" />
             <path d="M20 18.5c0-1.5-1-2.5-2.5-2.5h-3v5h3c1.5 0 2.5-1 2.5-2.5z" fill="white" />
           </svg>
         </div>
         <div className="market-info">
-          <div className="market-title">Bitcoin Up or Down - {position.market_slug}</div>
+          <div className="market-title">{MARKET_DISPLAY.titlePrefix}{position.market_slug}</div>
           <div className="market-meta">
             <span className={`badge ${position.side === 'yes' ? 'badge-green' : 'badge-red'}`}>
               {position.side.toUpperCase()}

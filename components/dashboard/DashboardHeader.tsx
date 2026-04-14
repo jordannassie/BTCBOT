@@ -1,8 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { APP_NAME } from '@/lib/config';
 
 export default function DashboardHeader() {
+  const pathname = usePathname();
+
   return (
     <header className="dashboard-header">
       <div className="header-content">
@@ -12,7 +16,7 @@ export default function DashboardHeader() {
             <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          <span>BTCBOT</span>
+          <span>{APP_NAME}</span>
         </Link>
 
         <div className="header-search">
@@ -22,6 +26,15 @@ export default function DashboardHeader() {
           </svg>
           <input type="text" placeholder="Search markets..." disabled />
         </div>
+
+        <nav className="header-nav">
+          <Link
+            href="/dashboard/copy"
+            className={`header-nav-link${pathname.startsWith('/dashboard/copy') ? ' active' : ''}`}
+          >
+            Copy Trading
+          </Link>
+        </nav>
 
         <div className="header-actions">
           <button className="header-btn secondary">How it works</button>

@@ -1,3 +1,7 @@
+// LEGACY — not mounted anywhere in the current dashboard.
+// This component was the original operator controls panel, replaced by the
+// individual PaperStrategyCard and PaperCandleBiasCard components.
+// Safe to delete once confirmed no longer needed.
 export default function OperatorControlsCard() {
   return (
     <div className="profile-card operator-card">

@@ -1,3 +1,11 @@
+// LEGACY — not mounted anywhere in the current dashboard.
+// This was an earlier positions table component that rendered both live
+// PositionGroup rows and paper PaperPosition rows. Replaced by
+// PaperPositionsPanel (which fetches its own data via /api/paper-positions).
+// Contains hardcoded "Bitcoin Up or Down -" market prefix and BTC orange icon
+// that should be updated via MARKET_DISPLAY in lib/config.ts if ever reactivated.
+// Safe to delete once confirmed no longer needed.
+
 import type { PositionGroup, PaperPosition } from '@/lib/botData';
 
 type PositionsTableProps = {

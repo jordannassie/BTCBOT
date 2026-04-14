@@ -1,39 +1,21 @@
 'use client';
 
-export type StrategyOption =
-  | 'ALL'
-  | 'FASTLOOP'
-  | 'SNIPER'
-  | 'CANDLE_BIAS'
-  | 'SWEEP_RECLAIM'
-  | 'BREAKOUT_CLOSE'
-  | 'ENGULFING_LEVEL'
-  | 'REJECTION_WICK'
-  | 'FOLLOW_THROUGH';
+import { STRATEGY_FILTER_OPTIONS, type StrategyFilterOption } from '@/lib/config';
+
+// Re-exported for backward compatibility — other components import this type here.
+export type StrategyOption = StrategyFilterOption;
 
 type StrategyFilterProps = {
   value: StrategyOption;
   onChange: (value: StrategyOption) => void;
 };
 
-const OPTIONS: StrategyOption[] = [
-  'ALL',
-  'FASTLOOP',
-  'SNIPER',
-  'CANDLE_BIAS',
-  'SWEEP_RECLAIM',
-  'BREAKOUT_CLOSE',
-  'ENGULFING_LEVEL',
-  'REJECTION_WICK',
-  'FOLLOW_THROUGH'
-];
-
 export default function StrategyFilter({ value, onChange }: StrategyFilterProps) {
   return (
     <label className="strategy-filter">
       <span>Strategy</span>
       <select value={value} onChange={(event) => onChange(event.target.value as StrategyOption)}>
-        {OPTIONS.map((option) => (
+        {STRATEGY_FILTER_OPTIONS.map((option) => (
           <option key={option} value={option}>
             {option === 'ALL' ? 'All' : option}
           </option>

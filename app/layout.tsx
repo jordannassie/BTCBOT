@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import './globals.css';
+import { APP_TITLE, APP_DESCRIPTION } from '@/lib/config';
 
 export const metadata = {
-  title: 'BTCBOT · Trading Dashboard',
-  description: 'Professional crypto trading bot dashboard powered by Supabase'
+  title: APP_TITLE,
+  description: APP_DESCRIPTION
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

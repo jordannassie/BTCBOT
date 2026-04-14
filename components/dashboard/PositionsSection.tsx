@@ -1,3 +1,9 @@
+// LEGACY — not mounted anywhere in the current dashboard.
+// This was an earlier composition of DashboardTabs + PaperPositionsPanel using
+// Next.js route-based tab navigation. Replaced by DashboardContent, which
+// handles both Positions and Activity tabs via client-side state.
+// Safe to delete once DashboardTabs is also removed.
+
 'use client';
 
 import { useState } from 'react';
