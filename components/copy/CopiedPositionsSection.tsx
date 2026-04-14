@@ -21,11 +21,13 @@ type CopiedPosition = {
 
 const truncate = (addr: string) =>
   addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
+const fmtDate = (d: string | null | undefined) =>
+  d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
 function statusBadge(status: string) {
-  if (status === 'OPEN')      return <span className="copy-badge copy-badge-green">OPEN</span>;
-  if (status === 'CLOSED')    return <span className="copy-badge copy-badge-gray">CLOSED</span>;
-  if (status === 'CANCELLED') return <span className="copy-badge copy-badge-red">CANCELLED</span>;
+  if (status === 'OPEN')      return <span className="copy-badge copy-badge-open">Open</span>;
+  if (status === 'CLOSED')    return <span className="copy-badge copy-badge-closed">Closed</span>;
+  if (status === 'CANCELLED') return <span className="copy-badge copy-badge-cancelled">Cancelled</span>;
   return <span className="copy-badge copy-badge-gray">{status}</span>;
 }
 
@@ -59,33 +61,54 @@ export default function CopiedPositionsSection() {
 
   return (
     <div className="copy-section">
-      <div className="copy-section-header">
-        <h2 className="copy-section-title">Copied Positions</h2>
-        <div className="copy-section-actions" style={{ gap: '0.3rem' }}>
-          {filters.map((f) => (
-            <button
-              key={f}
-              className={`copy-btn copy-btn-sm ${filter === f ? 'copy-btn-primary' : 'copy-btn-secondary'}`}
-              onClick={() => setFilter(f)}
-            >
-              {f}
-            </button>
-          ))}
-          <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={() => load(filter)} disabled={loading}>
+      <div className="copy-section-head">
+        <div className="copy-section-title-row">
+          <h2 className="copy-section-title">Copied Positions</h2>
+          {!loading && rows.length > 0 && (
+            <span className="copy-section-count">{rows.length}</span>
+          )}
+        </div>
+        <div className="copy-section-actions">
+          <div className="copy-filter-pills">
+            {filters.map((f) => (
+              <button
+                key={f}
+                className={`copy-filter-pill${filter === f ? ' active' : ''}`}
+                onClick={() => setFilter(f)}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          <button
+            className="copy-btn copy-btn-secondary copy-btn-sm"
+            onClick={() => load(filter)}
+            disabled={loading}
+            title="Refresh"
+          >
             ↻
           </button>
         </div>
       </div>
 
       {loading ? (
-        <div className="copy-empty"><p>Loading…</p></div>
+        <div className="copy-loading">Loading positions…</div>
       ) : error ? (
-        <div className="copy-empty"><p style={{ color: '#ef4444' }}>{error}</p></div>
+        <div className="copy-empty">
+          <p className="copy-empty-title" style={{ color: '#f87171' }}>{error}</p>
+        </div>
       ) : rows.length === 0 ? (
         <div className="copy-empty">
-          <p>No {filter !== 'ALL' ? filter.toLowerCase() + ' ' : ''}copied positions yet.</p>
+          <div className="copy-empty-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
+            </svg>
+          </div>
+          <p className="copy-empty-title">
+            No {filter !== 'ALL' ? filter.toLowerCase() + ' ' : ''}copied positions
+          </p>
           <p className="copy-empty-sub">
-            Positions will appear here once the copy-trading worker successfully executes trades.
+            Positions appear here once the copy worker successfully places orders on your behalf.
           </p>
         </div>
       ) : (
@@ -101,7 +124,7 @@ export default function CopiedPositionsSection() {
                 <th>Entry</th>
                 <th>Size</th>
                 <th>Status</th>
-                <th>P/L</th>
+                <th>P / L</th>
                 <th>Exit Price</th>
                 <th>Closed</th>
               </tr>
@@ -109,31 +132,37 @@ export default function CopiedPositionsSection() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id}>
-                  <td style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.72rem' }}>
-                    {new Date(r.opened_at).toLocaleString()}
+                  <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(r.opened_at)}</td>
+                  <td>
+                    <span className="copy-mono" title={r.wallet_address}>{truncate(r.wallet_address)}</span>
                   </td>
-                  <td><span className="copy-mono">{truncate(r.wallet_address)}</span></td>
-                  <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {r.market_title ?? r.market_slug ?? '—'}
+                  <td>
+                    <span className="copy-td-truncate" title={r.market_title ?? r.market_slug ?? undefined}>
+                      {r.market_title ?? r.market_slug ?? '—'}
+                    </span>
                   </td>
                   <td>
                     {r.outcome ? (
                       <span className={`copy-badge ${r.outcome.toUpperCase() === 'YES' ? 'copy-badge-green' : 'copy-badge-red'}`}>
                         {r.outcome.toUpperCase()}
                       </span>
-                    ) : '—'}
+                    ) : <span className="copy-td-muted">—</span>}
                   </td>
-                  <td>{r.side ?? '—'}</td>
-                  <td>{r.entry_price != null ? r.entry_price.toFixed(3) : '—'}</td>
-                  <td>{r.size != null ? `$${r.size.toFixed(2)}` : '—'}</td>
+                  <td className="copy-td-muted">{r.side ?? '—'}</td>
+                  <td className="copy-td-num">{r.entry_price != null ? r.entry_price.toFixed(3) : '—'}</td>
+                  <td className="copy-td-num">{r.size != null ? `$${r.size.toFixed(2)}` : '—'}</td>
                   <td>{statusBadge(r.status)}</td>
-                  <td style={{ color: r.pnl > 0 ? '#10b981' : r.pnl < 0 ? '#ef4444' : 'rgba(255,255,255,0.5)', fontWeight: 600 }}>
-                    {r.status === 'OPEN' ? '—' : (r.pnl >= 0 ? '+' : '') + `$${r.pnl.toFixed(2)}`}
+                  <td className="copy-td-num">
+                    {r.status === 'OPEN' ? (
+                      <span className="copy-td-muted">—</span>
+                    ) : (
+                      <span className={r.pnl > 0 ? 'copy-num-pos' : r.pnl < 0 ? 'copy-num-neg' : 'copy-num-neu'}>
+                        {r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}
+                      </span>
+                    )}
                   </td>
-                  <td>{r.exit_price != null ? r.exit_price.toFixed(3) : '—'}</td>
-                  <td style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.72rem' }}>
-                    {r.closed_at ? new Date(r.closed_at).toLocaleString() : '—'}
-                  </td>
+                  <td className="copy-td-num copy-td-muted">{r.exit_price != null ? r.exit_price.toFixed(3) : '—'}</td>
+                  <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(r.closed_at)}</td>
                 </tr>
               ))}
             </tbody>

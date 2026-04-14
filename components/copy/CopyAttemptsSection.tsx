@@ -26,15 +26,18 @@ type CopyAttempt = {
 
 const truncate = (addr: string) =>
   addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
+const fmtDate = (d: string) =>
+  new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 function orderStatusBadge(status: string | null) {
   if (!status) return <span className="copy-badge copy-badge-gray">—</span>;
-  const cls =
-    status === 'MATCHED' ? 'copy-badge-green' :
-    status === 'FAILED'  ? 'copy-badge-red' :
-    status === 'SKIPPED' ? 'copy-badge-gray' :
-    status === 'PARTIAL' ? 'copy-badge-yellow' : 'copy-badge-purple';
-  return <span className={`copy-badge ${cls}`}>{status}</span>;
+  const map: Record<string, string> = {
+    MATCHED: 'copy-badge-matched',
+    FAILED:  'copy-badge-failed',
+    SKIPPED: 'copy-badge-skipped',
+    PARTIAL: 'copy-badge-partial',
+  };
+  return <span className={`copy-badge ${map[status] ?? 'copy-badge-blue'}`}>{status}</span>;
 }
 
 export default function CopyAttemptsSection() {
@@ -61,8 +64,13 @@ export default function CopyAttemptsSection() {
 
   return (
     <div className="copy-section">
-      <div className="copy-section-header">
-        <h2 className="copy-section-title">Recent Copy Attempts</h2>
+      <div className="copy-section-head">
+        <div className="copy-section-title-row">
+          <h2 className="copy-section-title">Recent Copy Attempts</h2>
+          {!loading && rows.length > 0 && (
+            <span className="copy-section-count">{rows.length}</span>
+          )}
+        </div>
         <div className="copy-section-actions">
           <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={load} disabled={loading}>
             ↻ Refresh
@@ -71,14 +79,21 @@ export default function CopyAttemptsSection() {
       </div>
 
       {loading ? (
-        <div className="copy-empty"><p>Loading…</p></div>
+        <div className="copy-loading">Loading copy attempts…</div>
       ) : error ? (
-        <div className="copy-empty"><p style={{ color: '#ef4444' }}>{error}</p></div>
+        <div className="copy-empty">
+          <p className="copy-empty-title" style={{ color: '#f87171' }}>{error}</p>
+        </div>
       ) : rows.length === 0 ? (
         <div className="copy-empty">
-          <p>No copy attempts yet.</p>
+          <div className="copy-empty-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <p className="copy-empty-title">No copy attempts yet</p>
           <p className="copy-empty-sub">
-            Attempts will appear here once the copy-trading worker begins processing source wallet trades.
+            Attempts appear here once the copy worker detects trades from tracked wallets and decides to copy or skip.
           </p>
         </div>
       ) : (
@@ -104,27 +119,46 @@ export default function CopyAttemptsSection() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id}>
-                  <td style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.72rem' }}>
-                    {new Date(r.created_at).toLocaleString()}
-                  </td>
-                  <td><span className="copy-mono">{truncate(r.wallet_address)}</span></td>
-                  <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {r.market_title ?? r.market_slug ?? '—'}
-                  </td>
-                  <td>{r.source_side ?? '—'}</td>
-                  <td>{r.source_outcome ?? '—'}</td>
-                  <td>{r.source_price != null ? r.source_price.toFixed(3) : '—'}</td>
-                  <td>{r.submitted_price != null ? r.submitted_price.toFixed(3) : '—'}</td>
-                  <td>{r.submitted_size != null ? `$${r.submitted_size.toFixed(2)}` : '—'}</td>
+                  <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(r.created_at)}</td>
                   <td>
-                    <span className={`copy-badge ${r.copied ? 'copy-badge-green' : 'copy-badge-gray'}`}>
-                      {r.copied ? 'Yes' : 'No'}
+                    <span className="copy-mono" title={r.wallet_address}>{truncate(r.wallet_address)}</span>
+                  </td>
+                  <td>
+                    <span className="copy-td-truncate" title={r.market_title ?? r.market_slug ?? undefined}>
+                      {r.market_title ?? r.market_slug ?? '—'}
+                    </span>
+                  </td>
+                  <td className="copy-td-muted">{r.source_side ?? '—'}</td>
+                  <td>
+                    {r.source_outcome ? (
+                      <span className={`copy-badge ${r.source_outcome.toUpperCase() === 'YES' ? 'copy-badge-green' : 'copy-badge-red'}`}>
+                        {r.source_outcome.toUpperCase()}
+                      </span>
+                    ) : <span className="copy-td-muted">—</span>}
+                  </td>
+                  <td className="copy-td-num copy-td-muted">
+                    {r.source_price != null ? r.source_price.toFixed(3) : '—'}
+                  </td>
+                  <td className="copy-td-num copy-td-muted">
+                    {r.submitted_price != null ? r.submitted_price.toFixed(3) : '—'}
+                  </td>
+                  <td className="copy-td-num">
+                    {r.submitted_size != null ? `$${r.submitted_size.toFixed(2)}` : '—'}
+                  </td>
+                  <td>
+                    <span className={`copy-badge ${r.copied ? 'copy-badge-copied' : 'copy-badge-skipped'}`}>
+                      {r.copied ? 'Copied' : 'Skipped'}
                     </span>
                   </td>
                   <td>{orderStatusBadge(r.order_status)}</td>
-                  <td>{r.latency_ms != null ? `${r.latency_ms}ms` : '—'}</td>
-                  <td>{r.slippage != null ? `${(r.slippage * 100).toFixed(2)}%` : '—'}</td>
-                  <td style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.75rem', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <td className="copy-td-num copy-td-muted">
+                    {r.latency_ms != null ? `${r.latency_ms}ms` : '—'}
+                  </td>
+                  <td className="copy-td-num copy-td-muted">
+                    {r.slippage != null ? `${(r.slippage * 100).toFixed(2)}%` : '—'}
+                  </td>
+                  <td className="copy-td-muted copy-td-truncate" title={r.skip_reason ?? undefined}
+                    style={{ fontSize: '0.72rem', maxWidth: 160 }}>
                     {r.skip_reason ?? '—'}
                   </td>
                 </tr>

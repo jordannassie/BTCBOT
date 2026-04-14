@@ -1,4 +1,6 @@
-/* Polymarket-style Dashboard Styles */
+/* ═══════════════════════════════════════════════════════════════════════════
+   BTCBOT Dashboard — Premium Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 .dashboard-wrapper {
   min-height: 100vh;
@@ -21,10 +23,10 @@
 .header-content {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 1rem 2rem;
+  padding: 0.875rem 2rem;
   display: flex;
   align-items: center;
-  gap: 2rem;
+  gap: 1.5rem;
 }
 
 .header-brand {
@@ -71,39 +73,102 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  /* Reserved for future auth controls */
 }
 
-/* ─── Header nav (Copy Trading link, etc.) ─────────────────────────────────── */
+/* ─── Header brand upgrade ──────────────────────────────────────────────────── */
+
+.brand-text {
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: #f8fafc;
+  letter-spacing: -0.02em;
+}
+
+.brand-divider {
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0 0.35rem;
+}
+
+.brand-product {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: rgba(248, 250, 252, 0.5);
+  letter-spacing: 0.01em;
+}
+
+/* ─── Header nav (multi-link) ───────────────────────────────────────────────── */
+
 .header-nav {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  margin-left: auto;
 }
 
+/* Secondary nav link (BTC Strategies) */
 .header-nav-link {
   display: inline-flex;
   align-items: center;
-  padding: 0.4rem 0.85rem;
+  padding: 0.42rem 0.9rem;
   border-radius: 0.5rem;
-  font-size: 0.83rem;
+  font-size: 0.82rem;
   font-weight: 500;
-  color: rgba(248, 250, 252, 0.65);
+  color: rgba(248, 250, 252, 0.5);
   text-decoration: none;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid transparent;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
   white-space: nowrap;
 }
 
 .header-nav-link:hover {
-  color: #f8fafc;
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(248, 250, 252, 0.85);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .header-nav-link.active {
-  color: #818cf8;
-  background: rgba(99, 102, 241, 0.1);
-  border-color: rgba(99, 102, 241, 0.35);
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Primary CTA nav link (Copy Trading) */
+.header-nav-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: #fff;
+  text-decoration: none;
+  background: linear-gradient(135deg, #6366f1, #3b82f6);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+  white-space: nowrap;
+}
+
+.header-nav-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.45);
+}
+
+.header-nav-cta.active {
+  background: linear-gradient(135deg, #4f46e5, #2563eb);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+}
+
+.header-nav-cta-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  flex-shrink: 0;
 }
 
 .header-btn {
@@ -1590,5 +1655,178 @@
 
   .amount-main {
     font-size: 1.1rem;
+  }
+}
+
+/* ─── Copy Trading Promo Card (on main /dashboard) ──────────────────────────── */
+
+.copy-promo-card {
+  position: relative;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(59, 130, 246, 0.07));
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 1.1rem;
+  padding: 2rem 2.5rem;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  overflow: hidden;
+}
+
+.copy-promo-card::before {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.18), transparent 70%);
+  pointer-events: none;
+}
+
+.copy-promo-card::after {
+  content: '';
+  position: absolute;
+  bottom: -40px;
+  right: 120px;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.1), transparent 70%);
+  pointer-events: none;
+}
+
+.copy-promo-body {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.copy-promo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #818cf8;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  margin-bottom: 0.85rem;
+}
+
+.copy-promo-badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #818cf8;
+  animation: promoPromoPulse 2s ease-in-out infinite;
+}
+
+@keyframes promoPromoPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.copy-promo-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.copy-promo-desc {
+  font-size: 0.875rem;
+  color: rgba(248, 250, 252, 0.55);
+  margin: 0;
+  line-height: 1.6;
+  max-width: 400px;
+}
+
+.copy-promo-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.copy-promo-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.4rem;
+  background: linear-gradient(135deg, #6366f1, #3b82f6);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 0.6rem;
+  text-decoration: none;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.copy-promo-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+}
+
+.copy-promo-cta-arrow {
+  transition: transform 0.2s;
+}
+
+.copy-promo-cta:hover .copy-promo-cta-arrow {
+  transform: translateX(3px);
+}
+
+.copy-promo-stats {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+}
+
+.copy-promo-stat {
+  text-align: center;
+}
+
+.copy-promo-stat-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.copy-promo-stat-label {
+  font-size: 0.7rem;
+  color: rgba(248, 250, 252, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-top: 0.25rem;
+  font-weight: 600;
+}
+
+.copy-promo-divider {
+  width: 1px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 768px) {
+  .copy-promo-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 1.5rem;
+    gap: 1.25rem;
+  }
+
+  .copy-promo-stats {
+    gap: 1.5rem;
   }
 }

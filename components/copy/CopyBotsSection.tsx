@@ -25,6 +25,25 @@ type TrackedWallet = { wallet_address: string; display_name: string | null };
 
 const truncate = (addr: string) =>
   addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
+const fmtDate = (d: string) =>
+  new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+function EmptyBots({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div className="copy-empty">
+      <div className="copy-empty-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/>
+        </svg>
+      </div>
+      <p className="copy-empty-title">No copy bots yet</p>
+      <p className="copy-empty-sub">Create a bot to start mirroring trades from a tracked wallet. Start with a PAPER bot to test the strategy.</p>
+      <button className="copy-btn copy-btn-primary" style={{ marginTop: '1rem' }} onClick={onAdd}>
+        + Create Bot
+      </button>
+    </div>
+  );
+}
 
 export default function CopyBotsSection() {
   const [bots, setBots] = useState<CopyBot[]>([]);
@@ -34,7 +53,6 @@ export default function CopyBotsSection() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [wallets, setWallets] = useState<TrackedWallet[]>([]);
 
-  // Form fields
   const [fName, setFName] = useState('');
   const [fWallet, setFWallet] = useState('');
   const [fMode, setFMode] = useState<'PAPER' | 'LIVE'>('PAPER');
@@ -100,8 +118,8 @@ export default function CopyBotsSection() {
     e.preventDefault();
     setFError(null);
     setFSuccess(false);
-    if (!fName.trim()) { setFError('Name is required'); return; }
-    if (!fWallet.trim()) { setFError('Wallet address is required'); return; }
+    if (!fName.trim()) { setFError('Bot name is required'); return; }
+    if (!fWallet.trim()) { setFError('Source wallet is required'); return; }
     setFSaving(true);
     try {
       const res = await fetch('/api/copy/bots', {
@@ -122,7 +140,7 @@ export default function CopyBotsSection() {
         cache: 'no-store',
       });
       const payload = await res.json();
-      if (!payload.ok) { setFError(payload.error ?? 'Failed to add bot'); return; }
+      if (!payload.ok) { setFError(payload.error ?? 'Failed to create bot'); return; }
       setFName(''); setFWallet(''); setFMode('PAPER'); setFCopyMode('scaled');
       setFSizingValue('1'); setFMaxTrade('25'); setFMaxPos('10'); setFMaxPerHr('20');
       setFMaxSlippage('0.03'); setFDelay('0');
@@ -136,16 +154,21 @@ export default function CopyBotsSection() {
 
   const modeBadge = (mode: string) =>
     mode === 'LIVE'
-      ? <span className="copy-badge copy-badge-green">LIVE</span>
-      : <span className="copy-badge copy-badge-blue">PAPER</span>;
+      ? <span className="copy-badge copy-badge-live">LIVE</span>
+      : <span className="copy-badge copy-badge-paper">PAPER</span>;
 
   return (
     <div className="copy-section">
-      <div className="copy-section-header">
-        <h2 className="copy-section-title">Copy Bots</h2>
+      <div className="copy-section-head">
+        <div className="copy-section-title-row">
+          <h2 className="copy-section-title">Copy Bots</h2>
+          {!loading && bots.length > 0 && (
+            <span className="copy-section-count">{bots.length}</span>
+          )}
+        </div>
         <div className="copy-section-actions">
           <button
-            className="copy-btn copy-btn-secondary copy-btn-sm"
+            className={`copy-btn copy-btn-sm ${showForm ? 'copy-btn-secondary' : 'copy-btn-primary'}`}
             onClick={() => setShowForm((v) => !v)}
           >
             {showForm ? 'Cancel' : '+ Add Bot'}
@@ -155,13 +178,14 @@ export default function CopyBotsSection() {
 
       {showForm && (
         <form className="copy-add-form" onSubmit={handleAddBot}>
+          <div className="copy-form-title">Create Copy Bot</div>
           <div className="copy-form-grid">
             <div className="copy-form-field">
-              <label className="copy-form-label">Bot Name *</label>
-              <input className="copy-form-input" value={fName} onChange={(e) => setFName(e.target.value)} placeholder="e.g. Copy Whale A" />
+              <label className="copy-form-label">Bot Name <span style={{ color: '#f87171' }}>*</span></label>
+              <input className="copy-form-input" value={fName} onChange={(e) => setFName(e.target.value)} placeholder="e.g. Copy — Whale A" />
             </div>
             <div className="copy-form-field">
-              <label className="copy-form-label">Source Wallet *</label>
+              <label className="copy-form-label">Source Wallet <span style={{ color: '#f87171' }}>*</span></label>
               {wallets.length > 0 ? (
                 <select className="copy-form-select" value={fWallet} onChange={(e) => setFWallet(e.target.value)}>
                   <option value="">— Select wallet —</option>
@@ -178,88 +202,96 @@ export default function CopyBotsSection() {
             <div className="copy-form-field">
               <label className="copy-form-label">Mode</label>
               <select className="copy-form-select" value={fMode} onChange={(e) => setFMode(e.target.value as 'PAPER' | 'LIVE')}>
-                <option value="PAPER">PAPER</option>
-                <option value="LIVE">LIVE</option>
+                <option value="PAPER">PAPER (simulated)</option>
+                <option value="LIVE">LIVE (real orders)</option>
               </select>
+              <span className="copy-form-hint">Start with PAPER to test risk-free</span>
             </div>
             <div className="copy-form-field">
               <label className="copy-form-label">Copy Mode</label>
               <select className="copy-form-select" value={fCopyMode} onChange={(e) => setFCopyMode(e.target.value)}>
-                <option value="scaled">Scaled (multiplier)</option>
-                <option value="exact">Exact (fixed USD)</option>
-                <option value="percent">Percent of bankroll</option>
+                <option value="scaled">Scaled — multiplier of source size</option>
+                <option value="exact">Exact — fixed USD per trade</option>
+                <option value="percent">Percent — % of bankroll</option>
               </select>
             </div>
             <div className="copy-form-field">
               <label className="copy-form-label">Sizing Value</label>
               <input className="copy-form-input" type="number" step="0.01" value={fSizingValue} onChange={(e) => setFSizingValue(e.target.value)} />
+              <span className="copy-form-hint">Multiplier, USD, or % depending on mode</span>
             </div>
             <div className="copy-form-field">
               <label className="copy-form-label">Max Trade Size ($)</label>
-              <input className="copy-form-input" type="number" step="1" value={fMaxTrade} onChange={(e) => setFMaxTrade(e.target.value)} />
+              <input className="copy-form-input" type="number" step="1" min="0" value={fMaxTrade} onChange={(e) => setFMaxTrade(e.target.value)} />
+              <span className="copy-form-hint">USD cap per individual trade</span>
             </div>
             <div className="copy-form-field">
               <label className="copy-form-label">Max Open Positions</label>
-              <input className="copy-form-input" type="number" step="1" value={fMaxPos} onChange={(e) => setFMaxPos(e.target.value)} />
+              <input className="copy-form-input" type="number" step="1" min="0" value={fMaxPos} onChange={(e) => setFMaxPos(e.target.value)} />
             </div>
             <div className="copy-form-field">
-              <label className="copy-form-label">Max Trades/Hr</label>
-              <input className="copy-form-input" type="number" step="1" value={fMaxPerHr} onChange={(e) => setFMaxPerHr(e.target.value)} />
+              <label className="copy-form-label">Max Trades / Hour</label>
+              <input className="copy-form-input" type="number" step="1" min="0" value={fMaxPerHr} onChange={(e) => setFMaxPerHr(e.target.value)} />
             </div>
             <div className="copy-form-field">
-              <label className="copy-form-label">Max Slippage (e.g. 0.03)</label>
-              <input className="copy-form-input" type="number" step="0.001" value={fMaxSlippage} onChange={(e) => setFMaxSlippage(e.target.value)} />
+              <label className="copy-form-label">Max Slippage</label>
+              <input className="copy-form-input" type="number" step="0.001" min="0" max="1" value={fMaxSlippage} onChange={(e) => setFMaxSlippage(e.target.value)} />
+              <span className="copy-form-hint">e.g. 0.03 = 3% tolerance</span>
             </div>
             <div className="copy-form-field">
               <label className="copy-form-label">Delay Seconds</label>
-              <input className="copy-form-input" type="number" step="1" value={fDelay} onChange={(e) => setFDelay(e.target.value)} />
+              <input className="copy-form-input" type="number" step="1" min="0" value={fDelay} onChange={(e) => setFDelay(e.target.value)} />
+              <span className="copy-form-hint">Intentional lag after source trade is seen</span>
             </div>
           </div>
           <div className="copy-form-actions">
             <button className="copy-btn copy-btn-primary" type="submit" disabled={fSaving}>
               {fSaving ? 'Creating…' : 'Create Bot'}
             </button>
-            {fError && <p className="copy-form-error">{fError}</p>}
-            {fSuccess && <p className="copy-form-success">Bot created.</p>}
+            {fError && <span className="copy-form-msg copy-form-error">{fError}</span>}
+            {fSuccess && <span className="copy-form-msg copy-form-success">Bot created successfully.</span>}
           </div>
         </form>
       )}
 
       {loading ? (
-        <div className="copy-empty"><p>Loading bots…</p></div>
+        <div className="copy-loading">Loading bots…</div>
       ) : error ? (
-        <div className="copy-empty"><p style={{ color: '#ef4444' }}>{error}</p></div>
-      ) : bots.length === 0 ? (
         <div className="copy-empty">
-          <p>No copy bots yet.</p>
-          <p className="copy-empty-sub">Create a bot above to start copy-trading a tracked wallet.</p>
+          <p className="copy-empty-title" style={{ color: '#f87171' }}>{error}</p>
         </div>
+      ) : bots.length === 0 ? (
+        <EmptyBots onAdd={() => setShowForm(true)} />
       ) : (
         <div className="copy-table-wrap">
           <table className="copy-table">
             <thead>
               <tr>
-                <th>Name</th>
+                <th>Bot</th>
                 <th>Wallet</th>
                 <th>Mode</th>
                 <th>Enabled</th>
-                <th>ARM LIVE</th>
+                <th>Arm Live</th>
                 <th>Copy Mode</th>
                 <th>Sizing</th>
-                <th>Max Trade</th>
+                <th>Max $</th>
                 <th>Max Pos</th>
-                <th>Max/Hr</th>
-                <th>Slippage</th>
+                <th>/Hr</th>
+                <th>Slip.</th>
                 <th>Opens Only</th>
-                <th>Delay (s)</th>
+                <th>Delay</th>
                 <th>Updated</th>
               </tr>
             </thead>
             <tbody>
               {bots.map((bot) => (
                 <tr key={bot.id}>
-                  <td style={{ fontWeight: 600 }}>{bot.name}</td>
-                  <td><span className="copy-mono">{truncate(bot.wallet_address)}</span></td>
+                  <td>
+                    <span className="copy-td-name">{bot.name}</span>
+                  </td>
+                  <td>
+                    <span className="copy-mono" title={bot.wallet_address}>{truncate(bot.wallet_address)}</span>
+                  </td>
                   <td>{modeBadge(bot.mode)}</td>
                   <td>
                     <div className="toggle-switch" style={{ width: 36, height: 20 }}>
@@ -286,24 +318,22 @@ export default function CopyBotsSection() {
                     </div>
                   </td>
                   <td>
-                    <span className="copy-badge copy-badge-gray" style={{ textTransform: 'capitalize' }}>
+                    <span className="copy-badge copy-badge-blue" style={{ textTransform: 'capitalize' }}>
                       {bot.copy_mode}
                     </span>
                   </td>
-                  <td>{bot.sizing_value}</td>
-                  <td>${bot.max_trade_size}</td>
-                  <td>{bot.max_open_positions}</td>
-                  <td>{bot.max_trades_per_hour}</td>
-                  <td>{(bot.max_slippage * 100).toFixed(1)}%</td>
+                  <td className="copy-td-num">{bot.sizing_value}</td>
+                  <td className="copy-td-num">${bot.max_trade_size}</td>
+                  <td className="copy-td-num">{bot.max_open_positions}</td>
+                  <td className="copy-td-num">{bot.max_trades_per_hour}</td>
+                  <td className="copy-td-num">{(bot.max_slippage * 100).toFixed(1)}%</td>
                   <td>
-                    <span className={`copy-badge ${bot.opens_only ? 'copy-badge-blue' : 'copy-badge-gray'}`}>
+                    <span className={`copy-badge ${bot.opens_only ? 'copy-badge-enabled' : 'copy-badge-disabled'}`}>
                       {bot.opens_only ? 'Yes' : 'No'}
                     </span>
                   </td>
-                  <td>{bot.delay_seconds}s</td>
-                  <td style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.72rem' }}>
-                    {new Date(bot.updated_at).toLocaleString()}
-                  </td>
+                  <td className="copy-td-muted">{bot.delay_seconds}s</td>
+                  <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(bot.updated_at)}</td>
                 </tr>
               ))}
             </tbody>

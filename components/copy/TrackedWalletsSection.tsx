@@ -27,6 +27,25 @@ const fmtUSD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'US
 const fmt = (v: number | null | undefined) => (v == null ? '—' : fmtUSD.format(v));
 const truncate = (addr: string) =>
   addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
+const fmtDate = (d: string | null | undefined) =>
+  d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
+function EmptyWallets({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div className="copy-empty">
+      <div className="copy-empty-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+        </svg>
+      </div>
+      <p className="copy-empty-title">No tracked wallets</p>
+      <p className="copy-empty-sub">Add a Polymarket wallet address to begin monitoring its trades and ranking its performance.</p>
+      <button className="copy-btn copy-btn-primary" style={{ marginTop: '1rem' }} onClick={onAdd}>
+        + Add Wallet
+      </button>
+    </div>
+  );
+}
 
 export default function TrackedWalletsSection() {
   const [wallets, setWallets] = useState<WalletRow[]>([]);
@@ -35,7 +54,6 @@ export default function TrackedWalletsSection() {
   const [showForm, setShowForm] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  // Form fields
   const [fAddress, setFAddress] = useState('');
   const [fName, setFName] = useState('');
   const [fSaving, setFSaving] = useState(false);
@@ -108,11 +126,16 @@ export default function TrackedWalletsSection() {
 
   return (
     <div className="copy-section">
-      <div className="copy-section-header">
-        <h2 className="copy-section-title">Tracked Wallets</h2>
+      <div className="copy-section-head">
+        <div className="copy-section-title-row">
+          <h2 className="copy-section-title">Tracked Wallets</h2>
+          {!loading && wallets.length > 0 && (
+            <span className="copy-section-count">{wallets.length}</span>
+          )}
+        </div>
         <div className="copy-section-actions">
           <button
-            className="copy-btn copy-btn-secondary copy-btn-sm"
+            className={`copy-btn copy-btn-sm ${showForm ? 'copy-btn-secondary' : 'copy-btn-primary'}`}
             onClick={() => setShowForm((v) => !v)}
           >
             {showForm ? 'Cancel' : '+ Add Wallet'}
@@ -122,16 +145,19 @@ export default function TrackedWalletsSection() {
 
       {showForm && (
         <form className="copy-add-form" onSubmit={handleAddWallet}>
+          <div className="copy-form-title">Add Tracked Wallet</div>
           <div className="copy-form-grid">
-            <div className="copy-form-field" style={{ gridColumn: 'span 2' }}>
-              <label className="copy-form-label">Wallet Address *</label>
+            <div className="copy-form-field copy-form-grid-wide">
+              <label className="copy-form-label">Wallet Address <span style={{ color: '#f87171' }}>*</span></label>
               <input
                 className="copy-form-input"
                 value={fAddress}
                 onChange={(e) => setFAddress(e.target.value)}
-                placeholder="0x..."
+                placeholder="0x…"
                 spellCheck={false}
+                autoComplete="off"
               />
+              <span className="copy-form-hint">Paste the full Polymarket wallet address</span>
             </div>
             <div className="copy-form-field">
               <label className="copy-form-label">Display Name</label>
@@ -141,48 +167,49 @@ export default function TrackedWalletsSection() {
                 onChange={(e) => setFName(e.target.value)}
                 placeholder="e.g. Whale A"
               />
+              <span className="copy-form-hint">Optional label for this wallet</span>
             </div>
           </div>
           <div className="copy-form-actions">
             <button className="copy-btn copy-btn-primary" type="submit" disabled={fSaving}>
               {fSaving ? 'Adding…' : 'Add Wallet'}
             </button>
-            {fError && <p className="copy-form-error">{fError}</p>}
-            {fSuccess && <p className="copy-form-success">Wallet added.</p>}
+            {fError && <span className="copy-form-msg copy-form-error">{fError}</span>}
+            {fSuccess && <span className="copy-form-msg copy-form-success">Wallet added successfully.</span>}
           </div>
         </form>
       )}
 
       {loading ? (
-        <div className="copy-empty"><p>Loading wallets…</p></div>
+        <div className="copy-loading">Loading wallets…</div>
       ) : error ? (
-        <div className="copy-empty"><p style={{ color: '#ef4444' }}>{error}</p></div>
-      ) : wallets.length === 0 ? (
         <div className="copy-empty">
-          <p>No tracked wallets yet.</p>
-          <p className="copy-empty-sub">Add a wallet address above to start monitoring it.</p>
+          <p className="copy-empty-title" style={{ color: '#f87171' }}>{error}</p>
         </div>
+      ) : wallets.length === 0 ? (
+        <EmptyWallets onAdd={() => setShowForm(true)} />
       ) : (
         <div className="copy-table-wrap">
           <table className="copy-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Address</th>
+                <th>Wallet</th>
                 <th>Active</th>
                 <th>Score</th>
                 <th>7d P/L</th>
                 <th>30d P/L</th>
                 <th>Trades</th>
                 <th>Category</th>
-                <th>Metrics Updated</th>
+                <th>Metrics At</th>
               </tr>
             </thead>
             <tbody>
               {wallets.map((w) => (
                 <tr key={w.wallet_address}>
-                  <td style={{ fontWeight: 600 }}>{w.display_name ?? '—'}</td>
-                  <td><span className="copy-mono">{truncate(w.wallet_address)}</span></td>
+                  <td>
+                    <span className="copy-td-name">{w.display_name ?? <span className="copy-td-muted">Unnamed</span>}</span>
+                    <span className="copy-td-sub copy-mono" title={w.wallet_address}>{truncate(w.wallet_address)}</span>
+                  </td>
                   <td>
                     <div className="toggle-switch" style={{ width: 36, height: 20 }}>
                       <input
@@ -195,18 +222,28 @@ export default function TrackedWalletsSection() {
                       <label className="toggle-slider" htmlFor={`wallet-active-${w.wallet_address}`} />
                     </div>
                   </td>
-                  <td>{w.metrics?.copy_score != null ? w.metrics.copy_score.toFixed(1) : '—'}</td>
-                  <td style={{ color: (w.metrics?.pnl_7d ?? 0) >= 0 ? '#10b981' : '#ef4444' }}>
-                    {fmt(w.metrics?.pnl_7d)}
+                  <td className="copy-td-num">
+                    {w.metrics?.copy_score != null
+                      ? <span style={{ fontWeight: 600, color: '#f8fafc' }}>{w.metrics.copy_score.toFixed(1)}</span>
+                      : <span className="copy-td-muted">—</span>}
                   </td>
-                  <td style={{ color: (w.metrics?.pnl_30d ?? 0) >= 0 ? '#10b981' : '#ef4444' }}>
-                    {fmt(w.metrics?.pnl_30d)}
+                  <td className="copy-td-num">
+                    <span className={(w.metrics?.pnl_7d ?? 0) >= 0 ? 'copy-num-pos' : 'copy-num-neg'}>
+                      {fmt(w.metrics?.pnl_7d)}
+                    </span>
                   </td>
-                  <td>{w.metrics?.trade_count ?? '—'}</td>
-                  <td>{w.metrics?.category_focus ?? '—'}</td>
-                  <td style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.72rem' }}>
-                    {w.metrics?.updated_at ? new Date(w.metrics.updated_at).toLocaleString() : '—'}
+                  <td className="copy-td-num">
+                    <span className={(w.metrics?.pnl_30d ?? 0) >= 0 ? 'copy-num-pos' : 'copy-num-neg'}>
+                      {fmt(w.metrics?.pnl_30d)}
+                    </span>
                   </td>
+                  <td className="copy-td-num copy-td-muted">{w.metrics?.trade_count ?? '—'}</td>
+                  <td>
+                    {w.metrics?.category_focus
+                      ? <span className="copy-badge copy-badge-purple">{w.metrics.category_focus}</span>
+                      : <span className="copy-td-muted">—</span>}
+                  </td>
+                  <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(w.metrics?.updated_at)}</td>
                 </tr>
               ))}
             </tbody>

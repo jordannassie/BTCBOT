@@ -5,6 +5,7 @@ import PaperStrategyCard from '@/components/dashboard/PaperStrategyCard';
 import LiveCard from '@/components/dashboard/LiveCard';
 import DashboardContent from '@/components/dashboard/DashboardContent';
 import PaperCandleBiasCard from '@/components/dashboard/PaperCandleBiasCard';
+import CopyTradingPromoCard from '@/components/copy/CopyTradingPromoCard';
 
 export const revalidate = 0;
 
@@ -13,6 +14,8 @@ export default async function DashboardPage() {
 
   return (
     <div className="dashboard-container">
+      <CopyTradingPromoCard />
+
       <section className="overview-row">
         <ProfileCards stats={stats} />
         <LiveCard />
