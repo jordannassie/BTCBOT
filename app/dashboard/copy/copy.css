@@ -1239,6 +1239,222 @@
   }
 }
 
+/* ─── Copy Paper Bankroll Card ───────────────────────────────────────────────── */
+
+.copy-paper-card {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(248, 250, 252, 0.07);
+  border-radius: 14px;
+  padding: 1.4rem 1.5rem 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.copy-paper-card--loading {
+  min-height: 180px;
+}
+
+.copy-paper-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 0.9rem;
+  gap: 0.75rem;
+}
+
+.copy-paper-card-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.35);
+}
+
+.copy-paper-card-sublabel {
+  font-size: 0.72rem;
+  color: rgba(248, 250, 252, 0.3);
+  margin-top: 0.2rem;
+}
+
+.copy-paper-balance {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  margin-bottom: 0.6rem;
+}
+
+.copy-paper-pnl-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.copy-paper-pnl-label {
+  font-size: 0.72rem;
+  color: rgba(248, 250, 252, 0.35);
+}
+
+.copy-paper-pnl-value {
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.copy-paper-divider {
+  height: 1px;
+  background: rgba(248, 250, 252, 0.06);
+  margin-bottom: 0.85rem;
+}
+
+/* Saved default display row */
+.copy-paper-default-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.9rem;
+  gap: 0.5rem;
+}
+
+.copy-paper-default-label {
+  font-size: 0.73rem;
+  color: rgba(248, 250, 252, 0.4);
+  font-weight: 500;
+}
+
+.copy-paper-default-value {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 0.75);
+  font-variant-numeric: tabular-nums;
+  background: rgba(248, 250, 252, 0.05);
+  border: 1px solid rgba(248, 250, 252, 0.07);
+  border-radius: 6px;
+  padding: 0.18rem 0.55rem;
+}
+
+/* Set default section */
+.copy-paper-set-default {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+}
+
+.copy-paper-input-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(248, 250, 252, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.copy-paper-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.copy-paper-input-wrap {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.copy-paper-input-prefix {
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.82rem;
+  color: rgba(248, 250, 252, 0.4);
+  pointer-events: none;
+  user-select: none;
+}
+
+.copy-paper-input {
+  width: 100%;
+  background: rgba(248, 250, 252, 0.05);
+  border: 1px solid rgba(248, 250, 252, 0.1);
+  border-radius: 7px;
+  color: #f8fafc;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0.42rem 0.65rem 0.42rem 1.55rem;
+  outline: none;
+  transition: border-color 0.15s;
+  -moz-appearance: textfield;
+}
+
+.copy-paper-input::-webkit-outer-spin-button,
+.copy-paper-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.copy-paper-input:focus {
+  border-color: rgba(96, 165, 250, 0.45);
+  background: rgba(248, 250, 252, 0.07);
+}
+
+.copy-paper-hint {
+  font-size: 0.69rem;
+  color: rgba(248, 250, 252, 0.28);
+  line-height: 1.45;
+}
+
+.copy-paper-hint-error {
+  font-size: 0.71rem;
+  color: #f87171;
+}
+
+/* Reset button — prominent, clearly destructive-adjacent */
+.copy-paper-reset-btn {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.06);
+  color: #fbbf24;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: center;
+  margin-bottom: 0.4rem;
+}
+
+.copy-paper-reset-btn:hover:not(:disabled) {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+.copy-paper-reset-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Feedback message */
+.copy-paper-feedback {
+  font-size: 0.75rem;
+  margin-top: 0.2rem;
+  text-align: center;
+}
+
+.copy-paper-feedback.success {
+  color: #34d399;
+}
+
+.copy-paper-feedback.error {
+  color: #f87171;
+}
+
 /* ─── Leaderboard table ──────────────────────────────────────────────────────── */
 
 .copy-table-leaderboard {

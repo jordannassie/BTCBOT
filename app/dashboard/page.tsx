@@ -1,5 +1,5 @@
 import LiveCard from '@/components/dashboard/LiveCard';
-import AccountSummaryCard from '@/components/dashboard/AccountSummaryCard';
+import CopyPaperBankrollCard from '@/components/copy/CopyPaperBankrollCard';
 import CopyOverviewCards from '@/components/copy/CopyOverviewCards';
 import LiveCopySafetyCard from '@/components/copy/LiveCopySafetyCard';
 import GlobalSettingsPanel from '@/components/copy/GlobalSettingsPanel';
@@ -23,7 +23,7 @@ export default async function DashboardPage() {
       {/* Bankroll overview — live capital and paper capital */}
       <section className="copy-bankroll-row">
         <LiveCard />
-        <AccountSummaryCard />
+        <CopyPaperBankrollCard />
       </section>
 
       {/* Copy trading stat cards */}
