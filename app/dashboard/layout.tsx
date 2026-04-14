@@ -3,6 +3,7 @@ import DashboardHeader from '@/components/dashboard/DashboardHeader';
 import ModeBar from '@/components/dashboard/ModeBar';
 import { LastSaveProvider } from '@/components/dashboard/LastSaveContext';
 import './dashboard.css';
+import './copy/copy.css';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (

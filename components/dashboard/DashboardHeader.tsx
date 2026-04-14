@@ -6,8 +6,10 @@ import { APP_NAME } from '@/lib/config';
 
 export default function DashboardHeader() {
   const pathname = usePathname();
-  const onCopy = pathname.startsWith('/dashboard/copy');
-  const onMain = pathname === '/dashboard';
+  const onStrategies = pathname.startsWith('/dashboard/strategies');
+
+  // Copy Trading is active everywhere except /dashboard/strategies
+  const onCopyTrading = !onStrategies;
 
   return (
     <header className="dashboard-header">
@@ -23,25 +25,27 @@ export default function DashboardHeader() {
           <span className="brand-text">{APP_NAME}</span>
           <span className="brand-divider" />
           <span className="brand-product">
-            {onCopy ? 'Copy Trading' : 'Dashboard'}
+            {onStrategies ? 'BTC Strategies' : 'Copy Trading'}
           </span>
         </Link>
 
-        {/* Nav */}
+        {/* Primary nav */}
         <nav className="header-nav">
+          {/* Copy Trading — primary gradient CTA */}
           <Link
             href="/dashboard"
-            className={`header-nav-link${onMain ? ' active' : ''}`}
-          >
-            BTC Strategies
-          </Link>
-
-          <Link
-            href="/dashboard/copy"
-            className={`header-nav-cta${onCopy ? ' active' : ''}`}
+            className={`header-nav-cta${onCopyTrading ? ' active' : ''}`}
           >
             <span className="header-nav-cta-dot" />
             Copy Trading
+          </Link>
+
+          {/* BTC Strategies — secondary text link */}
+          <Link
+            href="/dashboard/strategies"
+            className={`header-nav-link${onStrategies ? ' active' : ''}`}
+          >
+            BTC Strategies
           </Link>
         </nav>
 

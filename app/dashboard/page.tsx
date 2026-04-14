@@ -1,39 +1,51 @@
-import { getDashboardStats } from '@/lib/botData';
-import ProfileCards from '@/components/dashboard/ProfileCards';
-import AccountSummaryCard from '@/components/dashboard/AccountSummaryCard';
-import PaperStrategyCard from '@/components/dashboard/PaperStrategyCard';
 import LiveCard from '@/components/dashboard/LiveCard';
-import DashboardContent from '@/components/dashboard/DashboardContent';
-import PaperCandleBiasCard from '@/components/dashboard/PaperCandleBiasCard';
-import CopyTradingPromoCard from '@/components/copy/CopyTradingPromoCard';
+import AccountSummaryCard from '@/components/dashboard/AccountSummaryCard';
+import CopyOverviewCards from '@/components/copy/CopyOverviewCards';
+import LiveCopySafetyCard from '@/components/copy/LiveCopySafetyCard';
+import GlobalSettingsPanel from '@/components/copy/GlobalSettingsPanel';
+import TrackedWalletsSection from '@/components/copy/TrackedWalletsSection';
+import CopyBotsSection from '@/components/copy/CopyBotsSection';
+import CopyAttemptsSection from '@/components/copy/CopyAttemptsSection';
+import CopiedPositionsSection from '@/components/copy/CopiedPositionsSection';
 
 export const revalidate = 0;
 
 export default async function DashboardPage() {
-  const stats = await getDashboardStats();
-
   return (
-    <div className="dashboard-container">
-      <CopyTradingPromoCard />
+    <div className="dashboard-container copy-page">
+      <div className="copy-page-header">
+        <h1 className="copy-page-title">Copy Trading</h1>
+        <p className="copy-page-subtitle">
+          Monitor wallets, manage copy bots, and control live execution safely
+        </p>
+      </div>
 
-      <section className="overview-row">
-        <ProfileCards stats={stats} />
+      {/* Bankroll overview — live capital and paper capital */}
+      <section className="copy-bankroll-row">
         <LiveCard />
         <AccountSummaryCard />
       </section>
 
-      <section className="strategy-grid">
-        <PaperStrategyCard botId="paper_fastloop" label="PAPER — FASTLOOP" />
-        <PaperStrategyCard botId="paper_sniper" label="PAPER — SNIPER" />
-        <PaperCandleBiasCard />
-        <PaperStrategyCard botId="paper_sweep_reclaim" label="PAPER — SWEEP_RECLAIM" />
-        <PaperStrategyCard botId="paper_breakout_close" label="PAPER — BREAKOUT_CLOSE" />
-        <PaperStrategyCard botId="paper_engulfing_level" label="PAPER — ENGULFING_LEVEL" />
-        <PaperStrategyCard botId="paper_rejection_wick" label="PAPER — REJECTION_WICK" />
-        <PaperStrategyCard botId="paper_follow_through" label="PAPER — FOLLOW_THROUGH" />
-      </section>
+      {/* Copy trading stat cards */}
+      <CopyOverviewCards />
 
-      <DashboardContent />
+      {/* Live safety briefing */}
+      <LiveCopySafetyCard />
+
+      {/* Global safety controls */}
+      <GlobalSettingsPanel />
+
+      {/* Wallet sources */}
+      <TrackedWalletsSection />
+
+      {/* Copy bots */}
+      <CopyBotsSection />
+
+      {/* Audit trail */}
+      <CopyAttemptsSection />
+
+      {/* Open / closed positions */}
+      <CopiedPositionsSection />
     </div>
   );
 }
