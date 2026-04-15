@@ -3,16 +3,22 @@
 // bot_settings, paper-pnl, or BTC strategy data is referenced here.
 //
 // Counts:
-//   wallets_active   → tracked_wallets WHERE is_active = true
-//   wallets_total    → tracked_wallets (all)
-//   bots_enabled     → copy_bots WHERE is_enabled = true
-//   positions_open   → copied_positions WHERE status = 'OPEN'
-//   attempts_today   → copy_attempts created since midnight UTC today
+//   walletsActive    → tracked_wallets WHERE is_active = true
+//   walletsTotal     → tracked_wallets (all)
+//   activeBotCount   → copy_bots WHERE is_enabled = true
+//   botsTotal        → copy_bots (all, regardless of is_enabled)
+//   openPositionCount→ copied_positions WHERE status = 'OPEN'
+//   attemptsTodayCount → copy_attempts created since midnight UTC today
 //
 // Settings (live_on, emergency_stop) come from copy_global_settings id=1.
+//
+// force-dynamic: opt this route out of any static/incremental caching so
+// every request hits Supabase and reflects the latest worker writes.
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+
+export const dynamic = 'force-dynamic';
 
 function getServiceClient() {
   let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
@@ -37,35 +43,40 @@ export async function GET() {
       activeWalletsRes,
       totalWalletsRes,
       enabledBotsRes,
+      totalBotsRes,
       openPositionsRes,
       attemptsTodayRes,
       settingsRes,
     ] = await Promise.all([
-      // Only count wallets the operator has marked active — these are the wallets
-      // actually being monitored by the worker right now.
+      // Wallets the operator has marked active — monitored by the worker
       client
         .from('tracked_wallets')
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true),
 
-      // Total tracked (including inactive) so the UI can show "X of Y active"
+      // All tracked wallets (including inactive) → shows "X of Y active"
       client
         .from('tracked_wallets')
         .select('*', { count: 'exact', head: true }),
 
-      // Enabled copy bots
+      // Enabled copy bots (is_enabled = true)
       client
         .from('copy_bots')
         .select('*', { count: 'exact', head: true })
         .eq('is_enabled', true),
 
-      // Open copied positions from copy-trading table only
+      // ALL copy bots regardless of enabled state → shows "X enabled / Y total"
+      client
+        .from('copy_bots')
+        .select('*', { count: 'exact', head: true }),
+
+      // OPEN copied positions only — never closed/cancelled
       client
         .from('copied_positions')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'OPEN'),
 
-      // Copy decisions made since midnight UTC today
+      // Copy decisions (attempts) made since midnight UTC today
       client
         .from('copy_attempts')
         .select('*', { count: 'exact', head: true })
@@ -79,18 +90,26 @@ export async function GET() {
         .maybeSingle(),
     ]);
 
-    return NextResponse.json({
-      ok: true,
-      // Active vs total wallets
-      walletsActive: activeWalletsRes.count ?? 0,
-      walletsTotal: totalWalletsRes.count ?? 0,
-      // Legacy field name kept for CopyOverviewCards compatibility
-      walletCount: activeWalletsRes.count ?? 0,
-      activeBotCount: enabledBotsRes.count ?? 0,
-      openPositionCount: openPositionsRes.count ?? 0,
-      attemptsTodayCount: attemptsTodayRes.count ?? 0,
-      settings: settingsRes.data ?? null,
-    });
+    return NextResponse.json(
+      {
+        ok: true,
+        // Wallets
+        walletsActive: activeWalletsRes.count ?? 0,
+        walletsTotal: totalWalletsRes.count ?? 0,
+        walletCount: activeWalletsRes.count ?? 0,  // legacy alias
+        // Bots — both enabled and total so UI can show "22 enabled / 24 total"
+        activeBotCount: enabledBotsRes.count ?? 0,
+        botsTotal: totalBotsRes.count ?? 0,
+        // Positions — OPEN only; label must say "open" in the UI
+        openPositionCount: openPositionsRes.count ?? 0,
+        // Attempts — today only; refreshes at midnight UTC automatically
+        attemptsTodayCount: attemptsTodayRes.count ?? 0,
+        settings: settingsRes.data ?? null,
+        // Server timestamp so the client can show "last updated X seconds ago"
+        fetchedAt: new Date().toISOString(),
+      },
+      { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

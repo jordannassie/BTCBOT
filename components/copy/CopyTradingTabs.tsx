@@ -8,17 +8,16 @@
 //
 // UX:
 //   - Active tab persisted to localStorage (key: 'btcbot-copy-tab')
-//   - Tab counts refreshed from /api/copy/summary on mount
+//   - Tab counts fetched from /api/copy/summary, polled every 15 s
+//   - Counts also refresh on window focus (visibilitychange)
 //   - Attempts and Positions tabs get scrollable tables (sticky headers)
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 
-// Load section components. All are already client components so no SSR issue.
 import CopyOverviewCards from './CopyOverviewCards';
 import LiveCopySafetyCard from './LiveCopySafetyCard';
 
-// Dynamic imports let Next.js code-split each tab — keeps initial bundle light.
 const TrackedWalletsSection  = dynamic(() => import('./TrackedWalletsSection'));
 const CopyBotsSection        = dynamic(() => import('./CopyBotsSection'));
 const CopyAttemptsSection    = dynamic(() => import('./CopyAttemptsSection'));
@@ -29,19 +28,30 @@ const GlobalSettingsPanel    = dynamic(() => import('./GlobalSettingsPanel'));
 
 type TabId = 'overview' | 'wallets' | 'bots' | 'attempts' | 'positions' | 'settings';
 
-const LS_KEY = 'btcbot-copy-tab';
+const LS_KEY  = 'btcbot-copy-tab';
+const POLL_MS = 15_000;
 
 interface TabDef {
   id: TabId;
   label: string;
-  /** key in the summary payload to show as a count badge */
+  /** Key in the summary payload for the badge number */
   countKey?: string;
+  /**
+   * Optional second key. When both keys are present the badge shows
+   * "primary / secondary" so the operator can see enabled vs total at a glance.
+   */
+  countKeyTotal?: string;
 }
 
+// Tab badge logic:
+//   Wallets   → walletsActive    (active / total if they differ)
+//   Bots      → activeBotCount   (enabled / total if they differ)
+//   Attempts  → attemptsTodayCount (today's decisions)
+//   Positions → openPositionCount  (OPEN only)
 const TABS: TabDef[] = [
   { id: 'overview',  label: 'Overview' },
-  { id: 'wallets',   label: 'Wallets',   countKey: 'walletsActive' },
-  { id: 'bots',      label: 'Bots',      countKey: 'activeBotCount' },
+  { id: 'wallets',   label: 'Wallets',   countKey: 'walletsActive',      countKeyTotal: 'walletsTotal' },
+  { id: 'bots',      label: 'Bots',      countKey: 'activeBotCount',     countKeyTotal: 'botsTotal' },
   { id: 'attempts',  label: 'Attempts',  countKey: 'attemptsTodayCount' },
   { id: 'positions', label: 'Positions', countKey: 'openPositionCount' },
   { id: 'settings',  label: 'Settings' },
@@ -63,23 +73,38 @@ export default function CopyTradingTabs() {
     } catch {}
   }, []);
 
-  // Fetch tab counts from the summary endpoint
-  useEffect(() => {
-    fetch('/api/copy/summary', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((p) => { if (p.ok) setCounts(p); })
-      .catch(() => {});
+  // Fetch (and poll) the summary endpoint for tab badge counts
+  const fetchCounts = useCallback(async () => {
+    try {
+      const r = await fetch('/api/copy/summary', { cache: 'no-store' });
+      const p = await r.json();
+      if (p.ok) setCounts(p as Record<string, number>);
+    } catch {}
   }, []);
+
+  useEffect(() => {
+    fetchCounts();
+
+    // Keep badges live while the worker writes to Supabase
+    const poll = setInterval(fetchCounts, POLL_MS);
+
+    // Re-sync when the operator returns to this browser tab
+    const onVisible = () => { if (!document.hidden) fetchCounts(); };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [fetchCounts]);
 
   const switchTab = (id: TabId) => {
     setTab(id);
     try { localStorage.setItem(LS_KEY, id); } catch {}
-    // Scroll tab bar into view on mobile
     document.getElementById('copy-tabs-bar')?.scrollIntoView({ block: 'nearest' });
   };
 
   if (!mounted) {
-    // Avoid hydration mismatch: render nothing until client is ready
     return <div className="copy-tabs-placeholder" />;
   }
 
@@ -88,7 +113,14 @@ export default function CopyTradingTabs() {
       {/* ── Tab bar ── */}
       <div id="copy-tabs-bar" className="copy-tabs-bar" role="tablist" aria-label="Copy Trading sections">
         {TABS.map((t) => {
-          const count = t.countKey ? (counts[t.countKey] ?? 0) : 0;
+          const primary   = t.countKey      ? (counts[t.countKey]      ?? 0) : 0;
+          const secondary = t.countKeyTotal ? (counts[t.countKeyTotal] ?? 0) : 0;
+
+          // Show badge when there is at least one item to display
+          const showBadge = primary > 0 || secondary > 0;
+          // Only show the "/ total" part when the two counts differ and total > 0
+          const showSlash = t.countKeyTotal && secondary > 0 && secondary !== primary;
+
           const isActive = tab === t.id;
           return (
             <button
@@ -101,9 +133,12 @@ export default function CopyTradingTabs() {
               onClick={() => switchTab(t.id)}
             >
               {t.label}
-              {count > 0 && (
+              {showBadge && (
                 <span className={`copy-tabs-count${isActive ? ' active' : ''}`}>
-                  {count}
+                  {primary}
+                  {showSlash && (
+                    <span style={{ opacity: 0.5, fontWeight: 400 }}>/{secondary}</span>
+                  )}
                 </span>
               )}
             </button>
@@ -129,7 +164,6 @@ export default function CopyTradingTabs() {
 
         {tab === 'bots' && <CopyBotsSection />}
 
-        {/* Attempts and Positions get internal-scroll tables */}
         {tab === 'attempts' && <CopyAttemptsSection scrollable />}
 
         {tab === 'positions' && <CopiedPositionsSection scrollable />}
