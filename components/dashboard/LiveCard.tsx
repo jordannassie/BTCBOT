@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BotSettings } from '@/lib/botData';
 import MiniSparkline from '@/components/copy/MiniSparkline';
 import {
@@ -102,6 +102,12 @@ export default function LiveCard() {
   // so the block always renders regardless of API success.
   const [liveExposure, setLiveExposure] = useState<ExposureMetrics | null>(null);
   const [exposureLoading, setExposureLoading] = useState(true);
+  // Inline live-cap editor
+  const [capInput, setCapInput] = useState('0');
+  const [savingCap, setSavingCap] = useState(false);
+  // Tracks whether capInput has been seeded from the server; prevents the
+  // 60-second periodic refresh from overwriting a value the operator is typing.
+  const capSynced = useRef(false);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -130,7 +136,14 @@ export default function LiveCard() {
       if (exposureRes.ok) {
         const expPayload = await exposureRes.json();
         if (expPayload.ok) {
-          setLiveExposure(expPayload.live as ExposureMetrics);
+          const live = expPayload.live as ExposureMetrics;
+          setLiveExposure(live);
+          // Seed the cap input only once — periodic refreshes must not clobber
+          // a value the operator is currently typing.
+          if (!capSynced.current) {
+            setCapInput(String(live.cap));
+            capSynced.current = true;
+          }
         } else {
           setLiveExposure(zeroExposure);
         }
@@ -146,6 +159,54 @@ export default function LiveCard() {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  // Lightweight exposure-only refresh used after saving the cap.
+  // Does not trigger the card loading state; always updates capInput to match
+  // the server-confirmed cap so the display stays consistent.
+  const loadExposure = useCallback(async () => {
+    try {
+      const res = await fetch('/api/copy/exposure', { cache: 'no-store' });
+      if (!res.ok) return;
+      const p = await res.json();
+      if (p.ok) {
+        const live = p.live as ExposureMetrics;
+        setLiveExposure(live);
+        setCapInput(String(live.cap));
+      }
+    } catch { /* swallow */ }
+  }, []);
+
+  const handleSaveLiveCap = async () => {
+    const parsed = Number(capInput);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setMessage({ text: 'Enter a valid amount (0 = unlimited)', type: 'error' });
+      return;
+    }
+    setSavingCap(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/copy/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ live_max_exposure_usd: parsed }),
+        cache: 'no-store',
+      });
+      const payload = await res.json();
+      if (payload.ok) {
+        await loadExposure();
+        const label = parsed > 0
+          ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(parsed)
+          : 'Unlimited';
+        setMessage({ text: `Live max exposure set to ${label}`, type: 'success' });
+      } else {
+        setMessage({ text: payload.error ?? 'Save failed', type: 'error' });
+      }
+    } catch {
+      setMessage({ text: 'Network error saving cap', type: 'error' });
+    } finally {
+      setSavingCap(false);
+    }
+  };
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -292,12 +353,54 @@ export default function LiveCard() {
 
           return (
             <div style={{ marginTop: '0.55rem', paddingTop: '0.45rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              {/* Max Exposure row */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', marginBottom: '0.25rem' }}>
-                <span style={{ color: 'rgba(248,250,252,0.35)' }}>Max Exposure</span>
-                <span style={{ color: 'rgba(248,250,252,0.55)', fontVariantNumeric: 'tabular-nums' }}>
-                  {cap > 0 ? formatUSD(cap) : 'Unlimited'}
-                </span>
+              {/* Max Exposure — inline editable */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', marginBottom: '0.15rem' }}>
+                <span style={{ color: 'rgba(248,250,252,0.35)', flexShrink: 0 }}>Max Exposure</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <span style={{ color: 'rgba(248,250,252,0.25)', fontSize: '0.65rem' }}>$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={capInput}
+                    onChange={(e) => setCapInput(e.target.value)}
+                    disabled={savingCap}
+                    title="Live max exposure (0 = unlimited)"
+                    style={{
+                      width: '70px',
+                      background: 'rgba(248,250,252,0.05)',
+                      border: '1px solid rgba(248,250,252,0.1)',
+                      borderRadius: '4px',
+                      color: '#f8fafc',
+                      fontSize: '0.72rem',
+                      padding: '0.15rem 0.3rem',
+                      fontVariantNumeric: 'tabular-nums',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    onClick={handleSaveLiveCap}
+                    disabled={savingCap}
+                    style={{
+                      padding: '0.15rem 0.45rem',
+                      borderRadius: '4px',
+                      border: '1px solid rgba(52,211,153,0.3)',
+                      background: 'rgba(52,211,153,0.08)',
+                      color: '#34d399',
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      cursor: savingCap ? 'not-allowed' : 'pointer',
+                      opacity: savingCap ? 0.5 : 1,
+                      lineHeight: 1,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {savingCap ? '…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+              <div style={{ fontSize: '0.58rem', color: 'rgba(248,250,252,0.18)', textAlign: 'right', marginBottom: '0.25rem' }}>
+                0 = unlimited
               </div>
               {/* Remaining row */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>

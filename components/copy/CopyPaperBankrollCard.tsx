@@ -56,6 +56,10 @@ export default function CopyPaperBankrollCard() {
   const [inputValue, setInputValue] = useState('');
   const [inputError, setInputError] = useState<string | null>(null);
 
+  // Inline paper-cap editor
+  const [capInput, setCapInput] = useState('0');
+  const [savingCap, setSavingCap] = useState(false);
+
   // Action feedback
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -121,6 +125,14 @@ export default function CopyPaperBankrollCard() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Keep cap input in sync with server-confirmed paperExposure.
+  // Runs after fresh start, after save, and after initial load.
+  useEffect(() => {
+    if (paperExposure !== null) {
+      setCapInput(String(paperExposure.cap));
+    }
+  }, [paperExposure]);
+
   const showFeedback = (text: string, type: 'success' | 'error') => {
     setFeedback({ text, type });
     setTimeout(() => setFeedback(null), 3500);
@@ -182,6 +194,38 @@ export default function CopyPaperBankrollCard() {
       showFeedback('Network error resetting bankroll', 'error');
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleSavePaperCap = async () => {
+    const parsed = Number(capInput);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      showFeedback('Enter a valid amount (0 = unlimited)', 'error');
+      return;
+    }
+    setSavingCap(true);
+    try {
+      const res = await fetch('/api/copy/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paper_max_exposure_usd: parsed }),
+        cache: 'no-store',
+      });
+      const payload = await res.json();
+      if (payload.ok) {
+        // loadExposure refreshes paperExposure → useEffect syncs capInput
+        await loadExposure();
+        showFeedback(
+          `Paper max exposure set to ${parsed > 0 ? fmt(parsed) : 'Unlimited'}`,
+          'success'
+        );
+      } else {
+        showFeedback(payload.error ?? 'Save failed', 'error');
+      }
+    } catch {
+      showFeedback('Network error saving cap', 'error');
+    } finally {
+      setSavingCap(false);
     }
   };
 
@@ -345,12 +389,54 @@ export default function CopyPaperBankrollCard() {
 
           return (
             <div style={{ marginTop: '0.55rem', paddingTop: '0.45rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              {/* Max Exposure row */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', marginBottom: '0.25rem' }}>
-                <span style={{ color: 'rgba(248,250,252,0.35)' }}>Max Exposure</span>
-                <span style={{ color: 'rgba(248,250,252,0.55)', fontVariantNumeric: 'tabular-nums' }}>
-                  {cap > 0 ? fmt(cap) : 'Unlimited'}
-                </span>
+              {/* Max Exposure — inline editable */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', marginBottom: '0.15rem' }}>
+                <span style={{ color: 'rgba(248,250,252,0.35)', flexShrink: 0 }}>Max Exposure</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <span style={{ color: 'rgba(248,250,252,0.25)', fontSize: '0.65rem' }}>$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={capInput}
+                    onChange={(e) => setCapInput(e.target.value)}
+                    disabled={savingCap}
+                    title="Paper max exposure (0 = unlimited)"
+                    style={{
+                      width: '70px',
+                      background: 'rgba(248,250,252,0.05)',
+                      border: '1px solid rgba(248,250,252,0.1)',
+                      borderRadius: '4px',
+                      color: '#f8fafc',
+                      fontSize: '0.72rem',
+                      padding: '0.15rem 0.3rem',
+                      fontVariantNumeric: 'tabular-nums',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    onClick={handleSavePaperCap}
+                    disabled={savingCap}
+                    style={{
+                      padding: '0.15rem 0.45rem',
+                      borderRadius: '4px',
+                      border: '1px solid rgba(52,211,153,0.3)',
+                      background: 'rgba(52,211,153,0.08)',
+                      color: '#34d399',
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      cursor: savingCap ? 'not-allowed' : 'pointer',
+                      opacity: savingCap ? 0.5 : 1,
+                      lineHeight: 1,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {savingCap ? '…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+              <div style={{ fontSize: '0.58rem', color: 'rgba(248,250,252,0.18)', textAlign: 'right', marginBottom: '0.25rem' }}>
+                0 = unlimited
               </div>
               {/* Remaining row */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
