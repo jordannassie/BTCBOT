@@ -18,7 +18,9 @@ interface Props {
   label?: string;
 }
 
-const PAD = 2;
+// PAD must be ≥ dot radius (2.2) + stroke half-width (0.75) ≈ 3; use 4 for safety
+// so the end-point dot and stroke never clip the viewBox edge.
+const PAD = 4;
 
 export default function MiniSparkline({
   points,
@@ -76,12 +78,12 @@ export default function MiniSparkline({
   const lastDotY = sy(lastY);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', width: '100%', overflow: 'hidden' }}>
       <svg
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
-        style={{ display: 'block', overflow: 'visible', flexShrink: 0 }}
+        style={{ display: 'block', overflow: 'hidden', flexShrink: 0, maxWidth: '100%' }}
         aria-hidden="true"
       >
         <defs>

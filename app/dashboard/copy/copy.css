@@ -1419,6 +1419,8 @@
   margin: 0.45rem 0 0.25rem;
   display: flex;
   align-items: center;
+  width: 100%;
+  overflow: hidden;
 }
 
 .copy-paper-pnl-row {
