@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { BOT_DEFAULTS } from '@/lib/copy/botDefaults';
+import { getEffectiveBotDefaults } from '@/lib/copy/masterStrategy';
 
 function getServiceClient() {
   let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
@@ -63,9 +64,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'copy_mode must be exact, scaled, or percent' }, { status: 400 });
     }
 
-    // Start with canonical defaults, then overlay body values
+    // Start with effective defaults (master strategy if "Use for New Bots" is ON,
+    // otherwise BOT_DEFAULTS), then overlay any values explicitly provided in the request body.
+    const effectiveDefaults = await getEffectiveBotDefaults(client, { ...BOT_DEFAULTS });
     const row: Record<string, unknown> = {
-      ...BOT_DEFAULTS,
+      ...effectiveDefaults,
       name: name.trim(),
       wallet_address: wallet_address.trim(),
       mode,

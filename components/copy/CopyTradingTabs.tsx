@@ -22,6 +22,7 @@ const TrackedWalletsSection  = dynamic(() => import('./TrackedWalletsSection'));
 const CopyBotsSection        = dynamic(() => import('./CopyBotsSection'));
 const CopyAttemptsSection    = dynamic(() => import('./CopyAttemptsSection'));
 const CopiedPositionsSection = dynamic(() => import('./CopiedPositionsSection'));
+const MasterStrategySection  = dynamic(() => import('./MasterStrategySection'));
 const GlobalSettingsPanel    = dynamic(() => import('./GlobalSettingsPanel'));
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -168,7 +169,12 @@ export default function CopyTradingTabs() {
 
         {tab === 'positions' && <CopiedPositionsSection scrollable />}
 
-        {tab === 'settings' && <GlobalSettingsPanel />}
+        {tab === 'settings' && (
+          <>
+            <MasterStrategySection />
+            <GlobalSettingsPanel />
+          </>
+        )}
       </div>
     </div>
   );

@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { BOT_DEFAULTS } from '@/lib/copy/botDefaults';
+import { getEffectiveBotDefaults } from '@/lib/copy/masterStrategy';
 
 function getServiceClient() {
   let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
@@ -89,12 +90,17 @@ export async function POST() {
     const wallets = (walletsRes.data ?? []) as WalletRow[];
     const missing = wallets.filter((w) => !walletsWithBots.has(w.wallet_address));
 
+    // Resolve effective defaults once for all bots in this backfill run.
+    // If "Use for New Bots" is ON the master strategy fields are applied;
+    // otherwise BOT_DEFAULTS are used as normal.
+    const effectiveDefaults = await getEffectiveBotDefaults(client, { ...BOT_DEFAULTS });
+
     let created = 0;
     const errors: string[] = [];
 
     for (const w of missing) {
       const { error } = await client.from('copy_bots').insert({
-        ...BOT_DEFAULTS,
+        ...effectiveDefaults,
         name: defaultBotName(w.wallet_address, w.display_name),
         wallet_address: w.wallet_address,
       });

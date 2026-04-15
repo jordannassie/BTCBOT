@@ -2350,3 +2350,252 @@
     padding: 0.45rem 1rem;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Master Strategy Section
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.copy-master-section {
+  margin-bottom: 0.5rem;
+}
+
+/* ── Header meta ── */
+.copy-master-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.copy-master-saved-badge {
+  font-size: 0.68rem;
+  color: rgba(248,250,252,0.35);
+  white-space: nowrap;
+}
+
+.copy-master-unsaved-badge {
+  font-size: 0.68rem;
+  color: rgba(248,120,100,0.65);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+/* ── Preset chips ── */
+.copy-master-presets-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.2rem;
+}
+
+.copy-master-presets-label {
+  font-size: 0.72rem;
+  color: rgba(248,250,252,0.35);
+  white-space: nowrap;
+}
+
+.copy-master-preset-btn {
+  background: rgba(248,250,252,0.05);
+  border: 1px solid rgba(248,250,252,0.12);
+  border-radius: 999px;
+  color: rgba(248,250,252,0.7);
+  cursor: pointer;
+  font-size: 0.72rem;
+  padding: 0.25rem 0.75rem;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.copy-master-preset-btn:hover {
+  background: rgba(96,165,250,0.12);
+  border-color: rgba(96,165,250,0.4);
+  color: #60a5fa;
+}
+
+/* ── Form ── */
+.copy-master-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Toggle grid — 2-column on desktop, 1-column on mobile */
+.copy-master-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem 1.5rem;
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 600px) {
+  .copy-master-toggle-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.copy-master-toggle-field {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 0.3rem !important;
+}
+
+.copy-master-toggle-row-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* Notes textarea */
+.copy-master-notes-field {
+  margin-top: 0.25rem;
+}
+
+.copy-master-textarea {
+  resize: vertical;
+  min-height: 52px;
+  font-family: inherit;
+  font-size: 0.82rem;
+}
+
+/* ── Save row ── */
+.copy-master-save-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+/* ── Divider ── */
+.copy-master-divider {
+  height: 1px;
+  background: rgba(248,250,252,0.06);
+  margin: 1.2rem 0;
+}
+
+/* ── Use for New Bots row ── */
+.copy-master-use-new-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.copy-master-use-new-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 200px;
+}
+
+.copy-master-use-new-label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.copy-master-use-new-hint {
+  font-size: 0.72rem;
+  color: rgba(248,250,252,0.35);
+  line-height: 1.5;
+}
+
+.copy-master-use-new-control {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+  padding-top: 0.1rem;
+}
+
+.copy-master-use-new-on-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background: rgba(52,211,153,0.15);
+  color: #34d399;
+  border: 1px solid rgba(52,211,153,0.3);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+}
+
+/* ── Apply section ── */
+.copy-master-apply-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.copy-master-apply-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.copy-master-apply-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(248,250,252,0.8);
+}
+
+.copy-master-apply-hint {
+  font-size: 0.7rem;
+  color: rgba(248,250,252,0.3);
+}
+
+.copy-master-apply-btns {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.copy-master-apply-select-hint {
+  font-size: 0.68rem;
+  color: rgba(248,250,252,0.25);
+  font-style: italic;
+}
+
+/* ── Banners (save / apply feedback) ── */
+.copy-master-banner {
+  border-radius: 6px;
+  font-size: 0.78rem;
+  padding: 0.5rem 0.85rem;
+  margin-top: 0.35rem;
+}
+
+.copy-master-banner--ok {
+  background: rgba(52,211,153,0.1);
+  border: 1px solid rgba(52,211,153,0.25);
+  color: #34d399;
+}
+
+.copy-master-banner--error {
+  background: rgba(248,113,113,0.1);
+  border: 1px solid rgba(248,113,113,0.25);
+  color: #f87171;
+}
+
+/* ── Relationship note ── */
+.copy-master-rel-note {
+  font-size: 0.7rem;
+  color: rgba(248,250,252,0.22);
+  line-height: 1.6;
+  margin-top: 1.2rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(248,250,252,0.05);
+}
+
+.copy-master-rel-note strong {
+  color: rgba(248,250,252,0.45);
+  font-weight: 600;
+}
+
+/* ── Disabled button variant ── */
+.copy-btn-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

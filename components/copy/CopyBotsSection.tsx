@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BOT_DEFAULTS, BOT_DEFAULTS_LS_KEY } from '@/lib/copy/botDefaults';
+import { SELECTED_BOTS_LS_KEY } from '@/lib/copy/masterStrategy';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -590,6 +591,14 @@ export default function CopyBotsSection() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ updated: number } | null>(null);
+
+  // Persist selected IDs to localStorage so MasterStrategySection can read them
+  // for "Apply to Selected Bots" even when the operator switches tabs.
+  useEffect(() => {
+    try {
+      localStorage.setItem(SELECTED_BOTS_LS_KEY, JSON.stringify(Array.from(selectedIds)));
+    } catch {}
+  }, [selectedIds]);
 
   // Create-bot form — load operator-saved defaults from localStorage
   const [fName, setFName] = useState('');

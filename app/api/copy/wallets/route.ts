@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { BOT_DEFAULTS } from '@/lib/copy/botDefaults';
+import { getEffectiveBotDefaults } from '@/lib/copy/masterStrategy';
 
 function getServiceClient() {
   let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
@@ -112,8 +113,10 @@ export async function POST(request: Request) {
 
       if (!existing || existing.length === 0) {
         const botName = name || (addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr);
+        // Use master strategy fields when "Use for New Bots" is ON; otherwise fall back to BOT_DEFAULTS
+        const botDefaults = await getEffectiveBotDefaults(client, { ...BOT_DEFAULTS });
         await client.from('copy_bots').insert({
-          ...BOT_DEFAULTS,
+          ...botDefaults,
           name: botName,
           wallet_address: addr,
         });
