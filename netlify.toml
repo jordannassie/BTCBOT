@@ -6,6 +6,14 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+[build.environment]
+  # Increment CACHE_VERSION to bust Netlify's build cache and force a full
+  # recompile of all Next.js routes.  Without this, Netlify can restore a
+  # cached .next/ directory from a previous build and serve old compiled route
+  # bundles even when the source files have changed in git.
+  CACHE_VERSION = "2"
+  NEXT_TELEMETRY_DISABLED = "1"
+
 [context.production.environment]
   NEXT_PUBLIC_SUPABASE_URL = "$NEXT_PUBLIC_SUPABASE_URL"
   NEXT_PUBLIC_SUPABASE_ANON_KEY = "$NEXT_PUBLIC_SUPABASE_ANON_KEY"

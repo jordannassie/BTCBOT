@@ -1,167 +1,151 @@
-// Clean copy-trading summary endpoint.
-// All counts are sourced exclusively from copy-trading tables — no legacy
-// bot_settings, paper-pnl, or BTC strategy data is referenced here.
+// /api/copy/summary  —  copy-trading dashboard summary
 //
-// Counts:
-//   walletsActive    → tracked_wallets WHERE is_active = true
-//   walletsTotal     → tracked_wallets (all)
-//   activeBotCount   → copy_bots WHERE is_enabled = true
-//   botsTotal        → copy_bots (all, regardless of is_enabled)
-//   openPositionCount→ copy_open_position_stats() RPC — true total, no row cap
-//   attemptsTodayCount → copy_attempts created since midnight UTC today
+// ROUTE_VERSION is returned in every response.  If you see "v3-rpc" in the
+// JSON then this build is running.  If you see anything else (or the field is
+// absent) then Netlify is still serving a cached older build.
 //
-// Exposure (OPEN positions only, using the `size` column):
-//   openExposure       → SUM(size) via copy_open_position_stats() — no row cap
-//   avgOpenSize        → AVG(size) via copy_open_position_stats()
-//   largestOpenPosition→ MAX(size) via copy_open_position_stats()
+// Counts / aggregates:
+//   walletsActive      → tracked_wallets WHERE is_active = true
+//   walletsTotal       → tracked_wallets (all)
+//   activeBotCount     → copy_bots WHERE is_enabled = true
+//   botsTotal          → copy_bots (all)
+//   openPositionCount  → copy_open_position_stats() RPC  ← DB aggregate, no row cap
+//   openExposure       → copy_open_position_stats() RPC  ← SUM(size), no row cap
+//   avgOpenSize        → copy_open_position_stats() RPC  ← AVG(size), no row cap
+//   largestOpenPosition→ copy_open_position_stats() RPC  ← MAX(size), no row cap
+//   attemptsTodayCount → copy_attempts since midnight UTC
 //
-// NOTE: All exposure aggregates use a database-side RPC function so they
-// are accurate for any number of OPEN positions.  A plain select('size')
-// query is limited to 1 000 rows by PostgREST, which caused silent
-// undercounting when there were >1 000 OPEN positions.
-//
-// Settings (live_on, emergency_stop) come from copy_global_settings id=1.
-//
-// force-dynamic: opt this route out of any static/incremental caching so
-// every request hits Supabase and reflects the latest worker writes.
+// The RPC function must exist in Supabase and GRANT EXECUTE must have been
+// run for service_role (see sql/migrations/0005-aggregate-functions.sql).
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-function getServiceClient() {
-  let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  if (url.startsWith('$')) url = '';
-  if (!url.startsWith('http') || !key) return null;
+// Bumped on every fix to this route — visible in response JSON.
+const ROUTE_VERSION = 'v3-rpc';
+
+function makeClient() {
+  let url = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim();
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
+  if (url.startsWith('$') || !url.startsWith('http') || !key) return null;
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
 export async function GET() {
-  const client = getServiceClient();
+  const client = makeClient();
   if (!client) {
-    return NextResponse.json({ ok: false, error: 'Supabase credentials missing' }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: 'Supabase credentials missing', route_version: ROUTE_VERSION },
+      { status: 500, headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    );
   }
 
-  try {
-    // Start of today in UTC
-    const todayUTC = new Date();
-    todayUTC.setUTCHours(0, 0, 0, 0);
+  const todayUTC = new Date();
+  todayUTC.setUTCHours(0, 0, 0, 0);
 
+  try {
+    // ── Run all queries in parallel ────────────────────────────────────────────
     const [
       activeWalletsRes,
       totalWalletsRes,
       enabledBotsRes,
       totalBotsRes,
-      openStatsRes,
+      openStatsRes,        // ← DB aggregate function: no 1000-row cap
       attemptsTodayRes,
       settingsRes,
     ] = await Promise.all([
-      // Wallets the operator has marked active — monitored by the worker
-      client
-        .from('tracked_wallets')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true),
+      client.from('tracked_wallets').select('*', { count: 'exact', head: true }).eq('is_active', true),
+      client.from('tracked_wallets').select('*', { count: 'exact', head: true }),
+      client.from('copy_bots').select('*', { count: 'exact', head: true }).eq('is_enabled', true),
+      client.from('copy_bots').select('*', { count: 'exact', head: true }),
 
-      // All tracked wallets (including inactive) → shows "X of Y active"
-      client
-        .from('tracked_wallets')
-        .select('*', { count: 'exact', head: true }),
-
-      // Enabled copy bots (is_enabled = true)
-      client
-        .from('copy_bots')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_enabled', true),
-
-      // ALL copy bots regardless of enabled state → shows "X enabled / Y total"
-      client
-        .from('copy_bots')
-        .select('*', { count: 'exact', head: true }),
-
-      // OPEN position aggregates via database function — COUNT, SUM, AVG, MAX.
-      // This is unbounded: it always reflects the true total regardless of how
-      // many rows exist.  A plain select('size') is capped at 1 000 rows by
-      // PostgREST and would undercount when there are >1 000 OPEN positions.
+      // copy_open_position_stats() runs COUNT/SUM/AVG/MAX inside PostgreSQL.
+      // It is completely unbounded — it will return the true total for any number
+      // of OPEN rows, whether there are 100 or 100 000.
+      // Created by sql/migrations/0005-aggregate-functions.sql.
       client.rpc('copy_open_position_stats'),
 
-      // Copy decisions (attempts) made since midnight UTC today
-      client
-        .from('copy_attempts')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', todayUTC.toISOString()),
-
-      // Master safety settings
-      client
-        .from('copy_global_settings')
+      client.from('copy_attempts').select('*', { count: 'exact', head: true }).gte('created_at', todayUTC.toISOString()),
+      client.from('copy_global_settings')
         .select('live_on, emergency_stop, max_total_live_exposure, default_slippage_cap, default_position_size, default_max_positions')
         .eq('id', 1)
         .maybeSingle(),
     ]);
 
-    // ── Explicit RPC error surfacing ──────────────────────────────────────────
-    // If the RPC fails (e.g. GRANT EXECUTE not run, function doesn't exist,
-    // or Netlify is running an old build that has no rpc() call at all), this
-    // will log the exact Supabase error object and surface it in _debug so the
-    // operator can see it in DevTools → Network → /api/copy/summary → Response
-    // without needing Netlify log access.
-    if (openStatsRes.error) {
-      console.error('[summary] copy_open_position_stats RPC FAILED:', openStatsRes.error);
+    // ── Surface RPC result ─────────────────────────────────────────────────────
+    const rpcError = openStatsRes.error ?? null;
+    const rpcRaw   = openStatsRes.data ?? null;
+
+    if (rpcError) {
+      console.error(`[summary ${ROUTE_VERSION}] copy_open_position_stats FAILED:`, rpcError);
     } else {
-      console.log('[summary] copy_open_position_stats RPC OK, raw data:', JSON.stringify(openStatsRes.data));
+      console.log(`[summary ${ROUTE_VERSION}] copy_open_position_stats OK:`, JSON.stringify(rpcRaw));
     }
 
-    // The RPC returns one row with all four aggregates.
-    // All values come from PostgreSQL's COUNT/SUM/AVG/MAX — no row cap.
-    const statsRow = (openStatsRes.data as Array<{
-      total_count: number | string;
-      total_exposure: number | string;
-      avg_size: number | string;
-      max_size: number | string;
-    }>)?.[0] ?? null;
+    // The function returns one row.  Supabase wraps RETURNS TABLE results in an
+    // array, so index [0].  All four columns are numeric; Number() handles both
+    // numeric-as-string (Postgres JSON) and native number.
+    type StatsRow = { total_count: unknown; total_exposure: unknown; avg_size: unknown; max_size: unknown };
+    const row = (rpcRaw as StatsRow[] | null)?.[0] ?? null;
 
-    const openPositionCount    = statsRow ? Number(statsRow.total_count)    : 0;
-    const openExposure         = statsRow ? Number(statsRow.total_exposure)  : 0;
-    const avgOpenSize          = statsRow ? Number(statsRow.avg_size)        : 0;
-    const largestOpenPosition  = statsRow ? Number(statsRow.max_size)        : 0;
+    const openPositionCount   = row ? Number(row.total_count)    : 0;
+    const openExposure        = row ? Number(row.total_exposure)  : 0;
+    const avgOpenSize         = row ? Number(row.avg_size)        : 0;
+    const largestOpenPosition = row ? Number(row.max_size)        : 0;
 
-    console.log(`[summary] openPositionCount=${openPositionCount} openExposure=${openExposure}`);
+    console.log(`[summary ${ROUTE_VERSION}] resolved: count=${openPositionCount} exposure=${openExposure}`);
 
+    // ── Response ───────────────────────────────────────────────────────────────
     return NextResponse.json(
       {
         ok: true,
+        route_version: ROUTE_VERSION,  // remove once confirmed working
+
         // Wallets
         walletsActive: activeWalletsRes.count ?? 0,
-        walletsTotal: totalWalletsRes.count ?? 0,
-        walletCount: activeWalletsRes.count ?? 0,  // legacy alias
-        // Bots — both enabled and total so UI can show "22 enabled / 24 total"
+        walletsTotal:  totalWalletsRes.count  ?? 0,
+        walletCount:   activeWalletsRes.count ?? 0,  // legacy alias
+
+        // Bots
         activeBotCount: enabledBotsRes.count ?? 0,
-        botsTotal: totalBotsRes.count ?? 0,
-        // Positions — OPEN only; label must say "open" in the UI
+        botsTotal:      totalBotsRes.count   ?? 0,
+
+        // OPEN positions — true totals from DB aggregate, no row cap
         openPositionCount,
-        // Exposure — all dollar figures are sourced from `size` (the sole sizing
-        // column on copied_positions; displayed as "Size ($)" in the UI table)
-        openExposure,        // SUM(size) WHERE status = 'OPEN'
-        avgOpenSize,         // openExposure / openPositionCount
-        largestOpenPosition, // MAX(size) WHERE status = 'OPEN'
-        // Attempts — today only; refreshes at midnight UTC automatically
+        openExposure,
+        avgOpenSize,
+        largestOpenPosition,
+
+        // Attempts
         attemptsTodayCount: attemptsTodayRes.count ?? 0,
+
+        // Settings
         settings: settingsRes.data ?? null,
-        // Server timestamp so the client can show "last updated X seconds ago"
+
+        // Server timestamp
         fetchedAt: new Date().toISOString(),
-        // _debug: visible in DevTools Network tab — remove once confirmed working
+
+        // _debug — visible in DevTools Network tab without Netlify log access.
+        // Shows exactly what the RPC returned so you can diagnose any mismatch.
         _debug: {
-          rpc: 'copy_open_position_stats',
-          rpc_error: openStatsRes.error ?? null,
-          rpc_raw: openStatsRes.data ?? null,
+          route_version: ROUTE_VERSION,
+          rpc_called:    'copy_open_position_stats',
+          rpc_error:     rpcError,
+          rpc_raw:       rpcRaw,
           resolved: { openPositionCount, openExposure, avgOpenSize, largestOpenPosition },
         },
       },
       { headers: { 'Cache-Control': 'no-store, max-age=0' } }
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[summary ${ROUTE_VERSION}] uncaught error:`, message);
+    return NextResponse.json(
+      { ok: false, error: message, route_version: ROUTE_VERSION },
+      { status: 500, headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    );
   }
 }
