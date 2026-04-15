@@ -1709,13 +1709,20 @@
   letter-spacing: 0.02em;
 }
 
-/* Inactive rows are visually dimmed */
-.copy-row-inactive td {
+/* Inactive rows: dim only the identity / status columns.
+   Historical performance columns (score, sparkline, P/L, win rate, trades,
+   volume, category, last trade) always stay at full opacity so operators can
+   read historical data regardless of whether the wallet is currently trading.
+   Column map: 1=checkbox 2=rank 3=wallet 4=toggle 5=bots 6+=performance */
+.copy-row-inactive td:nth-child(1),
+.copy-row-inactive td:nth-child(2),
+.copy-row-inactive td:nth-child(3),
+.copy-row-inactive td:nth-child(5) {
   opacity: 0.45;
 }
-.copy-row-inactive td:nth-child(3) {
-  opacity: 1; /* keep toggle fully visible */
-}
+/* col 4 (active toggle) and cols 6+ (all historical metrics) are intentionally
+   left at full opacity — the toggle must remain interactive and historical
+   data must remain fully readable even when the wallet is OFF */
 
 /* ─── Sortable column headers ────────────────────────────────────────────────── */
 
