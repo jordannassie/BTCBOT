@@ -160,9 +160,11 @@ export default function LiveCard() {
     loadSettings();
   }, [loadSettings]);
 
-  // Lightweight exposure-only refresh used after saving the cap.
-  // Does not trigger the card loading state; always updates capInput to match
-  // the server-confirmed cap so the display stays consistent.
+  // Lightweight exposure-only refresh — updates count/exposure/avg without
+  // touching the loading spinner. Preserves the current cap when the server
+  // returns 0 (the exposure route treats settings errors as non-fatal and may
+  // return cap:0 even when a real cap is saved). capInput is NOT updated here;
+  // explicit save handlers own that responsibility.
   const loadExposure = useCallback(async () => {
     try {
       const res = await fetch('/api/copy/exposure', { cache: 'no-store' });
@@ -170,8 +172,16 @@ export default function LiveCard() {
       const p = await res.json();
       if (p.ok) {
         const live = p.live as ExposureMetrics;
-        setLiveExposure(live);
-        setCapInput(String(live.cap));
+        setLiveExposure((prev) => {
+          const effectiveCap = live.cap > 0 ? live.cap : (prev?.cap ?? 0);
+          return {
+            count: live.count,
+            exposure: live.exposure,
+            avg: live.avg,
+            cap: effectiveCap,
+            remaining: effectiveCap > 0 ? Math.max(0, effectiveCap - live.exposure) : null,
+          };
+        });
       }
     } catch { /* swallow */ }
   }, []);
@@ -193,9 +203,20 @@ export default function LiveCard() {
       });
       const payload = await res.json();
       if (payload.ok) {
-        await loadExposure();
-        const label = parsed > 0
-          ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(parsed)
+        // Use the server-confirmed value straight from the PATCH response.
+        // loadExposure() treats settings-fetch errors as non-fatal and may
+        // return cap:0, which would snap the input and display back to 0.
+        const savedCap: number =
+          (payload.settings as { live_max_exposure_usd?: number } | null)
+            ?.live_max_exposure_usd ?? parsed;
+        setCapInput(String(savedCap));
+        setLiveExposure((prev) => {
+          if (!prev) return prev;
+          const remaining = savedCap > 0 ? Math.max(0, savedCap - prev.exposure) : null;
+          return { ...prev, cap: savedCap, remaining };
+        });
+        const label = savedCap > 0
+          ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(savedCap)
           : 'Unlimited';
         setMessage({ text: `Live max exposure set to ${label}`, type: 'success' });
       } else {

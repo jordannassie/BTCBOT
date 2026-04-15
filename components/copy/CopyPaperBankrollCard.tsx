@@ -67,16 +67,28 @@ export default function CopyPaperBankrollCard() {
   const [freshStarting, setFreshStarting] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // Lightweight exposure-only refresh — does not touch the loading spinner.
-  // Called after any action that changes DB exposure (fresh start, etc.)
-  // so the Paper card always shows server-confirmed values, not just optimistic state.
+  // Lightweight exposure-only refresh — updates count/exposure/avg from the server
+  // without touching the loading spinner. Preserves the current cap if the server
+  // returns 0 (which happens when the settings SELECT fails silently — the exposure
+  // route treats settings errors as non-fatal and returns cap:0). This prevents the
+  // card from snapping to "Unlimited" after a background refresh.
   const loadExposure = useCallback(async () => {
     try {
       const res = await fetch('/api/copy/exposure', { cache: 'no-store' });
       if (!res.ok) return;
       const p = await res.json();
       if (p.ok) {
-        setPaperExposure(p.paper as ExposureMetrics);
+        const paper = p.paper as ExposureMetrics;
+        setPaperExposure((prev) => {
+          const effectiveCap = paper.cap > 0 ? paper.cap : (prev?.cap ?? 0);
+          return {
+            count: paper.count,
+            exposure: paper.exposure,
+            avg: paper.avg,
+            cap: effectiveCap,
+            remaining: effectiveCap > 0 ? Math.max(0, effectiveCap - paper.exposure) : null,
+          };
+        });
       }
     } catch { /* swallow — optimistic state from caller remains */ }
   }, []);
@@ -106,7 +118,12 @@ export default function CopyPaperBankrollCard() {
       if (exposureRes.ok) {
         const expPayload = await exposureRes.json();
         if (expPayload.ok) {
-          setPaperExposure(expPayload.paper as ExposureMetrics);
+          const paper = expPayload.paper as ExposureMetrics;
+          setPaperExposure(paper);
+          // Seed capInput once from the initial load so the input reflects the
+          // DB-stored cap on first render. Subsequent changes come only from
+          // explicit save responses, not from background refreshes.
+          setCapInput(String(paper.cap));
         } else {
           setPaperExposure(zeroExposure);
         }
@@ -124,14 +141,6 @@ export default function CopyPaperBankrollCard() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  // Keep cap input in sync with server-confirmed paperExposure.
-  // Runs after fresh start, after save, and after initial load.
-  useEffect(() => {
-    if (paperExposure !== null) {
-      setCapInput(String(paperExposure.cap));
-    }
-  }, [paperExposure]);
 
   const showFeedback = (text: string, type: 'success' | 'error') => {
     setFeedback({ text, type });
@@ -213,10 +222,21 @@ export default function CopyPaperBankrollCard() {
       });
       const payload = await res.json();
       if (payload.ok) {
-        // loadExposure refreshes paperExposure → useEffect syncs capInput
-        await loadExposure();
+        // Use the server-confirmed value straight from the PATCH response.
+        // Do NOT rely on loadExposure() for the cap: the exposure API treats
+        // settings-fetch errors as non-fatal and may return cap:0 even after a
+        // successful save, causing the input and display to snap back to 0.
+        const savedCap: number =
+          (payload.settings as { paper_max_exposure_usd?: number } | null)
+            ?.paper_max_exposure_usd ?? parsed;
+        setCapInput(String(savedCap));
+        setPaperExposure((prev) => {
+          if (!prev) return prev;
+          const remaining = savedCap > 0 ? Math.max(0, savedCap - prev.exposure) : null;
+          return { ...prev, cap: savedCap, remaining };
+        });
         showFeedback(
-          `Paper max exposure set to ${parsed > 0 ? fmt(parsed) : 'Unlimited'}`,
+          `Paper max exposure set to ${savedCap > 0 ? fmt(savedCap) : 'Unlimited'}`,
           'success'
         );
       } else {
@@ -248,7 +268,9 @@ export default function CopyPaperBankrollCard() {
         // 1. Update balance / PnL in-place — no loading flash
         setState((prev) => prev ? { ...prev, balance: newBalance, pnl: 0 } : prev);
 
-        // 2. Optimistic exposure zero — visible immediately
+        // 2. Optimistic exposure zero — visible immediately.
+        //    Also sync capInput explicitly (useEffect no longer does this).
+        setCapInput(String(newCap));
         setPaperExposure({
           count: 0,
           exposure: 0,
