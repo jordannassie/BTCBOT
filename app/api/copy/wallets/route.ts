@@ -134,17 +134,15 @@ export async function POST(request: Request) {
 // ── PATCH /api/copy/wallets ──────────────────────────────────────────────────
 // Update a tracked wallet.
 //
-// Special behaviour when is_active = false:
-//   If the request includes disable_linked_bots: true, all copy_bots rows with
-//   the matching wallet_address are set is_enabled = false in the same request.
-//   History (copy_attempts, copied_positions) is never touched.
+// Master-switch behaviour for is_active:
+//   Wallet ON  (is_active → true)  → set all linked copy_bots.is_enabled = true
+//   Wallet OFF (is_active → false) → set all linked copy_bots.is_enabled = false
 //
-// When is_active = true (re-enabling):
-//   Linked bots are NOT automatically re-enabled. The operator must do that
-//   manually from the Bots tab. This is the safe default.
+// "Linked" means copy_bots.wallet_address = tracked_wallets.wallet_address.
+// History (copy_attempts, copied_positions) is never touched.
 //
 // Returns:
-//   { ok, row, bots_disabled? }   (bots_disabled present only when > 0)
+//   { ok, row, bots_synced: number }
 
 export async function PATCH(request: Request) {
   const client = getServiceClient();
@@ -154,7 +152,8 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json();
-    const { wallet_address, disable_linked_bots, ...updates } = body;
+    // strip any legacy disable_linked_bots flag — no longer needed
+    const { wallet_address, disable_linked_bots: _ignored, ...updates } = body;
 
     if (!wallet_address || typeof wallet_address !== 'string') {
       return NextResponse.json({ ok: false, error: 'wallet_address is required' }, { status: 400 });
@@ -162,9 +161,9 @@ export async function PATCH(request: Request) {
 
     // Build the allowed wallet field updates
     const allowed: Record<string, unknown> = {};
-    if (typeof updates.is_active     === 'boolean') allowed.is_active     = updates.is_active;
-    if (typeof updates.display_name  === 'string')  allowed.display_name  = updates.display_name;
-    if (typeof updates.tags          !== 'undefined') allowed.tags         = updates.tags;
+    if (typeof updates.is_active    === 'boolean') allowed.is_active    = updates.is_active;
+    if (typeof updates.display_name === 'string')  allowed.display_name = updates.display_name;
+    if (typeof updates.tags         !== 'undefined') allowed.tags        = updates.tags;
 
     if (Object.keys(allowed).length === 0) {
       return NextResponse.json({ ok: false, error: 'No valid fields to update' }, { status: 400 });
@@ -181,34 +180,26 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 
-    // ── Disable linked bots when wallet is turned off ────────────────────────
-    // Only fires when:
-    //   (a) the wallet is being deactivated  (is_active → false), AND
-    //   (b) the caller explicitly requested  (disable_linked_bots: true)
-    //
-    // Re-enabling a wallet never auto-enables bots (safe default).
-    let botsDisabled = 0;
-    if (allowed.is_active === false && disable_linked_bots === true) {
+    // ── Sync linked bots whenever is_active changes ──────────────────────────
+    // Wallet is the master switch: bots mirror its active state automatically.
+    let botsSynced = 0;
+    if (typeof allowed.is_active === 'boolean') {
       try {
-        const { data: disabledBots, error: botError } = await client
+        const { data: syncedBots, error: botError } = await client
           .from('copy_bots')
-          .update({ is_enabled: false })
+          .update({ is_enabled: allowed.is_active })
           .eq('wallet_address', wallet_address)
-          .eq('is_enabled', true)   // only touch bots that are currently ON
           .select('id');
 
         if (!botError) {
-          botsDisabled = disabledBots?.length ?? 0;
+          botsSynced = syncedBots?.length ?? 0;
         }
       } catch {
-        // Best-effort — wallet was updated successfully even if bot disable fails
+        // Best-effort — wallet was updated successfully even if bot sync fails
       }
     }
 
-    const response: Record<string, unknown> = { ok: true, row: data };
-    if (botsDisabled > 0) response.bots_disabled = botsDisabled;
-
-    return NextResponse.json(response);
+    return NextResponse.json({ ok: true, row: data, bots_synced: botsSynced });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

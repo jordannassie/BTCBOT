@@ -238,34 +238,23 @@ export default function TrackedWalletsSection() {
 
   const handleToggleActive = async (wallet: WalletRow) => {
     const turningOff = wallet.is_active;
+    const linkedCount = wallet.bot_count ?? 0;
 
-    // When turning OFF: ask if linked bots should also be disabled
-    let disableLinkedBots = false;
-    if (turningOff) {
-      const linkedCount = wallet.bot_count ?? 0;
-      const botLine = linkedCount > 0
-        ? `\nThis will also disable ${linkedCount} linked bot${linkedCount !== 1 ? 's' : ''}.`
-        : '';
-      const confirmed = window.confirm(
-        `Disable "${walletLabel(wallet)}"?${botLine}` +
-        `\n\nBots can be re-enabled manually from the Bots tab.`
-      );
-      if (!confirmed) return;
-      disableLinkedBots = linkedCount > 0;
-    }
+    // Always confirm before toggling — make the bot sync effect explicit
+    const botLine = linkedCount > 0
+      ? `\nThis will also ${turningOff ? 'disable' : 're-enable'} ${linkedCount} linked bot${linkedCount !== 1 ? 's' : ''}.`
+      : '';
+    const confirmed = window.confirm(
+      `${turningOff ? 'Disable' : 'Enable'} "${walletLabel(wallet)}"?${botLine}`
+    );
+    if (!confirmed) return;
 
     setTogglingId(wallet.wallet_address);
     try {
-      const body: Record<string, unknown> = {
-        wallet_address: wallet.wallet_address,
-        is_active: !wallet.is_active,
-      };
-      if (disableLinkedBots) body.disable_linked_bots = true;
-
       const res = await fetch('/api/copy/wallets', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ wallet_address: wallet.wallet_address, is_active: !wallet.is_active }),
         cache: 'no-store',
       });
       const payload = await res.json();
@@ -291,51 +280,48 @@ export default function TrackedWalletsSection() {
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  // ── Bulk disable selected wallets + their linked bots ─────────────────────
+  // ── Bulk toggle selected wallets + their linked bots ─────────────────────
+  // Syncs all selected wallets to the specified is_active value.
+  // Linked bots are mirrored automatically by the API (wallet is master switch).
 
-  const handleBulkDisable = async () => {
-    const targets = wallets.filter((w) => selectedIds.has(w.wallet_address));
-    const walletsToDisable = targets.filter((w) => w.is_active); // only those currently ON
-    const totalBots = walletsToDisable.reduce((sum, w) => sum + (w.bot_count ?? 0), 0);
+  const handleBulkSetActive = async (activate: boolean) => {
+    const targets  = wallets.filter((w) => selectedIds.has(w.wallet_address));
+    const toChange = targets.filter((w) => w.is_active !== activate);
+    const totalBots = toChange.reduce((sum, w) => sum + (w.bot_count ?? 0), 0);
 
-    if (walletsToDisable.length === 0) {
-      window.alert('All selected wallets are already inactive.');
+    if (toChange.length === 0) {
+      window.alert(`All selected wallets are already ${activate ? 'active' : 'inactive'}.`);
       clearSelection();
       return;
     }
 
+    const verb    = activate ? 'Enable' : 'Disable';
+    const verbPast = activate ? 'enabled' : 'disabled';
     const botLine = totalBots > 0
-      ? `\nThis will also disable ${totalBots} linked bot${totalBots !== 1 ? 's' : ''}.`
+      ? `\nThis will also ${activate ? 're-enable' : 'disable'} ${totalBots} linked bot${totalBots !== 1 ? 's' : ''}.`
       : '';
 
     const confirmed = window.confirm(
-      `Disable ${walletsToDisable.length} wallet${walletsToDisable.length !== 1 ? 's' : ''}?${botLine}` +
-      `\n\nBots can be re-enabled manually from the Bots tab.`
+      `${verb} ${toChange.length} wallet${toChange.length !== 1 ? 's' : ''}?${botLine}`
     );
     if (!confirmed) return;
 
     setBulkWorking(true);
     try {
       await Promise.all(
-        walletsToDisable.map((w) =>
+        toChange.map((w) =>
           fetch('/api/copy/wallets', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              wallet_address: w.wallet_address,
-              is_active: false,
-              disable_linked_bots: (w.bot_count ?? 0) > 0,
-            }),
+            body: JSON.stringify({ wallet_address: w.wallet_address, is_active: activate }),
             cache: 'no-store',
           })
         )
       );
       await load();
       clearSelection();
-      const msg = totalBots > 0
-        ? `Disabled ${walletsToDisable.length} wallet${walletsToDisable.length !== 1 ? 's' : ''} and ${totalBots} linked bot${totalBots !== 1 ? 's' : ''}.`
-        : `Disabled ${walletsToDisable.length} wallet${walletsToDisable.length !== 1 ? 's' : ''}.`;
-      setBulkResult(msg);
+      const botsNote = totalBots > 0 ? ` and ${totalBots} linked bot${totalBots !== 1 ? 's' : ''}` : '';
+      setBulkResult(`${toChange.length} wallet${toChange.length !== 1 ? 's' : ''}${botsNote} ${verbPast}.`);
       setTimeout(() => setBulkResult(null), 5000);
     } finally {
       setBulkWorking(false);
@@ -418,14 +404,24 @@ export default function TrackedWalletsSection() {
               <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={clearSelection}>
                 Clear
               </button>
-              <button
-                className="copy-btn copy-btn-sm copy-btn-danger"
-                onClick={handleBulkDisable}
-                disabled={bulkWorking}
-                style={{ marginLeft: 'auto' }}
-              >
-                {bulkWorking ? 'Disabling…' : `Disable + Bots (${selectedIds.size})`}
-              </button>
+              <div style={{ display: 'flex', gap: '0.4rem', marginLeft: 'auto' }}>
+                <button
+                  className="copy-btn copy-btn-secondary copy-btn-sm"
+                  onClick={() => handleBulkSetActive(true)}
+                  disabled={bulkWorking}
+                  title="Enable selected wallets and re-enable their linked bots"
+                >
+                  {bulkWorking ? '…' : `Enable (${selectedIds.size})`}
+                </button>
+                <button
+                  className="copy-btn copy-btn-sm copy-btn-danger"
+                  onClick={() => handleBulkSetActive(false)}
+                  disabled={bulkWorking}
+                  title="Disable selected wallets and disable their linked bots"
+                >
+                  {bulkWorking ? 'Working…' : `Disable (${selectedIds.size})`}
+                </button>
+              </div>
             </>
           )}
         </div>
@@ -519,8 +515,7 @@ export default function TrackedWalletsSection() {
                 const winPct   = m?.win_rate != null ? m.win_rate * 100 : null;
                 const isSelected = selectedIds.has(w.wallet_address);
 
-                // Hint: wallet is active but all its linked bots are disabled
-                const botsAllDisabled = w.is_active && w.bot_count > 0 && w.bots_enabled_count === 0;
+                // No hint needed — bots always mirror wallet active state now
 
                 return (
                   <tr
@@ -551,11 +546,6 @@ export default function TrackedWalletsSection() {
                       <span className="copy-td-sub copy-mono" title={w.wallet_address} style={{ cursor: 'default' }}>
                         {truncate(w.wallet_address)}
                       </span>
-                      {botsAllDisabled && (
-                        <span className="copy-wallet-bots-hint" title="All linked bots are disabled — re-enable them from the Bots tab">
-                          All bots disabled
-                        </span>
-                      )}
                     </td>
 
                     {/* Active toggle */}
