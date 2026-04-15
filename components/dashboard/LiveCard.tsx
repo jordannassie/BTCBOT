@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { BotSettings } from '@/lib/botData';
+import MiniSparkline from '@/components/copy/MiniSparkline';
+import {
+  appendBankrollPoint,
+  getBankrollHistory,
+  bankrollSpanLabel,
+  type BankrollPoint,
+} from '@/lib/copy/bankrollHistory';
 
 // ── Live wallet constants ────────────────────────────────────────────────────
 const LIVE_WALLET = '0x48c04c990182b23fd17c911d18c42605fad3312e';
@@ -80,6 +87,8 @@ export default function LiveCard() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [allowance, setAllowance] = useState<number | null>(null);
+  // Sparkline — client-only, read from localStorage after mount
+  const [sparkPoints, setSparkPoints] = useState<BankrollPoint[]>([]);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -93,6 +102,11 @@ export default function LiveCard() {
         const strategySettings = (nextSettings.strategy_settings ?? {}) as Record<string, unknown>;
         const strategyAllowance = strategySettings.live_allowance_usd as number | undefined;
         setAllowance(typeof strategyAllowance === 'number' ? strategyAllowance : null);
+        // Record balance in sparkline history whenever we get a fresh value
+        if (typeof nextSettings.live_balance_usd === 'number') {
+          appendBankrollPoint('live', nextSettings.live_balance_usd);
+          setSparkPoints(getBankrollHistory('live'));
+        }
       }
     } finally {
       setLoading(false);
@@ -169,6 +183,16 @@ export default function LiveCard() {
       <div className="live-balance">
         <div className="pnl-amount">
           {settings?.live_balance_usd != null ? formatUSD(settings.live_balance_usd) : '--'}
+        </div>
+        {/* Trend sparkline — powered by localStorage ring buffer */}
+        <div className="live-sparkline-row">
+          <MiniSparkline
+            points={sparkPoints}
+            id="live-bankroll"
+            width={120}
+            height={30}
+            label={bankrollSpanLabel(sparkPoints) || undefined}
+          />
         </div>
         <p className="pnl-subtext">Live Bankroll (USDC Polygon)</p>
         <p className="pnl-subtext">

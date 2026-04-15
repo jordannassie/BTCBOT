@@ -324,6 +324,14 @@
   color: #10b981;
 }
 
+/* ── Live bankroll sparkline row ─────────────────────────────────────────── */
+
+.live-sparkline-row {
+  margin: 0.45rem 0 0.15rem;
+  display: flex;
+  align-items: center;
+}
+
 /* ── Live wallet address row ─────────────────────────────────────────────── */
 
 .live-wallet-row {

@@ -1,6 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import MiniSparkline from './MiniSparkline';
+import {
+  appendBankrollPoint,
+  getBankrollHistory,
+  clearBankrollHistory,
+  bankrollSpanLabel,
+  type BankrollPoint,
+} from '@/lib/copy/bankrollHistory';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +35,8 @@ export default function CopyPaperBankrollCard() {
   const [state, setState] = useState<CardState | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  // Sparkline — client-only, read from localStorage after mount
+  const [sparkPoints, setSparkPoints] = useState<BankrollPoint[]>([]);
 
   // Input for new default amount
   const [inputValue, setInputValue] = useState('');
@@ -46,6 +56,11 @@ export default function CopyPaperBankrollCard() {
       if (payload.ok) {
         setState(payload);
         setInputValue(String(payload.default_amount));
+        // Record balance in sparkline history whenever we get a fresh value
+        if (typeof payload.balance === 'number') {
+          appendBankrollPoint('paper', payload.balance);
+          setSparkPoints(getBankrollHistory('paper'));
+        }
       } else {
         setFetchError(payload.error ?? 'Failed to load paper bankroll');
       }
@@ -107,6 +122,10 @@ export default function CopyPaperBankrollCard() {
         setState((prev) =>
           prev ? { ...prev, balance: payload.balance, pnl: 0 } : prev
         );
+        // Clear history so sparkline starts fresh from the new baseline
+        clearBankrollHistory('paper');
+        appendBankrollPoint('paper', payload.balance);
+        setSparkPoints(getBankrollHistory('paper'));
         showFeedback(`Paper bankroll reset to ${fmt(payload.balance)}`, 'success');
       } else {
         showFeedback(payload.error ?? 'Reset failed', 'error');
@@ -155,6 +174,17 @@ export default function CopyPaperBankrollCard() {
 
       {/* Balance */}
       <div className="copy-paper-balance">{fmt(state?.balance ?? 0)}</div>
+
+      {/* Trend sparkline — powered by localStorage ring buffer */}
+      <div className="copy-paper-sparkline-row">
+        <MiniSparkline
+          points={sparkPoints}
+          id="paper-bankroll"
+          width={120}
+          height={30}
+          label={bankrollSpanLabel(sparkPoints) || undefined}
+        />
+      </div>
 
       {/* P&L row */}
       <div className="copy-paper-pnl-row">

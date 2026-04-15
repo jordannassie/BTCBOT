@@ -1414,6 +1414,13 @@
   margin-bottom: 0.6rem;
 }
 
+/* Paper bankroll sparkline row */
+.copy-paper-sparkline-row {
+  margin: 0.45rem 0 0.25rem;
+  display: flex;
+  align-items: center;
+}
+
 .copy-paper-pnl-row {
   display: flex;
   align-items: center;
