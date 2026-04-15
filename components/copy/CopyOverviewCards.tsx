@@ -257,7 +257,7 @@ export default function CopyOverviewCards() {
           </div>
         </div>
 
-        {/* ── Open Positions — OPEN status only, never closed/cancelled ── */}
+        {/* ── Open Positions — OPEN status only, all modes combined ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
             <div className="copy-stat-icon"><IconPosition /></div>
@@ -266,25 +266,25 @@ export default function CopyOverviewCards() {
           <div className="copy-stat-value">{data.openPositionCount}</div>
           <div className="copy-stat-helper">
             <span className="copy-stat-badge copy-stat-badge-open">OPEN</span>
-            {' '}status only · not closed or cancelled
+            {' '}status · all modes (PAPER + LIVE)
           </div>
         </div>
 
-        {/* ── Open Exposure — SUM(size) WHERE status = 'OPEN' ── */}
+        {/* ── Open Exposure — SUM(size) across all modes WHERE status = 'OPEN' ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
             <div className="copy-stat-icon"><IconDollar /></div>
-            <span className="copy-stat-label">Open Exposure</span>
+            <span className="copy-stat-label">Total Open Exposure</span>
           </div>
           <div className="copy-stat-value">{fmtUsd(data.openExposure ?? 0)}</div>
           <div className="copy-stat-helper">
-            SUM(size) across{' '}
+            SUM(size) ·{' '}
             <span className="copy-stat-badge copy-stat-badge-open">OPEN</span>
-            {' '}positions
+            {' '}· all modes (PAPER + LIVE)
           </div>
         </div>
 
-        {/* ── Avg Open Size — openExposure / openPositionCount ── */}
+        {/* ── Avg Open Size — openExposure / openPositionCount, all modes ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
             <div className="copy-stat-icon"><IconDollar /></div>
@@ -293,7 +293,7 @@ export default function CopyOverviewCards() {
           <div className="copy-stat-value">{fmtUsd(data.avgOpenSize ?? 0)}</div>
           <div className="copy-stat-helper">
             {data.openPositionCount > 0
-              ? `Avg of ${data.openPositionCount} open position${data.openPositionCount !== 1 ? 's' : ''}`
+              ? `Avg of ${data.openPositionCount} open · all modes`
               : 'No open positions'}
             {(data.largestOpenPosition ?? 0) > 0 && (
               <span style={{ display: 'block', marginTop: '0.15rem', color: 'rgba(248,250,252,0.35)' }}>

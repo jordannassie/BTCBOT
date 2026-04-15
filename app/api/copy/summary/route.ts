@@ -25,7 +25,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // Bumped on every fix to this route — visible in response JSON.
-const ROUTE_VERSION = 'v3-rpc';
+const ROUTE_VERSION = 'v4-rpc-joined';
 
 function makeClient() {
   let url = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim();
@@ -63,9 +63,10 @@ export async function GET() {
       client.from('copy_bots').select('*', { count: 'exact', head: true }),
 
       // copy_open_position_stats() runs COUNT/SUM/AVG/MAX inside PostgreSQL.
-      // It is completely unbounded — it will return the true total for any number
-      // of OPEN rows, whether there are 100 or 100 000.
-      // Created by sql/migrations/0005-aggregate-functions.sql.
+      // It JOINs copy_bots so orphaned positions (copy_bot_id no longer in
+      // copy_bots) are excluded — matching copy_open_exposure_by_mode() exactly.
+      // Result = SUM(PAPER) + SUM(LIVE), no row cap.
+      // Created by sql/migrations/0005-aggregate-functions.sql (v2: added JOIN).
       client.rpc('copy_open_position_stats'),
 
       client.from('copy_attempts').select('*', { count: 'exact', head: true }).gte('created_at', todayUTC.toISOString()),

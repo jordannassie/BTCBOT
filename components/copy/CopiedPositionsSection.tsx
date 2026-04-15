@@ -35,21 +35,37 @@ function statusBadge(status: string) {
 
 type Filter = 'ALL' | 'OPEN' | 'CLOSED' | 'CANCELLED';
 
+// Server-confirmed open exposure summary (from the unbounded RPC via /api/copy/exposure).
+// Stored separately from the table rows so the summary bar is always accurate
+// regardless of the 100-row fetch limit on /api/copy/positions.
+type ExposureSummary = {
+  paperCount: number;
+  paperExposure: number;
+  liveCount: number;
+  liveExposure: number;
+};
+
 export default function CopiedPositionsSection({ scrollable = false }: { scrollable?: boolean }) {
   const [rows, setRows] = useState<CopiedPosition[]>([]);
   const [botMap, setBotMap] = useState<BotMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('ALL');
+  // Server-confirmed exposure totals — never limited by the table row cap
+  const [exposureSummary, setExposureSummary] = useState<ExposureSummary | null>(null);
 
   const load = useCallback(async (statusFilter: Filter) => {
     setLoading(true);
     setError(null);
     try {
       const qs = statusFilter !== 'ALL' ? `?status=${statusFilter}` : '';
-      const [posRes, botsRes] = await Promise.all([
+      const [posRes, botsRes, expRes] = await Promise.all([
         fetch(`/api/copy/positions${qs}`, { cache: 'no-store' }),
         fetch('/api/copy/bots', { cache: 'no-store' }),
+        // Fetch true open exposure via the unbounded RPC (copy_open_exposure_by_mode).
+        // This is the same source used by the Paper and Live bankroll cards, so the
+        // summary bar will always match those cards regardless of the table row limit.
+        fetch('/api/copy/exposure', { cache: 'no-store' }),
       ]);
       const posPayload = await posRes.json();
       const botsPayload = await botsRes.json();
@@ -63,6 +79,18 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
           map[b.id] = { mode: b.mode, name: b.name };
         }
         setBotMap(map);
+      }
+
+      if (expRes.ok) {
+        const expPayload = await expRes.json();
+        if (expPayload.ok) {
+          setExposureSummary({
+            paperCount:    expPayload.paper?.count    ?? 0,
+            paperExposure: expPayload.paper?.exposure ?? 0,
+            liveCount:     expPayload.live?.count     ?? 0,
+            liveExposure:  expPayload.live?.exposure  ?? 0,
+          });
+        }
       }
     } catch {
       setError('Network error');
@@ -78,16 +106,12 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
     [rows]
   );
 
-  // Exposure metrics — OPEN positions only, sourced from the `size` column
-  const openRows = useMemo(() => rows.filter((r) => r.status === 'OPEN'), [rows]);
-  const openExposure = useMemo(
-    () => openRows.reduce((sum, r) => sum + (r.size ?? 0), 0),
-    [openRows]
-  );
-  const avgOpenSize = openRows.length > 0 ? openExposure / openRows.length : 0;
-  const largestOpen = openRows.length > 0
-    ? Math.max(...openRows.map((r) => r.size ?? 0))
-    : 0;
+  // Derived summary totals from the RPC response (not the table rows)
+  const totalOpenCount    = (exposureSummary?.paperCount    ?? 0) + (exposureSummary?.liveCount    ?? 0);
+  const totalOpenExposure = (exposureSummary?.paperExposure ?? 0) + (exposureSummary?.liveExposure ?? 0);
+  const avgOpenSize       = totalOpenCount > 0 ? totalOpenExposure / totalOpenCount : 0;
+  const hasPaper          = (exposureSummary?.paperCount ?? 0) > 0;
+  const hasLive           = (exposureSummary?.liveCount  ?? 0) > 0;
 
   const filters: Filter[] = ['ALL', 'OPEN', 'CLOSED', 'CANCELLED'];
 
@@ -132,8 +156,11 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
         </div>
       </div>
 
-      {/* ── Open Exposure Summary ── above the table, outside the scroll area ── */}
-      {!loading && !error && openRows.length > 0 && (
+      {/* ── Open Exposure Summary ── above the table, outside the scroll area ──
+           Numbers come from /api/copy/exposure (copy_open_exposure_by_mode RPC)
+           so they are always accurate regardless of the table's 100-row limit.
+           Matches the Paper Bankroll card and Live card exactly. ── */}
+      {!loading && !error && totalOpenCount > 0 && (
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -148,20 +175,42 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
             Open Exposure
           </span>
           <span style={{ fontWeight: 700, color: '#f8fafc' }}>
-            ${openExposure.toFixed(2)}
+            ${totalOpenExposure.toFixed(2)}
           </span>
           <span style={{ color: 'rgba(248,250,252,0.25)' }}>·</span>
           <span style={{ color: 'rgba(248,250,252,0.45)' }}>
-            {openRows.length} open position{openRows.length !== 1 ? 's' : ''}
+            {totalOpenCount} open position{totalOpenCount !== 1 ? 's' : ''}
           </span>
           <span style={{ color: 'rgba(248,250,252,0.25)' }}>·</span>
           <span style={{ color: 'rgba(248,250,252,0.45)' }}>
             Avg <span style={{ color: '#f8fafc', fontWeight: 600 }}>${avgOpenSize.toFixed(2)}</span>
           </span>
-          <span style={{ color: 'rgba(248,250,252,0.25)' }}>·</span>
-          <span style={{ color: 'rgba(248,250,252,0.45)' }}>
-            Largest <span style={{ color: '#f8fafc', fontWeight: 600 }}>${largestOpen.toFixed(2)}</span>
-          </span>
+          {/* Mode breakdown — only shown when both modes have open positions */}
+          {hasPaper && hasLive && (
+            <>
+              <span style={{ color: 'rgba(248,250,252,0.25)' }}>·</span>
+              <span style={{ color: 'rgba(248,250,252,0.35)', fontSize: '0.69rem' }}>
+                Paper <span style={{ color: '#34d399', fontWeight: 600 }}>${(exposureSummary?.paperExposure ?? 0).toFixed(2)}</span>
+                {' '}· Live <span style={{ color: '#60a5fa', fontWeight: 600 }}>${(exposureSummary?.liveExposure ?? 0).toFixed(2)}</span>
+              </span>
+            </>
+          )}
+          {hasPaper && !hasLive && (
+            <>
+              <span style={{ color: 'rgba(248,250,252,0.25)' }}>·</span>
+              <span style={{ color: 'rgba(248,250,252,0.35)', fontSize: '0.69rem' }}>
+                <span style={{ color: '#34d399' }}>PAPER</span> only
+              </span>
+            </>
+          )}
+          {hasLive && !hasPaper && (
+            <>
+              <span style={{ color: 'rgba(248,250,252,0.25)' }}>·</span>
+              <span style={{ color: 'rgba(248,250,252,0.35)', fontSize: '0.69rem' }}>
+                <span style={{ color: '#60a5fa' }}>LIVE</span> only
+              </span>
+            </>
+          )}
         </div>
       )}
 

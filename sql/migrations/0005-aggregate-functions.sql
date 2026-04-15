@@ -27,6 +27,13 @@
 -- Run once against the production Supabase project.
 
 -- ── 1. Overall OPEN position stats (no mode split) ───────────────────────────
+-- IMPORTANT: this function MUST use the same INNER JOIN as
+-- copy_open_exposure_by_mode() so that both RPCs exclude "orphaned" positions
+-- (rows whose copy_bot_id no longer exists in copy_bots, e.g. after a bot is
+-- deleted or recreated with a new id).  Without the JOIN the function would
+-- include every row WHERE status='OPEN' regardless of whether its bot still
+-- exists, producing a higher total than the mode-split function — which is the
+-- root cause of the Overview vs Paper-card mismatch observed on the dashboard.
 CREATE OR REPLACE FUNCTION copy_open_position_stats()
 RETURNS TABLE (
   total_count    bigint,
@@ -39,12 +46,13 @@ STABLE
 SECURITY DEFINER
 AS $$
   SELECT
-    COUNT(*)::bigint               AS total_count,
-    COALESCE(SUM(size),  0)        AS total_exposure,
-    COALESCE(AVG(size),  0)        AS avg_size,
-    COALESCE(MAX(size),  0)        AS max_size
-  FROM copied_positions
-  WHERE status = 'OPEN';
+    COUNT(cp.id)::bigint            AS total_count,
+    COALESCE(SUM(cp.size),  0)      AS total_exposure,
+    COALESCE(AVG(cp.size),  0)      AS avg_size,
+    COALESCE(MAX(cp.size),  0)      AS max_size
+  FROM copied_positions cp
+  JOIN copy_bots cb ON cp.copy_bot_id = cb.id
+  WHERE cp.status = 'OPEN';
 $$;
 
 -- ── 2. OPEN exposure grouped by bot mode ─────────────────────────────────────
