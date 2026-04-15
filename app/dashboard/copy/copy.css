@@ -1574,6 +1574,98 @@
   cursor: not-allowed;
 }
 
+/* ─── Paper Fresh Start ───────────────────────────────────────────────────── */
+
+.copy-paper-fresh-start-btn {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.06);
+  color: #f87171;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: center;
+  margin-bottom: 0.4rem;
+}
+
+.copy-paper-fresh-start-btn:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.copy-paper-fresh-start-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.copy-paper-fresh-start-confirm {
+  background: rgba(248, 113, 113, 0.06);
+  border: 1px solid rgba(248, 113, 113, 0.22);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.copy-paper-fresh-start-confirm p {
+  font-size: 0.72rem;
+  color: rgba(248, 250, 252, 0.65);
+  line-height: 1.45;
+  margin-bottom: 0.6rem;
+}
+
+.copy-paper-fresh-start-confirm strong {
+  color: #f8fafc;
+  font-weight: 700;
+}
+
+.copy-paper-fresh-start-confirm-btn {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.copy-paper-fresh-start-confirm-btn:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.27);
+}
+
+.copy-paper-fresh-start-confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.copy-paper-fresh-start-cancel-btn {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(248, 250, 252, 0.1);
+  background: rgba(248, 250, 252, 0.04);
+  color: rgba(248, 250, 252, 0.5);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.copy-paper-fresh-start-cancel-btn:hover:not(:disabled) {
+  background: rgba(248, 250, 252, 0.08);
+  color: rgba(248, 250, 252, 0.75);
+}
+
+.copy-paper-fresh-start-cancel-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Feedback message */
 .copy-paper-feedback {
   font-size: 0.75rem;

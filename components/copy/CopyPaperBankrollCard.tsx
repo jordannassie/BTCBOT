@@ -26,6 +26,8 @@ type ExposureMetrics = {
   remaining: number | null; // null when unlimited
 };
 
+const FALLBACK_DEFAULT = 1000;
+
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
 const usd = new Intl.NumberFormat('en-US', {
@@ -57,6 +59,8 @@ export default function CopyPaperBankrollCard() {
   // Action feedback
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [freshStartConfirm, setFreshStartConfirm] = useState(false);
+  const [freshStarting, setFreshStarting] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const load = useCallback(async () => {
@@ -164,6 +168,53 @@ export default function CopyPaperBankrollCard() {
       showFeedback('Network error resetting bankroll', 'error');
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleFreshStart = async () => {
+    setFreshStarting(true);
+    setFreshStartConfirm(false);
+    try {
+      const res = await fetch('/api/copy/paper-bankroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'fresh_start' }),
+        cache: 'no-store',
+      });
+      const payload = await res.json();
+      if (payload.ok) {
+        const newBalance = payload.balance as number;
+        const newCap = payload.default_amount as number;
+        const archived = payload.positions_archived as number;
+
+        // Update card state in-place — no loading flash
+        setState((prev) => prev ? { ...prev, balance: newBalance, pnl: 0 } : prev);
+
+        // Exposure is now zero; cap matches the fresh starting balance
+        setPaperExposure({
+          count: 0,
+          exposure: 0,
+          avg: 0,
+          cap: newCap,
+          remaining: newCap,
+        });
+
+        // Reset sparkline to a fresh season baseline
+        clearBankrollHistory('paper');
+        appendBankrollPoint('paper', newBalance);
+        setSparkPoints(getBankrollHistory('paper'));
+
+        showFeedback(
+          `Fresh start! ${archived} position${archived !== 1 ? 's' : ''} archived. Balance reset to ${fmt(newBalance)}.`,
+          'success'
+        );
+      } else {
+        showFeedback(payload.error ?? 'Fresh start failed', 'error');
+      }
+    } catch {
+      showFeedback('Network error during fresh start', 'error');
+    } finally {
+      setFreshStarting(false);
     }
   };
 
@@ -367,6 +418,80 @@ export default function CopyPaperBankrollCard() {
           ? 'Resetting…'
           : `Reset to Default (${fmt(state?.default_amount ?? 0)})`}
       </button>
+
+      {/* ── Fresh Start (New Season) ─────────────────────────────────────────── */}
+      <div style={{
+        marginTop: '0.6rem',
+        paddingTop: '0.75rem',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+      }}>
+        {/* Section label */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
+          <span style={{
+            fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.1em',
+            textTransform: 'uppercase', color: 'rgba(248,250,252,0.3)',
+          }}>
+            Fresh Start
+          </span>
+          <span style={{
+            fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.05em',
+            textTransform: 'uppercase', padding: '0.1em 0.45em',
+            background: 'rgba(248,113,113,0.1)', color: '#f87171',
+            border: '1px solid rgba(248,113,113,0.2)', borderRadius: '0.3rem',
+          }}>
+            New Season
+          </span>
+        </div>
+
+        <p style={{
+          fontSize: '0.69rem', color: 'rgba(248,250,252,0.28)',
+          lineHeight: 1.45, marginBottom: '0.55rem',
+        }}>
+          Archives all open paper positions, resets balance to the saved default, clears P/L,
+          and sets Paper Max Exposure to match. Bots, wallets, and settings are preserved.
+        </p>
+
+        {!freshStartConfirm ? (
+          <button
+            className="copy-paper-fresh-start-btn"
+            onClick={() => setFreshStartConfirm(true)}
+            disabled={freshStarting}
+          >
+            {freshStarting ? 'Starting fresh…' : 'Fresh Start — New Season'}
+          </button>
+        ) : (
+          <div className="copy-paper-fresh-start-confirm">
+            <p>
+              This will archive{' '}
+              <strong>
+                {paperExposure?.count ?? 0} open paper position
+                {(paperExposure?.count ?? 0) !== 1 ? 's' : ''}
+              </strong>{' '}
+              and reset the balance to{' '}
+              <strong>{fmt(state?.default_amount ?? FALLBACK_DEFAULT)}</strong>.
+              {' '}Paper Max Exposure will also be set to{' '}
+              <strong>{fmt(state?.default_amount ?? FALLBACK_DEFAULT)}</strong>.
+              This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="copy-paper-fresh-start-confirm-btn"
+                onClick={handleFreshStart}
+                disabled={freshStarting}
+              >
+                {freshStarting ? 'Working…' : 'Yes, Fresh Start'}
+              </button>
+              <button
+                className="copy-paper-fresh-start-cancel-btn"
+                onClick={() => setFreshStartConfirm(false)}
+                disabled={freshStarting}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Feedback */}
       {feedback && (

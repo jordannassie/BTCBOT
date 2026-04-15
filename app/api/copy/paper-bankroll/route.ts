@@ -166,8 +166,100 @@ export async function POST(request: Request) {
     }
   }
 
+  // ── fresh_start ───────────────────────────────────────────────────────────
+  // Full paper season reset:
+  //   1. Archives all OPEN paper positions (status → CANCELLED, closed_at = now)
+  //   2. Resets paper_balance_usd + paper_pnl_usd in bot_settings
+  //   3. Syncs paper_max_exposure_usd in copy_global_settings to the balance default
+  //
+  // LIVE positions, bots, wallets, and bot settings are never touched.
+  if (body.action === 'fresh_start') {
+    try {
+      // 1. Read saved paper default
+      const { data: currentSettings } = await client
+        .from('bot_settings')
+        .select('strategy_settings')
+        .eq('bot_id', BOT_ID)
+        .maybeSingle();
+
+      const defaultAmount: number =
+        (currentSettings?.strategy_settings as { paper_default?: number } | null)
+          ?.paper_default ?? FALLBACK_DEFAULT;
+
+      // 2. Collect all PAPER bot IDs
+      const { data: paperBots, error: botsErr } = await client
+        .from('copy_bots')
+        .select('id')
+        .eq('mode', 'PAPER');
+
+      if (botsErr) {
+        return NextResponse.json({ ok: false, error: botsErr.message }, { status: 500 });
+      }
+
+      let positionsArchived = 0;
+
+      if (paperBots && paperBots.length > 0) {
+        const paperBotIds = (paperBots as Array<{ id: string }>).map((b) => b.id);
+
+        // Count OPEN paper positions (head:true bypasses the 1000-row response cap)
+        const { count } = await client
+          .from('copied_positions')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'OPEN')
+          .in('copy_bot_id', paperBotIds);
+
+        positionsArchived = count ?? 0;
+
+        if (positionsArchived > 0) {
+          // Archive without .select() so the UPDATE applies to all rows, not just 1000
+          const { error: cancelErr } = await client
+            .from('copied_positions')
+            .update({ status: 'CANCELLED', closed_at: now })
+            .eq('status', 'OPEN')
+            .in('copy_bot_id', paperBotIds);
+
+          if (cancelErr) {
+            return NextResponse.json({ ok: false, error: cancelErr.message }, { status: 500 });
+          }
+        }
+      }
+
+      // 3. Reset paper bankroll
+      const { data: bankroll, error: bankrollErr } = await client
+        .from('bot_settings')
+        .upsert(
+          { bot_id: BOT_ID, paper_balance_usd: defaultAmount, paper_pnl_usd: 0, updated_at: now },
+          { onConflict: 'bot_id' }
+        )
+        .select('paper_balance_usd, paper_pnl_usd, strategy_settings')
+        .single();
+
+      if (bankrollErr) {
+        return NextResponse.json({ ok: false, error: bankrollErr.message }, { status: 500 });
+      }
+
+      // 4. Sync paper max exposure cap to match the new starting balance
+      //    (operator may adjust this in GlobalSettingsPanel afterwards)
+      await client
+        .from('copy_global_settings')
+        .update({ paper_max_exposure_usd: defaultAmount })
+        .eq('id', 1);
+
+      return NextResponse.json({
+        ok: true,
+        action: 'fresh_start',
+        balance: bankroll?.paper_balance_usd ?? defaultAmount,
+        default_amount: defaultAmount,
+        positions_archived: positionsArchived,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    }
+  }
+
   return NextResponse.json(
-    { ok: false, error: 'action must be "save_default" or "reset"' },
+    { ok: false, error: 'action must be "save_default", "reset", or "fresh_start"' },
     { status: 400 }
   );
 }
