@@ -18,6 +18,8 @@ type CardState = {
   default_amount: number;
 };
 
+type ExposureMetrics = { count: number; exposure: number; avg: number };
+
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
 const usd = new Intl.NumberFormat('en-US', {
@@ -37,6 +39,10 @@ export default function CopyPaperBankrollCard() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   // Sparkline — client-only, read from localStorage after mount
   const [sparkPoints, setSparkPoints] = useState<BankrollPoint[]>([]);
+  // Open exposure for PAPER bots — fetched from /api/copy/exposure.
+  // Starts as null (loading); always becomes an object after first fetch attempt.
+  const [paperExposure, setPaperExposure] = useState<ExposureMetrics | null>(null);
+  const [exposureLoading, setExposureLoading] = useState(true);
 
   // Input for new default amount
   const [inputValue, setInputValue] = useState('');
@@ -51,12 +57,15 @@ export default function CopyPaperBankrollCard() {
     setLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch('/api/copy/paper-bankroll', { cache: 'no-store' });
-      const payload = await res.json();
+      const [bankrollRes, exposureRes] = await Promise.all([
+        fetch('/api/copy/paper-bankroll', { cache: 'no-store' }),
+        fetch('/api/copy/exposure', { cache: 'no-store' }),
+      ]);
+
+      const payload = await bankrollRes.json();
       if (payload.ok) {
         setState(payload);
         setInputValue(String(payload.default_amount));
-        // Record balance in sparkline history whenever we get a fresh value
         if (typeof payload.balance === 'number') {
           appendBankrollPoint('paper', payload.balance);
           setSparkPoints(getBankrollHistory('paper'));
@@ -64,8 +73,22 @@ export default function CopyPaperBankrollCard() {
       } else {
         setFetchError(payload.error ?? 'Failed to load paper bankroll');
       }
+
+      if (exposureRes.ok) {
+        const expPayload = await exposureRes.json();
+        if (expPayload.ok) {
+          setPaperExposure(expPayload.paper as ExposureMetrics);
+        } else {
+          setPaperExposure({ count: 0, exposure: 0, avg: 0 });
+        }
+      } else {
+        setPaperExposure({ count: 0, exposure: 0, avg: 0 });
+      }
+      setExposureLoading(false);
     } catch {
       setFetchError('Network error');
+      setPaperExposure({ count: 0, exposure: 0, avg: 0 });
+      setExposureLoading(false);
     } finally {
       setLoading(false);
     }
@@ -184,6 +207,76 @@ export default function CopyPaperBankrollCard() {
           height={30}
           label={bankrollSpanLabel(sparkPoints) || undefined}
         />
+      </div>
+
+      {/* ── Paper Open Exposure — always rendered, shows skeleton while loading ── */}
+      <div style={{
+        marginBottom: '0.85rem',
+        padding: '0.75rem 1rem',
+        background: 'rgba(248,250,252,0.03)',
+        border: '1px solid rgba(248,250,252,0.08)',
+        borderRadius: '0.65rem',
+        opacity: exposureLoading ? 0.5 : 1,
+        transition: 'opacity 0.2s',
+      }}>
+        {/* Label row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.45rem' }}>
+          <span style={{
+            fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.09em',
+            textTransform: 'uppercase', color: 'rgba(248,250,252,0.45)',
+          }}>
+            Open Exposure
+          </span>
+          <span style={{
+            fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.05em',
+            textTransform: 'uppercase', padding: '0.1em 0.45em',
+            background: 'rgba(16,185,129,0.12)', color: '#34d399',
+            border: '1px solid rgba(16,185,129,0.22)', borderRadius: '0.3rem',
+          }}>
+            PAPER · OPEN
+          </span>
+        </div>
+
+        {/* Exposure amount */}
+        <div style={{ fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.01em', color: '#f8fafc', lineHeight: 1.1, marginBottom: '0.35rem' }}>
+          {exposureLoading ? '—' : fmt(paperExposure?.exposure ?? 0)}
+        </div>
+
+        {/* Count + avg */}
+        <div style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.45)', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {exposureLoading ? (
+            <span>Loading…</span>
+          ) : (
+            <>
+              <span>{paperExposure?.count ?? 0} open position{(paperExposure?.count ?? 0) !== 1 ? 's' : ''}</span>
+              {(paperExposure?.count ?? 0) > 0 && (
+                <span>Avg {fmt(paperExposure?.avg ?? 0)}</span>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Available headroom */}
+        {!exposureLoading && state !== null && (() => {
+          const headroom = state.balance - (paperExposure?.exposure ?? 0);
+          const headroomColor = headroom >= 0 ? '#34d399' : '#f87171';
+          return (
+            <div style={{
+              marginTop: '0.55rem',
+              paddingTop: '0.45rem',
+              borderTop: '1px solid rgba(255,255,255,0.06)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: '0.72rem',
+            }}>
+              <span style={{ color: 'rgba(248,250,252,0.35)' }}>Available</span>
+              <span style={{ fontWeight: 700, color: headroomColor, fontVariantNumeric: 'tabular-nums' }}>
+                {fmt(headroom)}
+              </span>
+            </div>
+          );
+        })()}
       </div>
 
       {/* P&L row */}

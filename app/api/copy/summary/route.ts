@@ -7,8 +7,13 @@
 //   walletsTotal     → tracked_wallets (all)
 //   activeBotCount   → copy_bots WHERE is_enabled = true
 //   botsTotal        → copy_bots (all, regardless of is_enabled)
-//   openPositionCount→ copied_positions WHERE status = 'OPEN'
+//   openPositionCount→ copied_positions WHERE status = 'OPEN' (derived from sizes query)
 //   attemptsTodayCount → copy_attempts created since midnight UTC today
+//
+// Exposure (OPEN positions only, using the `size` column):
+//   openExposure       → SUM(size) across status='OPEN'
+//   avgOpenSize        → openExposure / openPositionCount (0 when no open positions)
+//   largestOpenPosition→ MAX(size) across status='OPEN'
 //
 // Settings (live_on, emergency_stop) come from copy_global_settings id=1.
 //
@@ -44,7 +49,7 @@ export async function GET() {
       totalWalletsRes,
       enabledBotsRes,
       totalBotsRes,
-      openPositionsRes,
+      openPositionSizesRes,
       attemptsTodayRes,
       settingsRes,
     ] = await Promise.all([
@@ -70,10 +75,11 @@ export async function GET() {
         .from('copy_bots')
         .select('*', { count: 'exact', head: true }),
 
-      // OPEN copied positions only — never closed/cancelled
+      // OPEN copied positions — fetch `size` so we can compute exposure totals
+      // (count is derived from data.length to avoid a separate query)
       client
         .from('copied_positions')
-        .select('*', { count: 'exact', head: true })
+        .select('size')
         .eq('status', 'OPEN'),
 
       // Copy decisions (attempts) made since midnight UTC today
@@ -90,6 +96,13 @@ export async function GET() {
         .maybeSingle(),
     ]);
 
+    // Derive exposure metrics from OPEN position sizes
+    const openSizes = (openPositionSizesRes.data ?? []).map((r) => r.size ?? 0);
+    const openPositionCount = openSizes.length;
+    const openExposure = openSizes.reduce((sum, s) => sum + s, 0);
+    const avgOpenSize = openPositionCount > 0 ? openExposure / openPositionCount : 0;
+    const largestOpenPosition = openSizes.length > 0 ? Math.max(...openSizes) : 0;
+
     return NextResponse.json(
       {
         ok: true,
@@ -101,7 +114,12 @@ export async function GET() {
         activeBotCount: enabledBotsRes.count ?? 0,
         botsTotal: totalBotsRes.count ?? 0,
         // Positions — OPEN only; label must say "open" in the UI
-        openPositionCount: openPositionsRes.count ?? 0,
+        openPositionCount,
+        // Exposure — all dollar figures are sourced from `size` (the sole sizing
+        // column on copied_positions; displayed as "Size ($)" in the UI table)
+        openExposure,        // SUM(size) WHERE status = 'OPEN'
+        avgOpenSize,         // openExposure / openPositionCount
+        largestOpenPosition, // MAX(size) WHERE status = 'OPEN'
         // Attempts — today only; refreshes at midnight UTC automatically
         attemptsTodayCount: attemptsTodayRes.count ?? 0,
         settings: settingsRes.data ?? null,

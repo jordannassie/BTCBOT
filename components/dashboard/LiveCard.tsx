@@ -79,6 +79,8 @@ const formatUSD = (value?: number | null) =>
     maximumFractionDigits: 2
   }).format(value ?? 0);
 
+type ExposureMetrics = { count: number; exposure: number; avg: number };
+
 export default function LiveCard() {
   const [settings, setSettings] = useState<BotSettings | null>(null);
   const [isEnabled, setIsEnabled] = useState(false);
@@ -89,25 +91,48 @@ export default function LiveCard() {
   const [allowance, setAllowance] = useState<number | null>(null);
   // Sparkline — client-only, read from localStorage after mount
   const [sparkPoints, setSparkPoints] = useState<BankrollPoint[]>([]);
+  // Open exposure for LIVE bots — fetched from /api/copy/exposure.
+  // Starts as null (loading); becomes an object after first fetch attempt
+  // so the block always renders regardless of API success.
+  const [liveExposure, setLiveExposure] = useState<ExposureMetrics | null>(null);
+  const [exposureLoading, setExposureLoading] = useState(true);
 
   const loadSettings = useCallback(async () => {
     try {
-      const res = await fetch('/api/bot-settings?bot_id=live', { cache: 'no-store' });
-      if (!res.ok) return;
-      const payload = await res.json();
-      if (payload.ok && payload.settings) {
-        const nextSettings: BotSettings = payload.settings;
-        setSettings(nextSettings);
-        setIsEnabled(nextSettings.is_enabled ?? false);
-        const strategySettings = (nextSettings.strategy_settings ?? {}) as Record<string, unknown>;
-        const strategyAllowance = strategySettings.live_allowance_usd as number | undefined;
-        setAllowance(typeof strategyAllowance === 'number' ? strategyAllowance : null);
-        // Record balance in sparkline history whenever we get a fresh value
-        if (typeof nextSettings.live_balance_usd === 'number') {
-          appendBankrollPoint('live', nextSettings.live_balance_usd);
-          setSparkPoints(getBankrollHistory('live'));
+      const [settingsRes, exposureRes] = await Promise.all([
+        fetch('/api/bot-settings?bot_id=live', { cache: 'no-store' }),
+        fetch('/api/copy/exposure', { cache: 'no-store' }),
+      ]);
+
+      if (settingsRes.ok) {
+        const payload = await settingsRes.json();
+        if (payload.ok && payload.settings) {
+          const nextSettings: BotSettings = payload.settings;
+          setSettings(nextSettings);
+          setIsEnabled(nextSettings.is_enabled ?? false);
+          const strategySettings = (nextSettings.strategy_settings ?? {}) as Record<string, unknown>;
+          const strategyAllowance = strategySettings.live_allowance_usd as number | undefined;
+          setAllowance(typeof strategyAllowance === 'number' ? strategyAllowance : null);
+          if (typeof nextSettings.live_balance_usd === 'number') {
+            appendBankrollPoint('live', nextSettings.live_balance_usd);
+            setSparkPoints(getBankrollHistory('live'));
+          }
         }
       }
+
+      if (exposureRes.ok) {
+        const expPayload = await exposureRes.json();
+        if (expPayload.ok) {
+          setLiveExposure(expPayload.live as ExposureMetrics);
+        } else {
+          // API responded but reported an error — show zeros rather than hiding
+          setLiveExposure({ count: 0, exposure: 0, avg: 0 });
+        }
+      } else {
+        // Non-2xx — show zeros rather than hiding the block
+        setLiveExposure({ count: 0, exposure: 0, avg: 0 });
+      }
+      setExposureLoading(false);
     } finally {
       setLoading(false);
     }
@@ -202,6 +227,76 @@ export default function LiveCard() {
       </div>
 
       <LiveWalletRow />
+
+      {/* ── Live Open Exposure — always rendered, shows skeleton while loading ── */}
+      <div style={{
+        marginTop: '1rem',
+        padding: '0.75rem 1rem',
+        background: 'rgba(59, 130, 246, 0.06)',
+        border: '1px solid rgba(59, 130, 246, 0.2)',
+        borderRadius: '0.65rem',
+        opacity: exposureLoading ? 0.5 : 1,
+        transition: 'opacity 0.2s',
+      }}>
+        {/* Label row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.45rem' }}>
+          <span style={{
+            fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.09em',
+            textTransform: 'uppercase', color: 'rgba(248,250,252,0.45)',
+          }}>
+            Open Exposure
+          </span>
+          <span style={{
+            fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.05em',
+            textTransform: 'uppercase', padding: '0.1em 0.45em',
+            background: 'rgba(16,185,129,0.15)', color: '#34d399',
+            border: '1px solid rgba(16,185,129,0.25)', borderRadius: '0.3rem',
+          }}>
+            LIVE · OPEN
+          </span>
+        </div>
+
+        {/* Exposure amount */}
+        <div style={{ fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-0.01em', color: '#f8fafc', lineHeight: 1.1, marginBottom: '0.35rem' }}>
+          {exposureLoading ? '—' : formatUSD(liveExposure?.exposure ?? 0)}
+        </div>
+
+        {/* Count + avg */}
+        <div style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.45)', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {exposureLoading ? (
+            <span>Loading…</span>
+          ) : (
+            <>
+              <span>{liveExposure?.count ?? 0} open position{(liveExposure?.count ?? 0) !== 1 ? 's' : ''}</span>
+              {(liveExposure?.count ?? 0) > 0 && (
+                <span>Avg {formatUSD(liveExposure?.avg)}</span>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Available headroom */}
+        {!exposureLoading && settings?.live_balance_usd != null && (() => {
+          const headroom = settings.live_balance_usd - (liveExposure?.exposure ?? 0);
+          const headroomColor = headroom >= 0 ? '#34d399' : '#f87171';
+          return (
+            <div style={{
+              marginTop: '0.55rem',
+              paddingTop: '0.45rem',
+              borderTop: '1px solid rgba(255,255,255,0.06)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: '0.72rem',
+            }}>
+              <span style={{ color: 'rgba(248,250,252,0.35)' }}>Available</span>
+              <span style={{ fontWeight: 700, color: headroomColor, fontVariantNumeric: 'tabular-nums' }}>
+                {formatUSD(headroom)}
+              </span>
+            </div>
+          );
+        })()}
+      </div>
 
       <div className="live-status" aria-live="polite">
         {settings?.live_balance_usd

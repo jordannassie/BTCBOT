@@ -14,15 +14,18 @@ type Settings = {
 };
 
 type Overview = {
-  walletCount: number;       // alias for walletsActive (legacy compat)
-  walletsActive: number;     // tracked_wallets WHERE is_active = true
-  walletsTotal: number;      // tracked_wallets all rows
-  activeBotCount: number;    // copy_bots WHERE is_enabled = true
-  botsTotal: number;         // copy_bots all rows
-  openPositionCount: number; // copied_positions WHERE status = 'OPEN'
-  attemptsTodayCount: number;// copy_attempts since midnight UTC today
+  walletCount: number;          // alias for walletsActive (legacy compat)
+  walletsActive: number;        // tracked_wallets WHERE is_active = true
+  walletsTotal: number;         // tracked_wallets all rows
+  activeBotCount: number;       // copy_bots WHERE is_enabled = true
+  botsTotal: number;            // copy_bots all rows
+  openPositionCount: number;    // copied_positions WHERE status = 'OPEN'
+  openExposure: number;         // SUM(size) WHERE status = 'OPEN'
+  avgOpenSize: number;          // openExposure / openPositionCount
+  largestOpenPosition: number;  // MAX(size) WHERE status = 'OPEN'
+  attemptsTodayCount: number;   // copy_attempts since midnight UTC today
   settings: Settings | null;
-  fetchedAt?: string;        // ISO timestamp from server
+  fetchedAt?: string;           // ISO timestamp from server
 };
 
 const POLL_MS = 15_000; // refresh every 15 seconds
@@ -87,6 +90,15 @@ function IconAlert() {
   );
 }
 
+function IconDollar() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23"/>
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </svg>
+  );
+}
+
 function IconRefresh() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -103,6 +115,11 @@ function fmtAge(iso: string): string {
   if (diff < 5)  return 'just now';
   if (diff < 60) return `${diff}s ago`;
   return `${Math.floor(diff / 60)}m ago`;
+}
+
+function fmtUsd(value: number): string {
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(2)}k`;
+  return `$${value.toFixed(2)}`;
 }
 
 function SkeletonCard() {
@@ -185,7 +202,7 @@ export default function CopyOverviewCards() {
   if (!data) {
     return (
       <div className="copy-overview-grid">
-        {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+        {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
       </div>
     );
   }
@@ -250,6 +267,39 @@ export default function CopyOverviewCards() {
           <div className="copy-stat-helper">
             <span className="copy-stat-badge copy-stat-badge-open">OPEN</span>
             {' '}status only · not closed or cancelled
+          </div>
+        </div>
+
+        {/* ── Open Exposure — SUM(size) WHERE status = 'OPEN' ── */}
+        <div className="copy-stat-card">
+          <div className="copy-stat-header">
+            <div className="copy-stat-icon"><IconDollar /></div>
+            <span className="copy-stat-label">Open Exposure</span>
+          </div>
+          <div className="copy-stat-value">{fmtUsd(data.openExposure ?? 0)}</div>
+          <div className="copy-stat-helper">
+            SUM(size) across{' '}
+            <span className="copy-stat-badge copy-stat-badge-open">OPEN</span>
+            {' '}positions
+          </div>
+        </div>
+
+        {/* ── Avg Open Size — openExposure / openPositionCount ── */}
+        <div className="copy-stat-card">
+          <div className="copy-stat-header">
+            <div className="copy-stat-icon"><IconDollar /></div>
+            <span className="copy-stat-label">Avg Open Size</span>
+          </div>
+          <div className="copy-stat-value">{fmtUsd(data.avgOpenSize ?? 0)}</div>
+          <div className="copy-stat-helper">
+            {data.openPositionCount > 0
+              ? `Avg of ${data.openPositionCount} open position${data.openPositionCount !== 1 ? 's' : ''}`
+              : 'No open positions'}
+            {(data.largestOpenPosition ?? 0) > 0 && (
+              <span style={{ display: 'block', marginTop: '0.15rem', color: 'rgba(248,250,252,0.35)' }}>
+                Largest: {fmtUsd(data.largestOpenPosition)}
+              </span>
+            )}
           </div>
         </div>
 
