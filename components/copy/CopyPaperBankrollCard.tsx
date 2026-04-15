@@ -63,6 +63,20 @@ export default function CopyPaperBankrollCard() {
   const [freshStarting, setFreshStarting] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
+  // Lightweight exposure-only refresh — does not touch the loading spinner.
+  // Called after any action that changes DB exposure (fresh start, etc.)
+  // so the Paper card always shows server-confirmed values, not just optimistic state.
+  const loadExposure = useCallback(async () => {
+    try {
+      const res = await fetch('/api/copy/exposure', { cache: 'no-store' });
+      if (!res.ok) return;
+      const p = await res.json();
+      if (p.ok) {
+        setPaperExposure(p.paper as ExposureMetrics);
+      }
+    } catch { /* swallow — optimistic state from caller remains */ }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
@@ -187,10 +201,10 @@ export default function CopyPaperBankrollCard() {
         const newCap = payload.default_amount as number;
         const archived = payload.positions_archived as number;
 
-        // Update card state in-place — no loading flash
+        // 1. Update balance / PnL in-place — no loading flash
         setState((prev) => prev ? { ...prev, balance: newBalance, pnl: 0 } : prev);
 
-        // Exposure is now zero; cap matches the fresh starting balance
+        // 2. Optimistic exposure zero — visible immediately
         setPaperExposure({
           count: 0,
           exposure: 0,
@@ -199,20 +213,25 @@ export default function CopyPaperBankrollCard() {
           remaining: newCap,
         });
 
-        // Reset sparkline to a fresh season baseline
+        // 3. Background server-confirmed re-fetch — overwrites the optimistic
+        //    state with the actual DB values so the Paper card is never stale.
+        //    (cap from copy_global_settings, count/exposure from the RPC)
+        void loadExposure();
+
+        // 4. Reset sparkline to a fresh season baseline
         clearBankrollHistory('paper');
         appendBankrollPoint('paper', newBalance);
         setSparkPoints(getBankrollHistory('paper'));
 
         showFeedback(
-          `Fresh start! ${archived} position${archived !== 1 ? 's' : ''} archived. Balance reset to ${fmt(newBalance)}.`,
+          `Restarted! ${archived} position${archived !== 1 ? 's' : ''} archived. Balance reset to ${fmt(newBalance)}.`,
           'success'
         );
       } else {
-        showFeedback(payload.error ?? 'Fresh start failed', 'error');
+        showFeedback(payload.error ?? 'Restart failed', 'error');
       }
     } catch {
-      showFeedback('Network error during fresh start', 'error');
+      showFeedback('Network error during restart', 'error');
     } finally {
       setFreshStarting(false);
     }
@@ -419,7 +438,7 @@ export default function CopyPaperBankrollCard() {
           : `Reset to Default (${fmt(state?.default_amount ?? 0)})`}
       </button>
 
-      {/* ── Fresh Start (New Season) ─────────────────────────────────────────── */}
+      {/* ── Restart Paper ────────────────────────────────────────────────────── */}
       <div style={{
         marginTop: '0.6rem',
         paddingTop: '0.75rem',
@@ -431,7 +450,7 @@ export default function CopyPaperBankrollCard() {
             fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.1em',
             textTransform: 'uppercase', color: 'rgba(248,250,252,0.3)',
           }}>
-            Fresh Start
+            Restart Paper
           </span>
           <span style={{
             fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.05em',
@@ -457,7 +476,7 @@ export default function CopyPaperBankrollCard() {
             onClick={() => setFreshStartConfirm(true)}
             disabled={freshStarting}
           >
-            {freshStarting ? 'Starting fresh…' : 'Fresh Start — New Season'}
+            {freshStarting ? 'Restarting…' : 'Restart Paper — New Season'}
           </button>
         ) : (
           <div className="copy-paper-fresh-start-confirm">
@@ -479,7 +498,7 @@ export default function CopyPaperBankrollCard() {
                 onClick={handleFreshStart}
                 disabled={freshStarting}
               >
-                {freshStarting ? 'Working…' : 'Yes, Fresh Start'}
+                {freshStarting ? 'Working…' : 'Yes, Restart Paper'}
               </button>
               <button
                 className="copy-paper-fresh-start-cancel-btn"
