@@ -101,6 +101,15 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
 
   useEffect(() => { load(filter); }, [load, filter]);
 
+  // Immediately reload when a Paper Restart completes so the table switches
+  // the just-cancelled positions from OPEN → CANCELLED without waiting for a
+  // manual refresh.  The exposure summary bar also refreshes via the same load.
+  useEffect(() => {
+    const onPaperReset = () => load(filter);
+    window.addEventListener('copy:paper-reset', onPaperReset);
+    return () => window.removeEventListener('copy:paper-reset', onPaperReset);
+  }, [load, filter]);
+
   const totalPnl = useMemo(() =>
     rows.filter((r) => r.status !== 'OPEN').reduce((sum, r) => sum + r.pnl, 0),
     [rows]

@@ -178,6 +178,11 @@ export default function CopyOverviewCards() {
     const onVisible = () => { if (!document.hidden) fetchSummary(); };
     document.addEventListener('visibilitychange', onVisible);
 
+    // Immediately re-fetch when a Paper Restart completes so the Open Positions
+    // and Total Open Exposure cards reflect zero without waiting for the next poll.
+    const onPaperReset = () => fetchSummary();
+    window.addEventListener('copy:paper-reset', onPaperReset);
+
     // Tick every second to keep "X ago" fresh without re-fetching
     const ticker = setInterval(() => setTick((n) => n + 1), 1000);
 
@@ -185,6 +190,7 @@ export default function CopyOverviewCards() {
       clearInterval(poll);
       clearInterval(ticker);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('copy:paper-reset', onPaperReset);
     };
   }, [fetchSummary]);
 

@@ -268,8 +268,8 @@ export default function CopyPaperBankrollCard() {
         // 1. Update balance / PnL in-place — no loading flash
         setState((prev) => prev ? { ...prev, balance: newBalance, pnl: 0 } : prev);
 
-        // 2. Optimistic exposure zero — visible immediately.
-        //    Also sync capInput explicitly (useEffect no longer does this).
+        // 2. Set capInput and paper exposure optimistically to zero so the card
+        //    is visually instant even before the server re-fetch completes.
         setCapInput(String(newCap));
         setPaperExposure({
           count: 0,
@@ -279,15 +279,23 @@ export default function CopyPaperBankrollCard() {
           remaining: newCap,
         });
 
-        // 3. Background server-confirmed re-fetch — overwrites the optimistic
-        //    state with the actual DB values so the Paper card is never stale.
-        //    (cap from copy_global_settings, count/exposure from the RPC)
-        void loadExposure();
+        // 3. AWAIT the server-confirmed exposure refetch.
+        //    We do NOT use void here: keeping setFreshStarting=true until this
+        //    resolves means the card stays in "Restarting…" mode until the DB
+        //    confirms the cancellations.  If loadExposure returns non-zero (e.g.
+        //    the cancel partially failed), the display will reflect reality
+        //    rather than silently showing stale optimistic zeros.
+        await loadExposure();
 
         // 4. Reset sparkline to a fresh season baseline
         clearBankrollHistory('paper');
         appendBankrollPoint('paper', newBalance);
         setSparkPoints(getBankrollHistory('paper'));
+
+        // 5. Signal peer components (Overview, Positions table) to hard-refresh.
+        //    Both listen for this event and trigger their own re-fetch immediately
+        //    so the entire dashboard reflects the post-reset state at once.
+        window.dispatchEvent(new CustomEvent('copy:paper-reset'));
 
         showFeedback(
           `Restarted! ${archived} position${archived !== 1 ? 's' : ''} archived. Balance reset to ${fmt(newBalance)}.`,
