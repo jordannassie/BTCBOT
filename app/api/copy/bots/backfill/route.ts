@@ -9,19 +9,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-
-const BOT_DEFAULTS = {
-  mode: 'PAPER',
-  is_enabled: true,
-  arm_live: false,
-  copy_mode: 'scaled',
-  sizing_value: 1,
-  max_trade_size: 25,
-  max_open_positions: 10,
-  max_trades_per_hour: 20,
-  max_slippage: 0.03,
-  delay_seconds: 0,
-};
+import { BOT_DEFAULTS } from '@/lib/copy/botDefaults';
 
 function getServiceClient() {
   let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();

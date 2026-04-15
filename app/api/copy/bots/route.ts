@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { BOT_DEFAULTS } from '@/lib/copy/botDefaults';
 
 function getServiceClient() {
   let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
@@ -62,12 +63,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'copy_mode must be exact, scaled, or percent' }, { status: 400 });
     }
 
+    // Start with canonical defaults, then overlay body values
     const row: Record<string, unknown> = {
+      ...BOT_DEFAULTS,
       name: name.trim(),
       wallet_address: wallet_address.trim(),
       mode,
       copy_mode,
-      is_enabled: body.is_enabled === true,
+      // is_enabled defaults true unless explicitly false
+      is_enabled: body.is_enabled !== false,
       arm_live: body.arm_live === true,
     };
 
@@ -79,7 +83,8 @@ export async function POST(request: Request) {
     for (const field of numericFields) {
       if (body[field] != null) {
         const parsed = Number(body[field]);
-        if (Number.isFinite(parsed)) row[field] = parsed;
+        // Allow 0 (unlimited) as a valid value for position/rate limits
+        if (Number.isFinite(parsed) && parsed >= 0) row[field] = parsed;
       }
     }
 

@@ -1924,3 +1924,220 @@
     margin: 0 1rem 0.75rem;
   }
 }
+
+/* ── Row selection ─────────────────────────────────────────────────────────── */
+
+.copy-row-selected {
+  background: rgba(99, 102, 241, 0.08);
+  outline: 1px solid rgba(99, 102, 241, 0.25);
+  outline-offset: -1px;
+}
+
+.copy-row-selected:hover {
+  background: rgba(99, 102, 241, 0.12) !important;
+}
+
+/* ── Bulk selection bar ────────────────────────────────────────────────────── */
+
+.copy-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 1.5rem;
+  background: rgba(248, 250, 252, 0.03);
+  border-bottom: 1px solid rgba(248, 250, 252, 0.07);
+}
+
+.copy-bulk-bar-select-all {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+}
+
+/* ── Shared checkbox style ─────────────────────────────────────────────────── */
+
+.copy-bulk-check {
+  width: 15px;
+  height: 15px;
+  accent-color: #6366f1;
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 3px;
+}
+
+/* ── Bulk modal ────────────────────────────────────────────────────────────── */
+
+.copy-bulk-modal {
+  max-width: 680px;
+  width: 100%;
+}
+
+/* Target selector */
+.copy-bulk-target-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.copy-bulk-target-label {
+  font-size: 0.78rem;
+  color: rgba(248, 250, 252, 0.5);
+  flex-shrink: 0;
+}
+
+.copy-bulk-target-btns {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.copy-bulk-target-btn {
+  padding: 0.3rem 0.75rem;
+  background: rgba(248, 250, 252, 0.06);
+  border: 1px solid rgba(248, 250, 252, 0.12);
+  border-radius: 6px;
+  color: rgba(248, 250, 252, 0.6);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.copy-bulk-target-btn:hover {
+  border-color: rgba(99, 102, 241, 0.5);
+  color: #f8fafc;
+}
+
+.copy-bulk-target-btn.active {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(99, 102, 241, 0.6);
+  color: #c7d2fe;
+  font-weight: 600;
+}
+
+/* "Fields to apply" header row */
+.copy-bulk-field-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.copy-bulk-field-label {
+  font-size: 0.78rem;
+  color: rgba(248, 250, 252, 0.5);
+  flex: 1;
+  min-width: 100px;
+}
+
+/* Field rows grid */
+.copy-bulk-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid rgba(248, 250, 252, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.copy-bulk-row {
+  display: grid;
+  grid-template-columns: 24px 170px 1fr;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.05);
+  transition: background 0.1s;
+}
+
+.copy-bulk-row:last-child {
+  border-bottom: none;
+}
+
+.copy-bulk-row:hover {
+  background: rgba(248, 250, 252, 0.03);
+}
+
+.copy-bulk-row-active {
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.copy-bulk-row-active:hover {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.copy-bulk-row-label {
+  font-size: 0.78rem;
+  color: rgba(248, 250, 252, 0.65);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.copy-bulk-row-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.copy-bulk-row-control .copy-form-input,
+.copy-bulk-row-control .copy-form-select {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.78rem;
+  min-width: 0;
+  width: 140px;
+}
+
+.copy-bulk-row-control .copy-form-hint {
+  margin: 0;
+  font-size: 0.7rem;
+}
+
+.copy-bulk-row-disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+/* "Set as future default" row */
+.copy-bulk-save-default-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.6rem 0;
+  border-top: 1px solid rgba(248, 250, 252, 0.07);
+  margin-top: 0.25rem;
+}
+
+.copy-bulk-save-default-label {
+  font-size: 0.78rem;
+  color: rgba(248, 250, 252, 0.55);
+  cursor: pointer;
+}
+
+/* ── Unlimited display ─────────────────────────────────────────────────────── */
+
+.copy-td-num span[title="Unlimited"] {
+  font-size: 1.05em;
+  opacity: 0.4;
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 640px) {
+  .copy-bulk-modal {
+    max-width: 100%;
+  }
+
+  .copy-bulk-row {
+    grid-template-columns: 24px 130px 1fr;
+    gap: 0.45rem;
+    padding: 0.5rem 0.65rem;
+  }
+
+  .copy-bulk-bar {
+    padding: 0.45rem 1rem;
+  }
+}
