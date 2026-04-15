@@ -4,7 +4,7 @@
 // The bankroll cards (LiveCard + CopyPaperBankrollCard) live above this
 // component, server-rendered. This component owns everything below them.
 //
-// Tabs: Overview · Wallets · Bots · Attempts · Positions · Settings
+// Tabs: Overview · Master · Wallets · Bots · Attempts · Positions · Settings
 //
 // UX:
 //   - Active tab persisted to localStorage (key: 'btcbot-copy-tab')
@@ -27,7 +27,7 @@ const GlobalSettingsPanel    = dynamic(() => import('./GlobalSettingsPanel'));
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'wallets' | 'bots' | 'attempts' | 'positions' | 'settings';
+type TabId = 'overview' | 'master' | 'wallets' | 'bots' | 'attempts' | 'positions' | 'settings';
 
 const LS_KEY  = 'btcbot-copy-tab';
 const POLL_MS = 15_000;
@@ -51,6 +51,7 @@ interface TabDef {
 //   Positions → openPositionCount  (OPEN only)
 const TABS: TabDef[] = [
   { id: 'overview',  label: 'Overview' },
+  { id: 'master',    label: 'Master' },
   { id: 'wallets',   label: 'Wallets',   countKey: 'walletsActive',      countKeyTotal: 'walletsTotal' },
   { id: 'bots',      label: 'Bots',      countKey: 'activeBotCount',     countKeyTotal: 'botsTotal' },
   { id: 'attempts',  label: 'Attempts',  countKey: 'attemptsTodayCount' },
@@ -161,6 +162,8 @@ export default function CopyTradingTabs() {
           </div>
         )}
 
+        {tab === 'master' && <MasterStrategySection />}
+
         {tab === 'wallets' && <TrackedWalletsSection />}
 
         {tab === 'bots' && <CopyBotsSection />}
@@ -169,12 +172,7 @@ export default function CopyTradingTabs() {
 
         {tab === 'positions' && <CopiedPositionsSection scrollable />}
 
-        {tab === 'settings' && (
-          <>
-            <MasterStrategySection />
-            <GlobalSettingsPanel />
-          </>
-        )}
+        {tab === 'settings' && <GlobalSettingsPanel />}
       </div>
     </div>
   );
