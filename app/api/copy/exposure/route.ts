@@ -14,6 +14,14 @@
 // Exposure source: copied_positions.size (the sole sizing column, displayed
 // as "Size ($)" in the positions table UI — interpreted as USD).
 //
+// ACCURACY NOTE
+// -------------
+// A plain select('size').eq('status','OPEN') is capped at 1 000 rows by
+// Supabase PostgREST.  This route uses rpc('copy_open_exposure_by_mode')
+// instead — a PostgreSQL aggregate function that runs COUNT/SUM/AVG on the
+// full table with no row limit.  The migration that creates this function
+// is sql/migrations/0005-aggregate-functions.sql.
+//
 // This endpoint is consumed by:
 //   - LiveCard + CopyPaperBankrollCard (display)
 //   - /api/copy/exposure-check (pre-trade enforcement helper)
@@ -31,13 +39,13 @@ function getServiceClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-function computeExposure(
-  sizes: number[],
+function buildResult(
+  row: { total_count: number | string; total_exposure: number | string; avg_size: number | string } | undefined,
   cap: number,
 ) {
-  const count    = sizes.length;
-  const exposure = sizes.reduce((s, v) => s + v, 0);
-  const avg      = count > 0 ? exposure / count : 0;
+  const count    = row ? Number(row.total_count)    : 0;
+  const exposure = row ? Number(row.total_exposure) : 0;
+  const avg      = row ? Number(row.avg_size)       : 0;
   const remaining = cap > 0 ? Math.max(0, cap - exposure) : null;
   return { count, exposure, avg, cap, remaining };
 }
@@ -52,10 +60,10 @@ export async function GET() {
   }
 
   try {
-    // Run all three reads in parallel
-    const [botsRes, positionsRes, settingsRes] = await Promise.all([
-      client.from('copy_bots').select('id, mode'),
-      client.from('copied_positions').select('size, copy_bot_id').eq('status', 'OPEN'),
+    // Run both reads in parallel.
+    // copy_open_exposure_by_mode() uses COUNT/SUM/AVG in PostgreSQL — no row cap.
+    const [modeRes, settingsRes] = await Promise.all([
+      client.rpc('copy_open_exposure_by_mode'),
       client
         .from('copy_global_settings')
         .select('live_max_exposure_usd, paper_max_exposure_usd')
@@ -63,8 +71,7 @@ export async function GET() {
         .maybeSingle(),
     ]);
 
-    if (botsRes.error)     throw botsRes.error;
-    if (positionsRes.error) throw positionsRes.error;
+    if (modeRes.error) throw modeRes.error;
     // settings error is non-fatal — fall back to 0 (unlimited)
 
     const settings = settingsRes.data as {
@@ -75,25 +82,17 @@ export async function GET() {
     const liveCap  = settings?.live_max_exposure_usd  ?? 0;
     const paperCap = settings?.paper_max_exposure_usd ?? 0;
 
-    const botMode = new Map<string, string>(
-      (botsRes.data ?? []).map((b) => [b.id as string, b.mode as string])
-    );
+    type ModeRow = { mode: string; total_count: number; total_exposure: number; avg_size: number };
+    const rows = (modeRes.data ?? []) as ModeRow[];
 
-    const liveSizes: number[]  = [];
-    const paperSizes: number[] = [];
-
-    for (const p of positionsRes.data ?? []) {
-      const mode = botMode.get(p.copy_bot_id as string);
-      const size = (p.size as number | null) ?? 0;
-      if (mode === 'LIVE')  liveSizes.push(size);
-      if (mode === 'PAPER') paperSizes.push(size);
-    }
+    const liveRow  = rows.find((r) => r.mode === 'LIVE');
+    const paperRow = rows.find((r) => r.mode === 'PAPER');
 
     return NextResponse.json(
       {
         ok: true,
-        live:  computeExposure(liveSizes,  liveCap),
-        paper: computeExposure(paperSizes, paperCap),
+        live:  buildResult(liveRow,  liveCap),
+        paper: buildResult(paperRow, paperCap),
         fetchedAt: new Date().toISOString(),
       },
       { headers: { 'Cache-Control': 'no-store, max-age=0' } }

@@ -79,43 +79,36 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Fetch settings cap + all open positions in parallel
+    // Fetch the cap setting and the current exposure for this mode in parallel.
+    //
+    // copy_open_exposure_for_mode() uses SUM in PostgreSQL — it is unbounded and
+    // always reflects the true total regardless of how many OPEN rows exist.
+    // The previous approach fetched all rows client-side (capped at 1 000 by
+    // PostgREST), which caused the enforcement check to under-count exposure
+    // and incorrectly allow trades that should have been blocked.
     const capField = mode === 'LIVE' ? 'live_max_exposure_usd' : 'paper_max_exposure_usd';
 
-    const [settingsRes, botsRes, positionsRes] = await Promise.all([
+    const [settingsRes, exposureRes] = await Promise.all([
       client
         .from('copy_global_settings')
-        .select(`${capField}`)
+        .select(capField)
         .eq('id', 1)
         .maybeSingle(),
 
-      client.from('copy_bots').select('id, mode'),
-
-      client
-        .from('copied_positions')
-        .select('size, copy_bot_id')
-        .eq('status', 'OPEN'),
+      client.rpc('copy_open_exposure_for_mode', { p_mode: mode }),
     ]);
 
     if (settingsRes.error) throw settingsRes.error;
-    if (botsRes.error)     throw botsRes.error;
-    if (positionsRes.error) throw positionsRes.error;
+    if (exposureRes.error) throw exposureRes.error;
 
     const cap: number = (settingsRes.data as Record<string, number> | null)?.[capField] ?? 0;
 
-    // Build bot → mode map and sum exposure for the requested mode only
-    const botMode = new Map<string, string>(
-      (botsRes.data ?? []).map((b) => [b.id as string, b.mode as string])
-    );
+    // RPC returns one row: { total_exposure: numeric }
+    type ExposureRow = { total_exposure: number | string };
+    const exposureRow = (exposureRes.data as ExposureRow[] | null)?.[0];
+    const currentExposure = exposureRow ? Number(exposureRow.total_exposure) : 0;
 
-    let currentExposure = 0;
-    for (const p of positionsRes.data ?? []) {
-      if (botMode.get(p.copy_bot_id as string) === mode) {
-        currentExposure += (p.size as number | null) ?? 0;
-      }
-    }
-
-    const wouldBe  = currentExposure + proposedSize;
+    const wouldBe = currentExposure + proposedSize;
     const remaining = cap > 0 ? Math.max(0, cap - currentExposure) : null;
 
     // cap = 0 means unlimited — always allow
