@@ -132,6 +132,39 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
         </div>
       </div>
 
+      {/* ── Open Exposure Summary ── above the table, outside the scroll area ── */}
+      {!loading && !error && openRows.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '0.5rem 1.5rem',
+          padding: '0.6rem 1.5rem',
+          borderBottom: '1px solid rgba(16, 185, 129, 0.12)',
+          background: 'rgba(16, 185, 129, 0.04)',
+          fontSize: '0.78rem',
+        }}>
+          <span style={{ color: 'rgba(248,250,252,0.45)', fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.68rem' }}>
+            Open Exposure
+          </span>
+          <span style={{ fontWeight: 700, color: '#f8fafc' }}>
+            ${openExposure.toFixed(2)}
+          </span>
+          <span style={{ color: 'rgba(248,250,252,0.25)' }}>·</span>
+          <span style={{ color: 'rgba(248,250,252,0.45)' }}>
+            {openRows.length} open position{openRows.length !== 1 ? 's' : ''}
+          </span>
+          <span style={{ color: 'rgba(248,250,252,0.25)' }}>·</span>
+          <span style={{ color: 'rgba(248,250,252,0.45)' }}>
+            Avg <span style={{ color: '#f8fafc', fontWeight: 600 }}>${avgOpenSize.toFixed(2)}</span>
+          </span>
+          <span style={{ color: 'rgba(248,250,252,0.25)' }}>·</span>
+          <span style={{ color: 'rgba(248,250,252,0.45)' }}>
+            Largest <span style={{ color: '#f8fafc', fontWeight: 600 }}>${largestOpen.toFixed(2)}</span>
+          </span>
+        </div>
+      )}
+
       {loading ? (
         <div className="copy-loading">Loading positions…</div>
       ) : error ? (
@@ -153,115 +186,78 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
           </p>
         </div>
       ) : (
-        <>
-          <div className={`copy-table-wrap${scrollable ? ' copy-table-scroll' : ''}`}>
-            <table className="copy-table">
-              <thead>
-                <tr>
-                  <th>Opened</th>
-                  <th>Bot / Mode</th>
-                  <th>Wallet</th>
-                  <th>Market</th>
-                  <th>Outcome</th>
-                  <th>Side</th>
-                  <th>Entry</th>
-                  <th>Size ($)</th>
-                  <th>Status</th>
-                  <th>P / L</th>
-                  <th>Exit</th>
-                  <th>Closed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => {
-                  const bot = botMap[r.copy_bot_id];
-                  return (
-                    <tr key={r.id}>
-                      <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(r.opened_at)}</td>
-                      <td>
-                        {bot ? (
-                          <>
-                            <span className={`copy-attempt-mode-dot copy-attempt-mode-dot-${bot.mode.toLowerCase()}`}>
-                              {bot.mode}
-                            </span>
-                            <span className="copy-td-sub">{bot.name}</span>
-                          </>
-                        ) : (
-                          <span className="copy-td-muted">—</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className="copy-mono" title={r.wallet_address}>{truncate(r.wallet_address)}</span>
-                      </td>
-                      <td>
-                        <span className="copy-td-truncate" title={r.market_title ?? r.market_slug ?? undefined}>
-                          {r.market_title ?? r.market_slug ?? '—'}
+        <div className={`copy-table-wrap${scrollable ? ' copy-table-scroll' : ''}`}>
+          <table className="copy-table">
+            <thead>
+              <tr>
+                <th>Opened</th>
+                <th>Bot / Mode</th>
+                <th>Wallet</th>
+                <th>Market</th>
+                <th>Outcome</th>
+                <th>Side</th>
+                <th>Entry</th>
+                <th>Size ($)</th>
+                <th>Status</th>
+                <th>P / L</th>
+                <th>Exit</th>
+                <th>Closed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const bot = botMap[r.copy_bot_id];
+                return (
+                  <tr key={r.id}>
+                    <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(r.opened_at)}</td>
+                    <td>
+                      {bot ? (
+                        <>
+                          <span className={`copy-attempt-mode-dot copy-attempt-mode-dot-${bot.mode.toLowerCase()}`}>
+                            {bot.mode}
+                          </span>
+                          <span className="copy-td-sub">{bot.name}</span>
+                        </>
+                      ) : (
+                        <span className="copy-td-muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <span className="copy-mono" title={r.wallet_address}>{truncate(r.wallet_address)}</span>
+                    </td>
+                    <td>
+                      <span className="copy-td-truncate" title={r.market_title ?? r.market_slug ?? undefined}>
+                        {r.market_title ?? r.market_slug ?? '—'}
+                      </span>
+                    </td>
+                    <td>
+                      {r.outcome ? (
+                        <span className={`copy-badge ${r.outcome.toUpperCase() === 'YES' ? 'copy-badge-green' : 'copy-badge-red'}`}>
+                          {r.outcome.toUpperCase()}
                         </span>
-                      </td>
-                      <td>
-                        {r.outcome ? (
-                          <span className={`copy-badge ${r.outcome.toUpperCase() === 'YES' ? 'copy-badge-green' : 'copy-badge-red'}`}>
-                            {r.outcome.toUpperCase()}
-                          </span>
-                        ) : <span className="copy-td-muted">—</span>}
-                      </td>
-                      <td className="copy-td-muted">{r.side ?? '—'}</td>
-                      <td className="copy-td-num">{r.entry_price != null ? r.entry_price.toFixed(3) : '—'}</td>
-                      <td className="copy-td-num">{r.size != null ? `$${r.size.toFixed(2)}` : '—'}</td>
-                      <td>{statusBadge(r.status)}</td>
-                      <td className="copy-td-num">
-                        {r.status === 'OPEN' ? (
-                          <span className="copy-td-muted">Open</span>
-                        ) : (
-                          <span className={r.pnl > 0 ? 'copy-num-pos' : r.pnl < 0 ? 'copy-num-neg' : 'copy-num-neu'}>
-                            {r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}
-                          </span>
-                        )}
-                      </td>
-                      <td className="copy-td-num copy-td-muted">{r.exit_price != null ? r.exit_price.toFixed(3) : '—'}</td>
-                      <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(r.closed_at)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* ── Open Exposure Summary — only rendered when OPEN positions exist ── */}
-          {openRows.length > 0 && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '0.5rem 1.5rem',
-              padding: '0.6rem 1rem',
-              marginTop: '0.5rem',
-              background: 'rgba(16, 185, 129, 0.05)',
-              border: '1px solid rgba(16, 185, 129, 0.15)',
-              borderRadius: '0.6rem',
-              fontSize: '0.78rem',
-            }}>
-              <span style={{ color: 'rgba(248,250,252,0.45)', fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.68rem' }}>
-                Open Exposure
-              </span>
-              <span style={{ fontWeight: 700, color: '#f8fafc' }}>
-                ${openExposure.toFixed(2)}
-              </span>
-              <span style={{ color: 'rgba(248,250,252,0.25)' }}>·</span>
-              <span style={{ color: 'rgba(248,250,252,0.45)' }}>
-                {openRows.length} position{openRows.length !== 1 ? 's' : ''}
-              </span>
-              <span style={{ color: 'rgba(248,250,252,0.25)' }}>·</span>
-              <span style={{ color: 'rgba(248,250,252,0.45)' }}>
-                Avg <span style={{ color: '#f8fafc', fontWeight: 600 }}>${avgOpenSize.toFixed(2)}</span>
-              </span>
-              <span style={{ color: 'rgba(248,250,252,0.25)' }}>·</span>
-              <span style={{ color: 'rgba(248,250,252,0.45)' }}>
-                Largest <span style={{ color: '#f8fafc', fontWeight: 600 }}>${largestOpen.toFixed(2)}</span>
-              </span>
-            </div>
-          )}
-        </>
+                      ) : <span className="copy-td-muted">—</span>}
+                    </td>
+                    <td className="copy-td-muted">{r.side ?? '—'}</td>
+                    <td className="copy-td-num">{r.entry_price != null ? r.entry_price.toFixed(3) : '—'}</td>
+                    <td className="copy-td-num">{r.size != null ? `$${r.size.toFixed(2)}` : '—'}</td>
+                    <td>{statusBadge(r.status)}</td>
+                    <td className="copy-td-num">
+                      {r.status === 'OPEN' ? (
+                        <span className="copy-td-muted">Open</span>
+                      ) : (
+                        <span className={r.pnl > 0 ? 'copy-num-pos' : r.pnl < 0 ? 'copy-num-neg' : 'copy-num-neu'}>
+                          {r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="copy-td-num copy-td-muted">{r.exit_price != null ? r.exit_price.toFixed(3) : '—'}</td>
+                    <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(r.closed_at)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
