@@ -71,7 +71,11 @@ export async function GET() {
         .maybeSingle(),
     ]);
 
-    if (modeRes.error) throw modeRes.error;
+    if (modeRes.error) {
+      console.error('[exposure] copy_open_exposure_by_mode RPC FAILED:', modeRes.error);
+      throw modeRes.error;
+    }
+    console.log('[exposure] copy_open_exposure_by_mode RPC OK, rows:', JSON.stringify(modeRes.data));
     // settings error is non-fatal — fall back to 0 (unlimited)
 
     const settings = settingsRes.data as {

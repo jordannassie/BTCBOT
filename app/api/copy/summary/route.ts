@@ -100,6 +100,18 @@ export async function GET() {
         .maybeSingle(),
     ]);
 
+    // ── Explicit RPC error surfacing ──────────────────────────────────────────
+    // If the RPC fails (e.g. GRANT EXECUTE not run, function doesn't exist,
+    // or Netlify is running an old build that has no rpc() call at all), this
+    // will log the exact Supabase error object and surface it in _debug so the
+    // operator can see it in DevTools → Network → /api/copy/summary → Response
+    // without needing Netlify log access.
+    if (openStatsRes.error) {
+      console.error('[summary] copy_open_position_stats RPC FAILED:', openStatsRes.error);
+    } else {
+      console.log('[summary] copy_open_position_stats RPC OK, raw data:', JSON.stringify(openStatsRes.data));
+    }
+
     // The RPC returns one row with all four aggregates.
     // All values come from PostgreSQL's COUNT/SUM/AVG/MAX — no row cap.
     const statsRow = (openStatsRes.data as Array<{
@@ -113,6 +125,8 @@ export async function GET() {
     const openExposure         = statsRow ? Number(statsRow.total_exposure)  : 0;
     const avgOpenSize          = statsRow ? Number(statsRow.avg_size)        : 0;
     const largestOpenPosition  = statsRow ? Number(statsRow.max_size)        : 0;
+
+    console.log(`[summary] openPositionCount=${openPositionCount} openExposure=${openExposure}`);
 
     return NextResponse.json(
       {
@@ -136,6 +150,13 @@ export async function GET() {
         settings: settingsRes.data ?? null,
         // Server timestamp so the client can show "last updated X seconds ago"
         fetchedAt: new Date().toISOString(),
+        // _debug: visible in DevTools Network tab — remove once confirmed working
+        _debug: {
+          rpc: 'copy_open_position_stats',
+          rpc_error: openStatsRes.error ?? null,
+          rpc_raw: openStatsRes.data ?? null,
+          resolved: { openPositionCount, openExposure, avgOpenSize, largestOpenPosition },
+        },
       },
       { headers: { 'Cache-Control': 'no-store, max-age=0' } }
     );

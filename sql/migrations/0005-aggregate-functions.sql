@@ -85,3 +85,19 @@ AS $$
   WHERE cp.status = 'OPEN'
     AND cb.mode = p_mode;
 $$;
+
+-- ── Grants ────────────────────────────────────────────────────────────────────
+-- Supabase creates functions owned by postgres/supabase_admin but does NOT
+-- automatically grant EXECUTE to service_role, authenticated, or anon.
+-- Without these grants the PostgREST API layer returns "permission denied for
+-- function ..." even though the function works fine in the SQL editor (which
+-- runs as the superuser).  The API uses the service_role key, so at minimum
+-- service_role must be granted.
+GRANT EXECUTE ON FUNCTION public.copy_open_position_stats()
+  TO service_role, authenticated, anon;
+
+GRANT EXECUTE ON FUNCTION public.copy_open_exposure_by_mode()
+  TO service_role, authenticated, anon;
+
+GRANT EXECUTE ON FUNCTION public.copy_open_exposure_for_mode(text)
+  TO service_role, authenticated, anon;
