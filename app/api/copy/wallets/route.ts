@@ -55,11 +55,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'wallet_address is required' }, { status: 400 });
     }
 
+    const addr = wallet_address.trim();
+    const name = display_name?.trim() || null;
+
     const { data, error } = await client
       .from('tracked_wallets')
       .insert({
-        wallet_address: wallet_address.trim(),
-        display_name: display_name?.trim() || null,
+        wallet_address: addr,
+        display_name: name,
         source: source || 'manual',
         is_active: is_active !== false,
       })
@@ -70,7 +73,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, row: data });
+    // ── Auto-create a default PAPER copy bot for this wallet ─────────────────
+    // Idempotent: only creates a bot if none already exists for this wallet.
+    let botCreated = false;
+    try {
+      const { data: existing } = await client
+        .from('copy_bots')
+        .select('id')
+        .eq('wallet_address', addr)
+        .limit(1);
+
+      if (!existing || existing.length === 0) {
+        const botName = name || (addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr);
+        await client.from('copy_bots').insert({
+          name: botName,
+          wallet_address: addr,
+          mode: 'PAPER',
+          is_enabled: true,
+          arm_live: false,
+          copy_mode: 'scaled',
+          sizing_value: 1,
+          max_trade_size: 25,
+          max_open_positions: 10,
+          max_trades_per_hour: 20,
+          max_slippage: 0.03,
+          delay_seconds: 0,
+        });
+        botCreated = true;
+      }
+    } catch {
+      // Auto-bot creation is best-effort. The wallet was created successfully;
+      // if this fails, the operator can use the backfill route.
+    }
+
+    return NextResponse.json({ ok: true, row: data, bot_created: botCreated });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

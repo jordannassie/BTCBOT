@@ -1588,3 +1588,214 @@
   border-radius: 999px;
   transition: width 0.3s ease;
 }
+
+/* ─── Copy Bot Actions column ────────────────────────────────────────────────── */
+
+.copy-bot-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.copy-bot-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.13s, border-color 0.13s, color 0.13s;
+  color: rgba(248, 250, 252, 0.35);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.copy-bot-action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.copy-bot-action-edit:hover:not(:disabled) {
+  background: rgba(96, 165, 250, 0.1);
+  border-color: rgba(96, 165, 250, 0.2);
+  color: #60a5fa;
+}
+
+.copy-bot-action-delete:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.2);
+  color: #f87171;
+}
+
+/* ─── Delete error inline row ────────────────────────────────────────────────── */
+
+.copy-bot-delete-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(248, 113, 113, 0.07);
+  border: 1px solid rgba(248, 113, 113, 0.18);
+  border-radius: 7px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+  color: #f87171;
+  flex-wrap: wrap;
+}
+
+.copy-bot-delete-error-dismiss {
+  background: transparent;
+  border: none;
+  color: rgba(248, 113, 113, 0.5);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.copy-bot-delete-error-dismiss:hover {
+  color: #f87171;
+}
+
+/* ─── Backfill result banner ─────────────────────────────────────────────────── */
+
+.copy-backfill-result {
+  margin: 0 1.5rem 0.75rem;
+  padding: 0.55rem 0.9rem;
+  background: rgba(52, 211, 153, 0.06);
+  border: 1px solid rgba(52, 211, 153, 0.15);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: #34d399;
+  line-height: 1.45;
+}
+
+/* ─── Edit / Create Bot modal ────────────────────────────────────────────────── */
+
+.copy-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.75);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.copy-modal {
+  background: #0f172a;
+  border: 1px solid rgba(248, 250, 252, 0.1);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 680px;
+  max-height: calc(100vh - 2rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
+.copy-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.5rem;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.07);
+  flex-shrink: 0;
+}
+
+.copy-modal-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0;
+}
+
+.copy-modal-close {
+  background: transparent;
+  border: none;
+  color: rgba(248, 250, 252, 0.4);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  transition: color 0.12s;
+}
+
+.copy-modal-close:hover {
+  color: #f8fafc;
+}
+
+.copy-modal-body {
+  padding: 1.25rem 1.5rem;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.copy-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgba(248, 250, 252, 0.07);
+  flex-shrink: 0;
+}
+
+/* Toggle row inside edit form — label + switch side by side */
+.copy-form-toggle-row {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.copy-form-toggle-row .copy-form-label {
+  min-width: 100px;
+  margin: 0;
+}
+
+.copy-form-toggle-row .copy-form-hint {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 640px) {
+  .copy-modal {
+    max-height: calc(100vh - 1rem);
+    border-radius: 12px;
+  }
+
+  .copy-modal-body {
+    padding: 1rem;
+  }
+
+  .copy-modal-footer {
+    flex-direction: column-reverse;
+    gap: 0.5rem;
+  }
+
+  .copy-modal-footer .copy-btn {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .copy-bot-actions {
+    gap: 0.2rem;
+  }
+
+  .copy-backfill-result {
+    margin: 0 1rem 0.75rem;
+  }
+}

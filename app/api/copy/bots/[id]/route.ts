@@ -9,6 +9,52 @@ function getServiceClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+export async function DELETE(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
+  const client = getServiceClient();
+  if (!client) {
+    return NextResponse.json({ ok: false, error: 'Supabase credentials missing' }, { status: 500 });
+  }
+
+  const { id } = params;
+  if (!id) {
+    return NextResponse.json({ ok: false, error: 'Bot id is required' }, { status: 400 });
+  }
+
+  try {
+    const { error } = await client.from('copy_bots').delete().eq('id', id);
+
+    if (error) {
+      // Foreign-key violation (code 23503): this bot has linked copy_attempts or
+      // copied_positions rows. Return a clear operator message instead of a raw DB error.
+      const isFkViolation =
+        error.code === '23503' || error.message?.includes('foreign key');
+
+      if (isFkViolation) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              'This bot has linked copy history (attempts or positions). ' +
+              'Disable it instead of deleting to preserve your records.',
+            fk_violation: true,
+          },
+          { status: 409 }
+        );
+      }
+
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
