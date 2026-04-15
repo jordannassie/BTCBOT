@@ -20,7 +20,8 @@ export async function GET() {
     todayStart.setHours(0, 0, 0, 0);
 
     const [walletsRes, botsRes, positionsRes, attemptsRes, settingsRes] = await Promise.all([
-      client.from('tracked_wallets').select('*', { count: 'exact', head: true }),
+      // Filter is_active=true — only count wallets the worker is actively monitoring
+      client.from('tracked_wallets').select('*', { count: 'exact', head: true }).eq('is_active', true),
       client.from('copy_bots').select('*', { count: 'exact', head: true }).eq('is_enabled', true),
       client.from('copied_positions').select('*', { count: 'exact', head: true }).eq('status', 'OPEN'),
       client.from('copy_attempts').select('*', { count: 'exact', head: true }).gte('created_at', todayStart.toISOString()),

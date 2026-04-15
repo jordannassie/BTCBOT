@@ -12,7 +12,9 @@ type Settings = {
 };
 
 type Overview = {
-  walletCount: number;
+  walletCount: number;      // active wallets (is_active = true)
+  walletsActive: number;
+  walletsTotal: number;
   activeBotCount: number;
   openPositionCount: number;
   attemptsTodayCount: number;
@@ -94,13 +96,16 @@ export default function CopyOverviewCards() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/copy/overview', { cache: 'no-store' })
+    // /api/copy/summary: dedicated copy-trading-only endpoint.
+    // Counts only is_active wallets, is_enabled bots, OPEN positions, and
+    // today's copy_attempts. No legacy BTC or bot_settings data.
+    fetch('/api/copy/summary', { cache: 'no-store' })
       .then((r) => r.json())
       .then((payload) => {
         if (payload.ok) setData(payload);
-        else setError(payload.error ?? 'Failed to load overview');
+        else setError(payload.error ?? 'Failed to load summary');
       })
-      .catch(() => setError('Network error loading overview'));
+      .catch(() => setError('Network error loading summary'));
   }, []);
 
   if (error) {
@@ -125,14 +130,21 @@ export default function CopyOverviewCards() {
   return (
     <div className="copy-overview-grid">
 
-      {/* Tracked Wallets */}
+      {/* Tracked Wallets — only active wallets count */}
       <div className="copy-stat-card">
         <div className="copy-stat-header">
           <div className="copy-stat-icon"><IconWallet /></div>
           <span className="copy-stat-label">Tracked Wallets</span>
         </div>
-        <div className="copy-stat-value">{data.walletCount}</div>
-        <div className="copy-stat-helper">Wallet sources monitored</div>
+        <div className="copy-stat-value">{data.walletsActive ?? data.walletCount}</div>
+        <div className="copy-stat-helper">
+          Active wallet sources
+          {data.walletsTotal > (data.walletsActive ?? data.walletCount) && (
+            <span style={{ color: 'rgba(248,250,252,0.3)', marginLeft: '0.3rem' }}>
+              / {data.walletsTotal} total
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Active Bots */}

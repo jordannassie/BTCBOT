@@ -30,6 +30,8 @@ type AttemptTab = 'ALL' | 'LIVE' | 'PAPER' | 'COPIED' | 'SKIPPED' | 'FAILED';
 
 const truncate = (addr: string) =>
   addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
+const truncateTradeId = (id: string | null) =>
+  !id ? '—' : id.length > 16 ? `${id.slice(0, 12)}…` : id;
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -190,6 +192,7 @@ export default function CopyAttemptsSection() {
                 <th>Wallet</th>
                 <th>Market</th>
                 <th>Outcome</th>
+                <th>Source Trade ID</th>
                 <th>Src Price</th>
                 <th>Sub Price</th>
                 <th>Sub Size</th>
@@ -224,6 +227,15 @@ export default function CopyAttemptsSection() {
                           {r.source_outcome.toUpperCase()}
                         </span>
                       ) : <span className="copy-td-muted">—</span>}
+                    </td>
+                    <td>
+                      <span
+                        className="copy-mono"
+                        title={r.source_trade_id ?? undefined}
+                        style={{ fontSize: '0.7rem', color: 'rgba(248,250,252,0.4)' }}
+                      >
+                        {truncateTradeId(r.source_trade_id)}
+                      </span>
                     </td>
                     <td className="copy-td-num copy-td-muted">
                       {r.source_price != null ? r.source_price.toFixed(3) : '—'}
