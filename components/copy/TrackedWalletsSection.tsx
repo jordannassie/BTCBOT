@@ -30,6 +30,9 @@ type WalletRow = {
   created_at: string;
   updated_at: string;
   metrics: WalletMetrics | null;
+  // Bot counts injected by GET /api/copy/wallets
+  bot_count: number;           // total bots linked to this wallet
+  bots_enabled_count: number;  // how many of those bots are currently enabled
 };
 
 type SeriesPoint = { x: string; y: number };
@@ -45,7 +48,7 @@ function fmtCompact(v: number | null | undefined): string {
   const abs = Math.abs(v);
   const prefix = v < 0 ? '-$' : '$';
   if (abs >= 1_000_000) return `${prefix}${(abs / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `${prefix}${(abs / 1_000).toFixed(1)}K`;
+  if (abs >= 1_000)     return `${prefix}${(abs / 1_000).toFixed(1)}K`;
   return `${prefix}${abs.toFixed(2)}`;
 }
 
@@ -63,21 +66,23 @@ function fmtRelative(d: string | null | undefined): string {
   if (!d) return '—';
   const diff = Date.now() - new Date(d).getTime();
   const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'just now';
+  if (mins < 1)  return 'just now';
   if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  const hrs  = Math.floor(mins / 60);
+  if (hrs < 24)  return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 const truncate = (addr: string) =>
   addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
 
+const walletLabel = (w: WalletRow) =>
+  w.display_name || truncate(w.wallet_address);
+
 function scoreColor(score: number | null | undefined): string {
   if (score == null) return 'copy-score-none';
-  if (score >= 70) return 'copy-score-high';
-  if (score >= 40) return 'copy-score-mid';
+  if (score >= 70)   return 'copy-score-high';
+  if (score >= 40)   return 'copy-score-mid';
   return 'copy-score-low';
 }
 
@@ -93,7 +98,9 @@ function EmptyWallets({ onAdd }: { onAdd: () => void }) {
     <div className="copy-empty">
       <div className="copy-empty-icon">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+          <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
+          <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
+          <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
         </svg>
       </div>
       <p className="copy-empty-title">No tracked wallets</p>
@@ -115,13 +122,39 @@ interface SortHeaderProps {
 function SortHeader({ label, sortKey, active, dir, onSort }: SortHeaderProps) {
   const isActive = active === sortKey;
   return (
-    <th
-      className={`copy-th-sort${isActive ? ` ${dir}` : ''}`}
-      onClick={() => onSort(sortKey)}
-      title={`Sort by ${label}`}
-    >
+    <th className={`copy-th-sort${isActive ? ` ${dir}` : ''}`} onClick={() => onSort(sortKey)} title={`Sort by ${label}`}>
       {label}
     </th>
+  );
+}
+
+// ── Bot count badge per wallet row ──────────────────────────────────────────
+// Green:  all bots enabled        → "3"
+// Orange: some bots disabled      → "1/3"
+// Grey:   all bots disabled / 0   → "0" (muted) or "0/3" (warning)
+
+function BotCountBadge({ total, enabled }: { total: number; enabled: number }) {
+  if (total === 0) {
+    return <span className="copy-wallet-bots copy-wallet-bots-none">—</span>;
+  }
+  if (enabled === total) {
+    return (
+      <span className="copy-wallet-bots copy-wallet-bots-ok" title={`${total} bot${total !== 1 ? 's' : ''}, all enabled`}>
+        {total}
+      </span>
+    );
+  }
+  if (enabled === 0) {
+    return (
+      <span className="copy-wallet-bots copy-wallet-bots-off" title={`${total} bot${total !== 1 ? 's' : ''}, all disabled — re-enable from Bots tab`}>
+        0/{total}
+      </span>
+    );
+  }
+  return (
+    <span className="copy-wallet-bots copy-wallet-bots-partial" title={`${enabled} of ${total} bot${total !== 1 ? 's' : ''} enabled`}>
+      {enabled}/{total}
+    </span>
   );
 }
 
@@ -135,11 +168,16 @@ export default function TrackedWalletsSection() {
   const [showForm, setShowForm] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  // Sort state — default: sort by copy_score descending
+  // Sort state
   const [sortKey, setSortKey] = useState<SortKey>('copy_score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  // Add wallet form state
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkWorking, setBulkWorking] = useState(false);
+  const [bulkResult, setBulkResult] = useState<string | null>(null);
+
+  // Add wallet form
   const [fAddress, setFAddress] = useState('');
   const [fName, setFName] = useState('');
   const [fSaving, setFSaving] = useState(false);
@@ -181,13 +219,11 @@ export default function TrackedWalletsSection() {
 
   useEffect(() => { load(); }, [load]);
 
+  // ── Sort ──────────────────────────────────────────────────────────────────
+
   const handleSort = (key: SortKey) => {
-    if (key === sortKey) {
-      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
-    } else {
-      setSortKey(key);
-      setSortDir('desc');
-    }
+    if (key === sortKey) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
+    else { setSortKey(key); setSortDir('desc'); }
   };
 
   const sorted = useMemo(() => {
@@ -198,27 +234,115 @@ export default function TrackedWalletsSection() {
     });
   }, [wallets, sortKey, sortDir]);
 
+  // ── Toggle single wallet ──────────────────────────────────────────────────
+
   const handleToggleActive = async (wallet: WalletRow) => {
+    const turningOff = wallet.is_active;
+
+    // When turning OFF: ask if linked bots should also be disabled
+    let disableLinkedBots = false;
+    if (turningOff) {
+      const linkedCount = wallet.bot_count ?? 0;
+      const botLine = linkedCount > 0
+        ? `\nThis will also disable ${linkedCount} linked bot${linkedCount !== 1 ? 's' : ''}.`
+        : '';
+      const confirmed = window.confirm(
+        `Disable "${walletLabel(wallet)}"?${botLine}` +
+        `\n\nBots can be re-enabled manually from the Bots tab.`
+      );
+      if (!confirmed) return;
+      disableLinkedBots = linkedCount > 0;
+    }
+
     setTogglingId(wallet.wallet_address);
     try {
+      const body: Record<string, unknown> = {
+        wallet_address: wallet.wallet_address,
+        is_active: !wallet.is_active,
+      };
+      if (disableLinkedBots) body.disable_linked_bots = true;
+
       const res = await fetch('/api/copy/wallets', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet_address: wallet.wallet_address, is_active: !wallet.is_active }),
+        body: JSON.stringify(body),
         cache: 'no-store',
       });
       const payload = await res.json();
       if (payload.ok) {
-        setWallets((prev) =>
-          prev.map((w) =>
-            w.wallet_address === wallet.wallet_address ? { ...w, is_active: !wallet.is_active } : w
-          )
-        );
+        // Reload to get fresh bot counts from the server
+        await load();
       }
     } finally {
       setTogglingId(null);
     }
   };
+
+  // ── Bulk selection helpers ────────────────────────────────────────────────
+
+  const allSelected = wallets.length > 0 && selectedIds.size === wallets.length;
+  const someSelected = selectedIds.size > 0 && !allSelected;
+
+  const toggleSelect = (addr: string) =>
+    setSelectedIds((prev) => { const s = new Set(prev); s.has(addr) ? s.delete(addr) : s.add(addr); return s; });
+
+  const toggleSelectAll = () =>
+    setSelectedIds(allSelected ? new Set() : new Set(wallets.map((w) => w.wallet_address)));
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  // ── Bulk disable selected wallets + their linked bots ─────────────────────
+
+  const handleBulkDisable = async () => {
+    const targets = wallets.filter((w) => selectedIds.has(w.wallet_address));
+    const walletsToDisable = targets.filter((w) => w.is_active); // only those currently ON
+    const totalBots = walletsToDisable.reduce((sum, w) => sum + (w.bot_count ?? 0), 0);
+
+    if (walletsToDisable.length === 0) {
+      window.alert('All selected wallets are already inactive.');
+      clearSelection();
+      return;
+    }
+
+    const botLine = totalBots > 0
+      ? `\nThis will also disable ${totalBots} linked bot${totalBots !== 1 ? 's' : ''}.`
+      : '';
+
+    const confirmed = window.confirm(
+      `Disable ${walletsToDisable.length} wallet${walletsToDisable.length !== 1 ? 's' : ''}?${botLine}` +
+      `\n\nBots can be re-enabled manually from the Bots tab.`
+    );
+    if (!confirmed) return;
+
+    setBulkWorking(true);
+    try {
+      await Promise.all(
+        walletsToDisable.map((w) =>
+          fetch('/api/copy/wallets', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              wallet_address: w.wallet_address,
+              is_active: false,
+              disable_linked_bots: (w.bot_count ?? 0) > 0,
+            }),
+            cache: 'no-store',
+          })
+        )
+      );
+      await load();
+      clearSelection();
+      const msg = totalBots > 0
+        ? `Disabled ${walletsToDisable.length} wallet${walletsToDisable.length !== 1 ? 's' : ''} and ${totalBots} linked bot${totalBots !== 1 ? 's' : ''}.`
+        : `Disabled ${walletsToDisable.length} wallet${walletsToDisable.length !== 1 ? 's' : ''}.`;
+      setBulkResult(msg);
+      setTimeout(() => setBulkResult(null), 5000);
+    } finally {
+      setBulkWorking(false);
+    }
+  };
+
+  // ── Add wallet ────────────────────────────────────────────────────────────
 
   const handleAddWallet = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,6 +369,8 @@ export default function TrackedWalletsSection() {
     }
   };
 
+  // ─── Render ──────────────────────────────────────────────────────────────
+
   return (
     <div className="copy-section">
       {/* ── Section header ── */}
@@ -256,6 +382,7 @@ export default function TrackedWalletsSection() {
           )}
         </div>
         <div className="copy-section-actions">
+          <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={load} disabled={loading} title="Refresh">↻</button>
           <button
             className={`copy-btn copy-btn-sm ${showForm ? 'copy-btn-secondary' : 'copy-btn-primary'}`}
             onClick={() => setShowForm((v) => !v)}
@@ -264,6 +391,45 @@ export default function TrackedWalletsSection() {
           </button>
         </div>
       </div>
+
+      {/* Bulk action result */}
+      {bulkResult && (
+        <div className="copy-backfill-result">✓ {bulkResult}</div>
+      )}
+
+      {/* ── Bulk selection bar (appears when selection > 0) ── */}
+      {!loading && wallets.length > 0 && (
+        <div className="copy-bulk-bar">
+          <label className="copy-bulk-bar-select-all" title={allSelected ? 'Deselect all' : 'Select all'}>
+            <input
+              type="checkbox"
+              className="copy-bulk-check"
+              checked={allSelected}
+              ref={(el) => { if (el) el.indeterminate = someSelected; }}
+              onChange={toggleSelectAll}
+            />
+            <span style={{ fontSize: '0.75rem', color: 'rgba(248,250,252,0.5)' }}>
+              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select'}
+            </span>
+          </label>
+
+          {selectedIds.size > 0 && (
+            <>
+              <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={clearSelection}>
+                Clear
+              </button>
+              <button
+                className="copy-btn copy-btn-sm copy-btn-danger"
+                onClick={handleBulkDisable}
+                disabled={bulkWorking}
+                style={{ marginLeft: 'auto' }}
+              >
+                {bulkWorking ? 'Disabling…' : `Disable + Bots (${selectedIds.size})`}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── Add wallet form ── */}
       {showForm && (
@@ -319,9 +485,21 @@ export default function TrackedWalletsSection() {
           <table className="copy-table copy-table-leaderboard">
             <thead>
               <tr>
+                {/* Checkbox column */}
+                <th style={{ width: 36 }}>
+                  <input
+                    type="checkbox"
+                    className="copy-bulk-check"
+                    checked={allSelected}
+                    ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                    onChange={toggleSelectAll}
+                    title={allSelected ? 'Deselect all' : 'Select all'}
+                  />
+                </th>
                 <th className="copy-th-rank">#</th>
                 <th style={{ minWidth: 180 }}>Wallet</th>
                 <th style={{ minWidth: 50 }}>Active</th>
+                <th style={{ minWidth: 60 }} title="Linked copy bots (enabled / total)">Bots</th>
                 <SortHeader label="Score"    sortKey="copy_score"  active={sortKey} dir={sortDir} onSort={handleSort} />
                 <th style={{ minWidth: 92 }}>Trend</th>
                 <SortHeader label="7d P/L"   sortKey="pnl_7d"      active={sortKey} dir={sortDir} onSort={handleSort} />
@@ -336,29 +514,48 @@ export default function TrackedWalletsSection() {
             </thead>
             <tbody>
               {sorted.map((w, idx) => {
-                const m = w.metrics;
-                const points = seriesMap.get(w.wallet_address) ?? [];
-                const winRatePct = m?.win_rate != null ? m.win_rate * 100 : null;
+                const m        = w.metrics;
+                const points   = seriesMap.get(w.wallet_address) ?? [];
+                const winPct   = m?.win_rate != null ? m.win_rate * 100 : null;
+                const isSelected = selectedIds.has(w.wallet_address);
+
+                // Hint: wallet is active but all its linked bots are disabled
+                const botsAllDisabled = w.is_active && w.bot_count > 0 && w.bots_enabled_count === 0;
 
                 return (
-                  <tr key={w.wallet_address} className={w.is_active ? '' : 'copy-row-inactive'}>
-                    {/* Rank */}
-                    <td className="copy-td-rank">
-                      {idx + 1}
+                  <tr
+                    key={w.wallet_address}
+                    className={[
+                      w.is_active ? '' : 'copy-row-inactive',
+                      isSelected ? 'copy-row-selected' : '',
+                    ].filter(Boolean).join(' ')}
+                  >
+                    {/* Row checkbox */}
+                    <td>
+                      <input
+                        type="checkbox"
+                        className="copy-bulk-check"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(w.wallet_address)}
+                      />
                     </td>
+
+                    {/* Rank */}
+                    <td className="copy-td-rank">{idx + 1}</td>
 
                     {/* Wallet identity */}
                     <td>
                       <span className="copy-td-name">
                         {w.display_name ?? <span className="copy-td-muted">Unnamed</span>}
                       </span>
-                      <span
-                        className="copy-td-sub copy-mono"
-                        title={w.wallet_address}
-                        style={{ cursor: 'default' }}
-                      >
+                      <span className="copy-td-sub copy-mono" title={w.wallet_address} style={{ cursor: 'default' }}>
                         {truncate(w.wallet_address)}
                       </span>
+                      {botsAllDisabled && (
+                        <span className="copy-wallet-bots-hint" title="All linked bots are disabled — re-enable them from the Bots tab">
+                          All bots disabled
+                        </span>
+                      )}
                     </td>
 
                     {/* Active toggle */}
@@ -375,7 +572,12 @@ export default function TrackedWalletsSection() {
                       </div>
                     </td>
 
-                    {/* Copy score — prominent */}
+                    {/* Linked bots count */}
+                    <td className="copy-td-num">
+                      <BotCountBadge total={w.bot_count} enabled={w.bots_enabled_count} />
+                    </td>
+
+                    {/* Copy score */}
                     <td className="copy-td-num">
                       {m?.copy_score != null ? (
                         <span className={`copy-score-badge ${scoreColor(m.copy_score)}`}>
@@ -388,36 +590,27 @@ export default function TrackedWalletsSection() {
 
                     {/* Sparkline */}
                     <td className="copy-td-sparkline">
-                      <WalletSparkline
-                        points={points}
-                        walletAddress={w.wallet_address}
-                      />
+                      <WalletSparkline points={points} walletAddress={w.wallet_address} />
                     </td>
 
-                    {/* P/L fields */}
-                    <td className={`copy-td-num ${pnlClass(m?.pnl_7d)}`}>
-                      {fmtCompact(m?.pnl_7d)}
-                    </td>
-                    <td className={`copy-td-num ${pnlClass(m?.pnl_30d)}`}>
-                      {fmtCompact(m?.pnl_30d)}
-                    </td>
-                    <td className={`copy-td-num ${pnlClass(m?.pnl_all)}`}>
-                      {fmtCompact(m?.pnl_all)}
-                    </td>
+                    {/* P/L */}
+                    <td className={`copy-td-num ${pnlClass(m?.pnl_7d)}`}>{fmtCompact(m?.pnl_7d)}</td>
+                    <td className={`copy-td-num ${pnlClass(m?.pnl_30d)}`}>{fmtCompact(m?.pnl_30d)}</td>
+                    <td className={`copy-td-num ${pnlClass(m?.pnl_all)}`}>{fmtCompact(m?.pnl_all)}</td>
 
-                    {/* Win rate with mini bar */}
+                    {/* Win rate */}
                     <td className="copy-td-num">
-                      {winRatePct != null ? (
+                      {winPct != null ? (
                         <div className="copy-winrate">
-                          <span style={{ color: winRatePct >= 55 ? '#34d399' : winRatePct >= 40 ? '#fbbf24' : '#f87171' }}>
+                          <span style={{ color: winPct >= 55 ? '#34d399' : winPct >= 40 ? '#fbbf24' : '#f87171' }}>
                             {fmtPct(m?.win_rate)}
                           </span>
                           <div className="copy-winrate-bar">
                             <div
                               className="copy-winrate-fill"
                               style={{
-                                width: `${Math.min(100, winRatePct)}%`,
-                                background: winRatePct >= 55 ? '#34d399' : winRatePct >= 40 ? '#fbbf24' : '#f87171',
+                                width: `${Math.min(100, winPct)}%`,
+                                background: winPct >= 55 ? '#34d399' : winPct >= 40 ? '#fbbf24' : '#f87171',
                               }}
                             />
                           </div>
@@ -427,10 +620,7 @@ export default function TrackedWalletsSection() {
                       )}
                     </td>
 
-                    {/* Trades */}
                     <td className="copy-td-num copy-td-muted">{fmtNum(m?.trade_count)}</td>
-
-                    {/* Volume */}
                     <td className="copy-td-num copy-td-muted">{fmtCompact(m?.volume)}</td>
 
                     {/* Category */}

@@ -2188,6 +2188,74 @@
   cursor: pointer;
 }
 
+/* ── Wallet-level bot count badges ────────────────────────────────────────── */
+
+.copy-wallet-bots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem 0.45rem;
+  border-radius: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* All bots enabled — calm green */
+.copy-wallet-bots-ok {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+/* Some bots disabled — amber warning */
+.copy-wallet-bots-partial {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+/* All bots disabled — red/danger */
+.copy-wallet-bots-off {
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+/* No bots at all — muted dash */
+.copy-wallet-bots-none {
+  background: transparent;
+  color: rgba(248, 250, 252, 0.2);
+  border: 1px solid transparent;
+  font-weight: 400;
+}
+
+/* Inline hint below wallet name when active but all linked bots disabled */
+.copy-wallet-bots-hint {
+  display: block;
+  font-size: 0.67rem;
+  color: #f87171;
+  margin-top: 0.15rem;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+/* ── Danger button variant (for "Disable + Bots") ──────────────────────────── */
+
+.copy-btn-danger {
+  background: rgba(239, 68, 68, 0.14);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.copy-btn-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
 /* ── Unlimited display ─────────────────────────────────────────────────────── */
 
 .copy-td-num span[title="Unlimited"] {
