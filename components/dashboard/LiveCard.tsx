@@ -126,17 +126,16 @@ export default function LiveCard() {
         }
       }
 
+      const zeroExposure: ExposureMetrics = { count: 0, exposure: 0, avg: 0, cap: 0, remaining: null };
       if (exposureRes.ok) {
         const expPayload = await exposureRes.json();
         if (expPayload.ok) {
           setLiveExposure(expPayload.live as ExposureMetrics);
         } else {
-          // API responded but reported an error — show zeros rather than hiding
-          setLiveExposure({ count: 0, exposure: 0, avg: 0 });
+          setLiveExposure(zeroExposure);
         }
       } else {
-        // Non-2xx — show zeros rather than hiding the block
-        setLiveExposure({ count: 0, exposure: 0, avg: 0 });
+        setLiveExposure(zeroExposure);
       }
       setExposureLoading(false);
     } finally {

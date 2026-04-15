@@ -80,20 +80,21 @@ export default function CopyPaperBankrollCard() {
         setFetchError(payload.error ?? 'Failed to load paper bankroll');
       }
 
+      const zeroExposure: ExposureMetrics = { count: 0, exposure: 0, avg: 0, cap: 0, remaining: null };
       if (exposureRes.ok) {
         const expPayload = await exposureRes.json();
         if (expPayload.ok) {
           setPaperExposure(expPayload.paper as ExposureMetrics);
         } else {
-          setPaperExposure({ count: 0, exposure: 0, avg: 0 });
+          setPaperExposure(zeroExposure);
         }
       } else {
-        setPaperExposure({ count: 0, exposure: 0, avg: 0 });
+        setPaperExposure(zeroExposure);
       }
       setExposureLoading(false);
     } catch {
       setFetchError('Network error');
-      setPaperExposure({ count: 0, exposure: 0, avg: 0 });
+      setPaperExposure({ count: 0, exposure: 0, avg: 0, cap: 0, remaining: null });
       setExposureLoading(false);
     } finally {
       setLoading(false);
