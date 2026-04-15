@@ -67,30 +67,20 @@ export default function CopyPaperBankrollCard() {
   const [freshStarting, setFreshStarting] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // Lightweight exposure-only refresh — updates count/exposure/avg from the server
-  // without touching the loading spinner. Preserves the current cap if the server
-  // returns 0 (which happens when the settings SELECT fails silently — the exposure
-  // route treats settings errors as non-fatal and returns cap:0). This prevents the
-  // card from snapping to "Unlimited" after a background refresh.
+  // Lightweight exposure-only refresh — no loading spinner, no cap heuristics.
+  // The route now returns { ok: false } if the settings SELECT fails, so on any
+  // !p.ok response we return early and the previous state stays intact. This means
+  // the card never silently shows "Unlimited" due to a transient settings error.
   const loadExposure = useCallback(async () => {
     try {
       const res = await fetch('/api/copy/exposure', { cache: 'no-store' });
       if (!res.ok) return;
       const p = await res.json();
       if (p.ok) {
-        const paper = p.paper as ExposureMetrics;
-        setPaperExposure((prev) => {
-          const effectiveCap = paper.cap > 0 ? paper.cap : (prev?.cap ?? 0);
-          return {
-            count: paper.count,
-            exposure: paper.exposure,
-            avg: paper.avg,
-            cap: effectiveCap,
-            remaining: effectiveCap > 0 ? Math.max(0, effectiveCap - paper.exposure) : null,
-          };
-        });
+        setPaperExposure(p.paper as ExposureMetrics);
       }
-    } catch { /* swallow — optimistic state from caller remains */ }
+      // !p.ok → settings read failed server-side; leave previous state as-is.
+    } catch { /* network error — leave previous state as-is */ }
   }, []);
 
   const load = useCallback(async () => {
@@ -141,6 +131,12 @@ export default function CopyPaperBankrollCard() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Keep exposure numbers fresh during active trading without a full page reload.
+  useEffect(() => {
+    const interval = setInterval(() => { void loadExposure(); }, 30_000);
+    return () => clearInterval(interval);
+  }, [loadExposure]);
 
   const showFeedback = (text: string, type: 'success' | 'error') => {
     setFeedback({ text, type });
@@ -419,65 +415,32 @@ export default function CopyPaperBankrollCard() {
 
           return (
             <div style={{ marginTop: '0.55rem', paddingTop: '0.45rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              {/* Max Exposure — inline editable */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', marginBottom: '0.15rem' }}>
-                <span style={{ color: 'rgba(248,250,252,0.35)', flexShrink: 0 }}>Max Exposure</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <span style={{ color: 'rgba(248,250,252,0.25)', fontSize: '0.65rem' }}>$</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={capInput}
-                    onChange={(e) => setCapInput(e.target.value)}
-                    disabled={savingCap}
-                    title="Paper max exposure (0 = unlimited)"
-                    style={{
-                      width: '70px',
-                      background: 'rgba(248,250,252,0.05)',
-                      border: '1px solid rgba(248,250,252,0.1)',
-                      borderRadius: '4px',
-                      color: '#f8fafc',
-                      fontSize: '0.72rem',
-                      padding: '0.15rem 0.3rem',
-                      fontVariantNumeric: 'tabular-nums',
-                      outline: 'none',
-                    }}
-                  />
-                  <button
-                    onClick={handleSavePaperCap}
-                    disabled={savingCap}
-                    style={{
-                      padding: '0.15rem 0.45rem',
-                      borderRadius: '4px',
-                      border: '1px solid rgba(52,211,153,0.3)',
-                      background: 'rgba(52,211,153,0.08)',
-                      color: '#34d399',
-                      fontSize: '0.65rem',
-                      fontWeight: 700,
-                      cursor: savingCap ? 'not-allowed' : 'pointer',
-                      opacity: savingCap ? 0.5 : 1,
-                      lineHeight: 1,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {savingCap ? '…' : 'Save'}
-                  </button>
-                </div>
+              {/* Max Exposure — READ-ONLY display of the DB-confirmed cap.
+                  The edit control is separate below; this row always reflects
+                  the last value returned by /api/copy/exposure, never the
+                  unsaved input the operator may be typing. */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', marginBottom: '0.2rem' }}>
+                <span style={{ color: 'rgba(248,250,252,0.35)' }}>Max Exposure</span>
+                <span style={{
+                  fontWeight: 700,
+                  color: cap > 0 ? '#f8fafc' : 'rgba(248,250,252,0.38)',
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {cap > 0 ? fmt(cap) : 'Unlimited'}
+                </span>
               </div>
-              <div style={{ fontSize: '0.58rem', color: 'rgba(248,250,252,0.18)', textAlign: 'right', marginBottom: '0.25rem' }}>
-                0 = unlimited
-              </div>
+
               {/* Remaining row */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', marginBottom: cap > 0 ? '0.1rem' : 0 }}>
                 <span style={{ color: 'rgba(248,250,252,0.35)' }}>Remaining</span>
                 <span style={{ fontWeight: 700, color: remColor, fontVariantNumeric: 'tabular-nums' }}>
                   {remaining === null ? 'Unlimited' : fmt(remaining)}
                 </span>
               </div>
+
               {/* Utilisation bar — only shown when a cap is set */}
               {cap > 0 && (
-                <div style={{ marginTop: '0.4rem', height: '3px', borderRadius: '99px', background: 'rgba(255,255,255,0.07)' }}>
+                <div style={{ marginBottom: '0.5rem', height: '3px', borderRadius: '99px', background: 'rgba(255,255,255,0.07)' }}>
                   <div style={{
                     height: '100%', borderRadius: '99px',
                     width: `${pct}%`,
@@ -486,6 +449,60 @@ export default function CopyPaperBankrollCard() {
                   }} />
                 </div>
               )}
+
+              {/* Change-cap edit control — clearly separated from the display rows.
+                  capInput holds the operator's pending value; the display above
+                  always reads from paperExposure.cap (DB-confirmed), so typing
+                  here does not corrupt the displayed cap until Save is clicked. */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '0.3rem',
+                paddingTop: '0.4rem', borderTop: '1px solid rgba(255,255,255,0.05)',
+              }}>
+                <span style={{ color: 'rgba(248,250,252,0.22)', fontSize: '0.63rem', flexShrink: 0 }}>Change cap:</span>
+                <span style={{ color: 'rgba(248,250,252,0.18)', fontSize: '0.63rem' }}>$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={capInput}
+                  onChange={(e) => setCapInput(e.target.value)}
+                  disabled={savingCap}
+                  title="Paper max exposure (0 = unlimited)"
+                  style={{
+                    flex: 1, minWidth: 0, maxWidth: '68px',
+                    background: 'rgba(248,250,252,0.05)',
+                    border: '1px solid rgba(248,250,252,0.08)',
+                    borderRadius: '4px',
+                    color: '#f8fafc',
+                    fontSize: '0.72rem',
+                    padding: '0.15rem 0.3rem',
+                    fontVariantNumeric: 'tabular-nums',
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={handleSavePaperCap}
+                  disabled={savingCap}
+                  style={{
+                    padding: '0.15rem 0.45rem',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(52,211,153,0.3)',
+                    background: 'rgba(52,211,153,0.08)',
+                    color: '#34d399',
+                    fontSize: '0.65rem',
+                    fontWeight: 700,
+                    cursor: savingCap ? 'not-allowed' : 'pointer',
+                    opacity: savingCap ? 0.5 : 1,
+                    lineHeight: 1,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {savingCap ? '…' : 'Save'}
+                </button>
+              </div>
+              <div style={{ fontSize: '0.56rem', color: 'rgba(248,250,252,0.15)', textAlign: 'right', marginTop: '0.12rem' }}>
+                0 = unlimited
+              </div>
             </div>
           );
         })()}

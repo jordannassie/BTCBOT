@@ -160,10 +160,9 @@ export default function LiveCard() {
     loadSettings();
   }, [loadSettings]);
 
-  // Lightweight exposure-only refresh — updates count/exposure/avg without
-  // touching the loading spinner. Preserves the current cap when the server
-  // returns 0 (the exposure route treats settings errors as non-fatal and may
-  // return cap:0 even when a real cap is saved). capInput is NOT updated here;
+  // Lightweight exposure-only refresh — no loading spinner, no cap heuristics.
+  // Route returns { ok: false } if settings SELECT fails, so on !p.ok we return
+  // early and the previous state stays intact. capInput is not updated here;
   // explicit save handlers own that responsibility.
   const loadExposure = useCallback(async () => {
     try {
@@ -171,19 +170,10 @@ export default function LiveCard() {
       if (!res.ok) return;
       const p = await res.json();
       if (p.ok) {
-        const live = p.live as ExposureMetrics;
-        setLiveExposure((prev) => {
-          const effectiveCap = live.cap > 0 ? live.cap : (prev?.cap ?? 0);
-          return {
-            count: live.count,
-            exposure: live.exposure,
-            avg: live.avg,
-            cap: effectiveCap,
-            remaining: effectiveCap > 0 ? Math.max(0, effectiveCap - live.exposure) : null,
-          };
-        });
+        setLiveExposure(p.live as ExposureMetrics);
       }
-    } catch { /* swallow */ }
+      // !p.ok → settings read failed server-side; leave previous state as-is.
+    } catch { /* network error — leave previous state as-is */ }
   }, []);
 
   const handleSaveLiveCap = async () => {
@@ -374,65 +364,29 @@ export default function LiveCard() {
 
           return (
             <div style={{ marginTop: '0.55rem', paddingTop: '0.45rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              {/* Max Exposure — inline editable */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', marginBottom: '0.15rem' }}>
-                <span style={{ color: 'rgba(248,250,252,0.35)', flexShrink: 0 }}>Max Exposure</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <span style={{ color: 'rgba(248,250,252,0.25)', fontSize: '0.65rem' }}>$</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={capInput}
-                    onChange={(e) => setCapInput(e.target.value)}
-                    disabled={savingCap}
-                    title="Live max exposure (0 = unlimited)"
-                    style={{
-                      width: '70px',
-                      background: 'rgba(248,250,252,0.05)',
-                      border: '1px solid rgba(248,250,252,0.1)',
-                      borderRadius: '4px',
-                      color: '#f8fafc',
-                      fontSize: '0.72rem',
-                      padding: '0.15rem 0.3rem',
-                      fontVariantNumeric: 'tabular-nums',
-                      outline: 'none',
-                    }}
-                  />
-                  <button
-                    onClick={handleSaveLiveCap}
-                    disabled={savingCap}
-                    style={{
-                      padding: '0.15rem 0.45rem',
-                      borderRadius: '4px',
-                      border: '1px solid rgba(52,211,153,0.3)',
-                      background: 'rgba(52,211,153,0.08)',
-                      color: '#34d399',
-                      fontSize: '0.65rem',
-                      fontWeight: 700,
-                      cursor: savingCap ? 'not-allowed' : 'pointer',
-                      opacity: savingCap ? 0.5 : 1,
-                      lineHeight: 1,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {savingCap ? '…' : 'Save'}
-                  </button>
-                </div>
+              {/* Max Exposure — READ-ONLY display of the DB-confirmed cap. */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', marginBottom: '0.2rem' }}>
+                <span style={{ color: 'rgba(248,250,252,0.35)' }}>Max Exposure</span>
+                <span style={{
+                  fontWeight: 700,
+                  color: cap > 0 ? '#f8fafc' : 'rgba(248,250,252,0.38)',
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {cap > 0 ? formatUSD(cap) : 'Unlimited'}
+                </span>
               </div>
-              <div style={{ fontSize: '0.58rem', color: 'rgba(248,250,252,0.18)', textAlign: 'right', marginBottom: '0.25rem' }}>
-                0 = unlimited
-              </div>
+
               {/* Remaining row */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', marginBottom: cap > 0 ? '0.1rem' : 0 }}>
                 <span style={{ color: 'rgba(248,250,252,0.35)' }}>Remaining</span>
                 <span style={{ fontWeight: 700, color: remColor, fontVariantNumeric: 'tabular-nums' }}>
                   {remaining === null ? 'Unlimited' : formatUSD(remaining)}
                 </span>
               </div>
-              {/* Utilisation bar — only shown when a cap is set */}
+
+              {/* Utilisation bar */}
               {cap > 0 && (
-                <div style={{ marginTop: '0.4rem', height: '3px', borderRadius: '99px', background: 'rgba(255,255,255,0.07)' }}>
+                <div style={{ marginBottom: '0.5rem', height: '3px', borderRadius: '99px', background: 'rgba(255,255,255,0.07)' }}>
                   <div style={{
                     height: '100%', borderRadius: '99px',
                     width: `${pct}%`,
@@ -441,6 +395,57 @@ export default function LiveCard() {
                   }} />
                 </div>
               )}
+
+              {/* Change-cap edit control — separate from the read-only display. */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '0.3rem',
+                paddingTop: '0.4rem', borderTop: '1px solid rgba(255,255,255,0.05)',
+              }}>
+                <span style={{ color: 'rgba(248,250,252,0.22)', fontSize: '0.63rem', flexShrink: 0 }}>Change cap:</span>
+                <span style={{ color: 'rgba(248,250,252,0.18)', fontSize: '0.63rem' }}>$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={capInput}
+                  onChange={(e) => setCapInput(e.target.value)}
+                  disabled={savingCap}
+                  title="Live max exposure (0 = unlimited)"
+                  style={{
+                    flex: 1, minWidth: 0, maxWidth: '68px',
+                    background: 'rgba(248,250,252,0.05)',
+                    border: '1px solid rgba(248,250,252,0.08)',
+                    borderRadius: '4px',
+                    color: '#f8fafc',
+                    fontSize: '0.72rem',
+                    padding: '0.15rem 0.3rem',
+                    fontVariantNumeric: 'tabular-nums',
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={handleSaveLiveCap}
+                  disabled={savingCap}
+                  style={{
+                    padding: '0.15rem 0.45rem',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(52,211,153,0.3)',
+                    background: 'rgba(52,211,153,0.08)',
+                    color: '#34d399',
+                    fontSize: '0.65rem',
+                    fontWeight: 700,
+                    cursor: savingCap ? 'not-allowed' : 'pointer',
+                    opacity: savingCap ? 0.5 : 1,
+                    lineHeight: 1,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {savingCap ? '…' : 'Save'}
+                </button>
+              </div>
+              <div style={{ fontSize: '0.56rem', color: 'rgba(248,250,252,0.15)', textAlign: 'right', marginTop: '0.12rem' }}>
+                0 = unlimited
+              </div>
             </div>
           );
         })()}

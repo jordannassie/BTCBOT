@@ -76,7 +76,18 @@ export async function GET() {
       throw modeRes.error;
     }
     console.log('[exposure] copy_open_exposure_by_mode RPC OK, rows:', JSON.stringify(modeRes.data));
-    // settings error is non-fatal — fall back to 0 (unlimited)
+
+    // Settings error is FATAL: returning cap=0 when the real cap is non-zero would show
+    // "Unlimited" on the cards — which is a worse UX than showing an error. If the SELECT
+    // fails the client keeps whatever cap it last knew about (loadExposure returns early
+    // on !p.ok), so the operator never sees a stale "Unlimited" label.
+    if (settingsRes.error) {
+      console.error('[exposure] copy_global_settings SELECT FAILED:', settingsRes.error);
+      return NextResponse.json(
+        { ok: false, error: settingsRes.error.message ?? 'Settings read failed' },
+        { status: 500 }
+      );
+    }
 
     const settings = settingsRes.data as {
       live_max_exposure_usd: number;
