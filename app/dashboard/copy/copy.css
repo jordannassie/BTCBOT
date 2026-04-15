@@ -2188,6 +2188,68 @@
   cursor: pointer;
 }
 
+/* ── Polymarket profile link + address row ─────────────────────────────────── */
+
+/* Wallet name as a link */
+.copy-wallet-pm-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: inherit;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.82rem;
+  transition: color 0.12s;
+  line-height: 1.3;
+}
+
+.copy-wallet-pm-link:hover {
+  color: #a5b4fc;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* External link icon — subtle, appears on hover */
+.copy-wallet-ext-icon {
+  opacity: 0.35;
+  flex-shrink: 0;
+  transition: opacity 0.12s;
+  margin-bottom: 1px;
+}
+
+.copy-wallet-pm-link:hover .copy-wallet-ext-icon {
+  opacity: 0.8;
+}
+
+/* Address sub-row: address + copy button inline */
+.copy-wallet-addr-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.1rem;
+}
+
+/* Copy-address button */
+.copy-wallet-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 2px 3px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: rgba(248, 250, 252, 0.3);
+  transition: color 0.1s, background 0.1s;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.copy-wallet-copy-btn:hover {
+  color: rgba(248, 250, 252, 0.75);
+  background: rgba(248, 250, 252, 0.07);
+}
+
 /* ── Wallet-level bot count badges ────────────────────────────────────────── */
 
 .copy-wallet-bots {

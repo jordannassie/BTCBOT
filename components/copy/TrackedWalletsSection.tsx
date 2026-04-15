@@ -93,6 +93,63 @@ function pnlClass(v: number | null | undefined): string {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
+function ExternalLinkIcon() {
+  return (
+    <svg
+      className="copy-wallet-ext-icon"
+      width="10" height="10"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+      <polyline points="15 3 21 3 21 9"/>
+      <line x1="10" y1="14" x2="21" y2="3"/>
+    </svg>
+  );
+}
+
+function WalletAddressRow({ address }: { address: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(address).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
+  };
+
+  return (
+    <div className="copy-wallet-addr-row">
+      <span className="copy-td-sub copy-mono" title={address}>
+        {truncate(address)}
+      </span>
+      <button
+        className="copy-wallet-copy-btn"
+        onClick={handleCopy}
+        title={copied ? 'Copied!' : 'Copy address'}
+        aria-label="Copy wallet address"
+      >
+        {copied ? (
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        ) : (
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        )}
+      </button>
+    </div>
+  );
+}
+
 function EmptyWallets({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="copy-empty">
@@ -540,12 +597,19 @@ export default function TrackedWalletsSection() {
 
                     {/* Wallet identity */}
                     <td>
-                      <span className="copy-td-name">
-                        {w.display_name ?? <span className="copy-td-muted">Unnamed</span>}
-                      </span>
-                      <span className="copy-td-sub copy-mono" title={w.wallet_address} style={{ cursor: 'default' }}>
-                        {truncate(w.wallet_address)}
-                      </span>
+                      {/* Display name links to Polymarket profile */}
+                      <a
+                        className="copy-td-name copy-wallet-pm-link"
+                        href={`https://polymarket.com/profile/${w.wallet_address}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="View on Polymarket"
+                      >
+                        {w.display_name ?? <span style={{ opacity: 0.45 }}>Unnamed</span>}
+                        <ExternalLinkIcon />
+                      </a>
+                      {/* Address row: copy-to-clipboard + truncated address */}
+                      <WalletAddressRow address={w.wallet_address} />
                     </td>
 
                     {/* Active toggle */}
