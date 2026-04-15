@@ -64,7 +64,7 @@ const TAB_DEFS: { id: AttemptTab; label: string; activeClass: string }[] = [
   { id: 'FAILED', label: 'Failed', activeClass: 'active-failed' },
 ];
 
-export default function CopyAttemptsSection() {
+export default function CopyAttemptsSection({ scrollable = false }: { scrollable?: boolean }) {
   const [rows, setRows] = useState<CopyAttempt[]>([]);
   const [botMap, setBotMap] = useState<BotMap>({});
   const [loading, setLoading] = useState(true);
@@ -183,7 +183,7 @@ export default function CopyAttemptsSection() {
           <p className="copy-empty-sub">Try a different filter.</p>
         </div>
       ) : (
-        <div className="copy-table-wrap">
+        <div className={`copy-table-wrap${scrollable ? ' copy-table-scroll' : ''}`}>
           <table className="copy-table">
             <thead>
               <tr>

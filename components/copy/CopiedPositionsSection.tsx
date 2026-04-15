@@ -35,7 +35,7 @@ function statusBadge(status: string) {
 
 type Filter = 'ALL' | 'OPEN' | 'CLOSED' | 'CANCELLED';
 
-export default function CopiedPositionsSection() {
+export default function CopiedPositionsSection({ scrollable = false }: { scrollable?: boolean }) {
   const [rows, setRows] = useState<CopiedPosition[]>([]);
   const [botMap, setBotMap] = useState<BotMap>({});
   const [loading, setLoading] = useState(true);
@@ -142,7 +142,7 @@ export default function CopiedPositionsSection() {
           </p>
         </div>
       ) : (
-        <div className="copy-table-wrap">
+        <div className={`copy-table-wrap${scrollable ? ' copy-table-scroll' : ''}`}>
           <table className="copy-table">
             <thead>
               <tr>

@@ -1239,6 +1239,131 @@
   }
 }
 
+/* ─── Tabbed layout ──────────────────────────────────────────────────────────── */
+
+.copy-tabs-placeholder {
+  height: 2rem;
+}
+
+.copy-tabs-root {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  /* Ensure the tabs + panel fill vertically without page overflow */
+}
+
+/* Tab bar */
+.copy-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0 0.25rem;
+  margin-bottom: 0;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.07);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  flex-shrink: 0;
+}
+
+.copy-tabs-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.copy-tabs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 0.95rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px; /* overlaps the bar border */
+  color: rgba(248, 250, 252, 0.45);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.14s, border-color 0.14s;
+  letter-spacing: 0.01em;
+  border-radius: 0;
+}
+
+.copy-tabs-btn:hover {
+  color: rgba(248, 250, 252, 0.8);
+}
+
+.copy-tabs-btn.active {
+  color: #f8fafc;
+  font-weight: 600;
+  border-bottom-color: #60a5fa;
+}
+
+/* Count badge inside tab */
+.copy-tabs-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: rgba(248, 250, 252, 0.08);
+  color: rgba(248, 250, 252, 0.45);
+  letter-spacing: 0;
+  transition: background 0.14s, color 0.14s;
+}
+
+.copy-tabs-count.active {
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+}
+
+/* Tab content panel */
+.copy-tabs-panel {
+  min-height: 0;
+}
+
+/* Overview tab layout */
+.copy-tabs-overview {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Internal-scroll table (Attempts + Positions tabs) ──────────────────────── */
+
+/* When the copy-table-wrap has the scroll modifier, cap its height
+   and let the table header stick to the top of the scroll container. */
+.copy-table-scroll {
+  max-height: 560px;
+  overflow-y: auto;
+  border-radius: 0 0 10px 10px;
+  /* Thin scrollbar on Webkit */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(248, 250, 252, 0.12) transparent;
+}
+
+.copy-table-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.copy-table-scroll::-webkit-scrollbar-thumb {
+  background: rgba(248, 250, 252, 0.12);
+  border-radius: 999px;
+}
+
+.copy-table-scroll thead th {
+  position: sticky;
+  top: 0;
+  /* Match the table header background so rows don't bleed through */
+  background: #0c1220;
+  z-index: 3;
+  box-shadow: 0 1px 0 rgba(248, 250, 252, 0.06);
+}
+
 /* ─── Copy Paper Bankroll Card ───────────────────────────────────────────────── */
 
 .copy-paper-card {
