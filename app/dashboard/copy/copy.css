@@ -2067,6 +2067,18 @@
   border: 1px solid rgba(52, 211, 153, 0.25);
 }
 
+.copy-stat-badge-paper {
+  background: rgba(52, 211, 153, 0.10);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.20);
+}
+
+.copy-stat-badge-live {
+  background: rgba(96, 165, 250, 0.12);
+  color: #93c5fd;
+  border: 1px solid rgba(96, 165, 250, 0.22);
+}
+
 /* ── Overview cards footer (last updated + manual refresh) ─────────────────── */
 
 .copy-overview-footer {

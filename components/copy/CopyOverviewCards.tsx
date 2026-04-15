@@ -19,10 +19,19 @@ type Overview = {
   walletsTotal: number;         // tracked_wallets all rows
   activeBotCount: number;       // copy_bots WHERE is_enabled = true
   botsTotal: number;            // copy_bots all rows
-  openPositionCount: number;    // copied_positions WHERE status = 'OPEN'
-  openExposure: number;         // SUM(size) WHERE status = 'OPEN'
-  avgOpenSize: number;          // openExposure / openPositionCount
-  largestOpenPosition: number;  // MAX(size) WHERE status = 'OPEN'
+  // ── Overall totals (PAPER + LIVE combined) ──────────────────────────────────
+  openPositionCount: number;    // copy_open_position_stats RPC: COUNT all OPEN
+  openExposure: number;         // copy_open_position_stats RPC: SUM(size) all OPEN
+  avgOpenSize: number;          // copy_open_position_stats RPC: AVG(size) all OPEN
+  largestOpenPosition: number;  // copy_open_position_stats RPC: MAX(size) all OPEN
+  // ── Per-mode splits (copy_open_exposure_by_mode RPC) ───────────────────────
+  paperPositionCount: number;   // PAPER mode OPEN count
+  paperExposure: number;        // PAPER mode SUM(size)
+  paperAvgSize: number;         // PAPER mode AVG(size)
+  livePositionCount: number;    // LIVE mode OPEN count
+  liveExposure: number;         // LIVE mode SUM(size)
+  liveAvgSize: number;          // LIVE mode AVG(size)
+  // ───────────────────────────────────────────────────────────────────────────
   attemptsTodayCount: number;   // copy_attempts since midnight UTC today
   settings: Settings | null;
   fetchedAt?: string;           // ISO timestamp from server
@@ -263,20 +272,55 @@ export default function CopyOverviewCards() {
           </div>
         </div>
 
-        {/* ── Open Positions — OPEN status only, all modes combined ── */}
+        {/* ── Paper Open Exposure ──────────────────────────────────────────────────
+             Source: copy_open_exposure_by_mode() RPC, PAPER mode row only.
+             Matches the Paper Bankroll card exactly — same RPC, same filter. ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
             <div className="copy-stat-icon"><IconPosition /></div>
-            <span className="copy-stat-label">Open Positions</span>
+            <span className="copy-stat-label">Paper Open Exposure</span>
           </div>
-          <div className="copy-stat-value">{data.openPositionCount}</div>
+          <div className="copy-stat-value">{fmtUsd(data.paperExposure ?? 0)}</div>
           <div className="copy-stat-helper">
+            <span className="copy-stat-badge copy-stat-badge-paper">PAPER</span>
+            {' '}·{' '}
             <span className="copy-stat-badge copy-stat-badge-open">OPEN</span>
-            {' '}status · all modes (PAPER + LIVE)
+            {' '}· {data.paperPositionCount ?? 0} position{(data.paperPositionCount ?? 0) !== 1 ? 's' : ''}
+            {(data.paperAvgSize ?? 0) > 0 && (
+              <span style={{ display: 'block', marginTop: '0.15rem', color: 'rgba(248,250,252,0.35)' }}>
+                Avg {fmtUsd(data.paperAvgSize)}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* ── Open Exposure — SUM(size) across all modes WHERE status = 'OPEN' ── */}
+        {/* ── Live Open Exposure ───────────────────────────────────────────────────
+             Source: copy_open_exposure_by_mode() RPC, LIVE mode row only.
+             Shows $0.00 / 0 positions when Live Trading is off. ── */}
+        <div className="copy-stat-card">
+          <div className="copy-stat-header">
+            <div className="copy-stat-icon"><IconDollar /></div>
+            <span className="copy-stat-label">Live Open Exposure</span>
+          </div>
+          <div className="copy-stat-value" style={{ color: (data.liveExposure ?? 0) > 0 ? '#f8fafc' : 'rgba(248,250,252,0.35)' }}>
+            {fmtUsd(data.liveExposure ?? 0)}
+          </div>
+          <div className="copy-stat-helper">
+            <span className="copy-stat-badge copy-stat-badge-live">LIVE</span>
+            {' '}·{' '}
+            <span className="copy-stat-badge copy-stat-badge-open">OPEN</span>
+            {' '}· {data.livePositionCount ?? 0} position{(data.livePositionCount ?? 0) !== 1 ? 's' : ''}
+            {(data.liveAvgSize ?? 0) > 0 && (
+              <span style={{ display: 'block', marginTop: '0.15rem', color: 'rgba(248,250,252,0.35)' }}>
+                Avg {fmtUsd(data.liveAvgSize)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* ── Total Open Exposure ──────────────────────────────────────────────────
+             Source: copy_open_position_stats() RPC = PAPER + LIVE combined.
+             When LIVE = $0, Total = Paper. ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
             <div className="copy-stat-icon"><IconDollar /></div>
@@ -284,23 +328,9 @@ export default function CopyOverviewCards() {
           </div>
           <div className="copy-stat-value">{fmtUsd(data.openExposure ?? 0)}</div>
           <div className="copy-stat-helper">
-            SUM(size) ·{' '}
+            PAPER + LIVE ·{' '}
             <span className="copy-stat-badge copy-stat-badge-open">OPEN</span>
-            {' '}· all modes (PAPER + LIVE)
-          </div>
-        </div>
-
-        {/* ── Avg Open Size — openExposure / openPositionCount, all modes ── */}
-        <div className="copy-stat-card">
-          <div className="copy-stat-header">
-            <div className="copy-stat-icon"><IconDollar /></div>
-            <span className="copy-stat-label">Avg Open Size</span>
-          </div>
-          <div className="copy-stat-value">{fmtUsd(data.avgOpenSize ?? 0)}</div>
-          <div className="copy-stat-helper">
-            {data.openPositionCount > 0
-              ? `Avg of ${data.openPositionCount} open · all modes`
-              : 'No open positions'}
+            {' '}· {data.openPositionCount} position{data.openPositionCount !== 1 ? 's' : ''}
             {(data.largestOpenPosition ?? 0) > 0 && (
               <span style={{ display: 'block', marginTop: '0.15rem', color: 'rgba(248,250,252,0.35)' }}>
                 Largest: {fmtUsd(data.largestOpenPosition)}
