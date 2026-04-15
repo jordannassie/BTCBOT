@@ -7,6 +7,8 @@ type GlobalSettings = {
   live_on: boolean;
   emergency_stop: boolean;
   max_total_live_exposure: number;
+  live_max_exposure_usd: number;
+  paper_max_exposure_usd: number;
   default_slippage_cap: number;
   default_position_size: number;
   default_max_positions: number;
@@ -32,6 +34,15 @@ function IconWarning() {
   );
 }
 
+function IconExposure() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23"/>
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </svg>
+  );
+}
+
 export default function GlobalSettingsPanel() {
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +50,8 @@ export default function GlobalSettingsPanel() {
   const [statusMsg, setStatusMsg] = useState('');
 
   const [exposure, setExposure] = useState('');
+  const [liveMaxExp, setLiveMaxExp] = useState('');
+  const [paperMaxExp, setPaperMaxExp] = useState('');
   const [slippage, setSlippage] = useState('');
   const [posSize, setPosSize] = useState('');
   const [maxPos, setMaxPos] = useState('');
@@ -46,6 +59,8 @@ export default function GlobalSettingsPanel() {
   const applySettings = useCallback((s: GlobalSettings) => {
     setSettings(s);
     setExposure(String(s.max_total_live_exposure));
+    setLiveMaxExp(String(s.live_max_exposure_usd ?? 0));
+    setPaperMaxExp(String(s.paper_max_exposure_usd ?? 0));
     setSlippage(String(s.default_slippage_cap));
     setPosSize(String(s.default_position_size));
     setMaxPos(String(s.default_max_positions));
@@ -102,9 +117,11 @@ export default function GlobalSettingsPanel() {
   const handleSaveNumeric = () => {
     patch({
       max_total_live_exposure: parseFloat(exposure) || 0,
-      default_slippage_cap: parseFloat(slippage) || 0,
-      default_position_size: parseFloat(posSize) || 0,
-      default_max_positions: parseInt(maxPos, 10) || 0,
+      live_max_exposure_usd:   parseFloat(liveMaxExp) || 0,
+      paper_max_exposure_usd:  parseFloat(paperMaxExp) || 0,
+      default_slippage_cap:    parseFloat(slippage) || 0,
+      default_position_size:   parseFloat(posSize) || 0,
+      default_max_positions:   parseInt(maxPos, 10) || 0,
     });
   };
 
@@ -219,6 +236,89 @@ export default function GlobalSettingsPanel() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* ── Exposure Controls ── */}
+        <div>
+          <div className="copy-safety-block-head" style={{ marginBottom: '0.75rem' }}>
+            <span className="copy-safety-block-icon"><IconExposure /></span>
+            <span className="copy-safety-block-title">Exposure Controls</span>
+          </div>
+          <p style={{ fontSize: '0.73rem', color: 'rgba(248,250,252,0.4)', marginBottom: '1rem', lineHeight: 1.5 }}>
+            Stop opening new positions when the total allocated capital for a mode would exceed these caps.
+            Set to <strong style={{ color: 'rgba(248,250,252,0.6)' }}>0</strong> to disable the cap (unlimited).
+            Caps only block <em>new opens</em> — closing positions is always allowed.
+          </p>
+          <div className="copy-settings-field-row">
+            <div className="copy-form-field">
+              <label className="copy-form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{
+                  fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.07em',
+                  padding: '0.1em 0.45em', borderRadius: '0.3rem',
+                  background: 'rgba(59,130,246,0.15)', color: '#60a5fa',
+                  border: '1px solid rgba(59,130,246,0.25)',
+                }}>LIVE</span>
+                Live Max Exposure (USD)
+              </label>
+              <input
+                className="copy-form-input"
+                type="number"
+                value={liveMaxExp}
+                onChange={(e) => setLiveMaxExp(e.target.value)}
+                step="100"
+                min="0"
+              />
+              <span className="copy-form-hint">
+                Max SUM(size) across all OPEN LIVE positions. 0 = unlimited.
+                <br />
+                Enforcement endpoint: <code style={{ fontSize: '0.68rem', opacity: 0.6 }}>POST /api/copy/exposure-check</code>
+              </span>
+            </div>
+            <div className="copy-form-field">
+              <label className="copy-form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{
+                  fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.07em',
+                  padding: '0.1em 0.45em', borderRadius: '0.3rem',
+                  background: 'rgba(248,250,252,0.08)', color: 'rgba(248,250,252,0.6)',
+                  border: '1px solid rgba(248,250,252,0.12)',
+                }}>PAPER</span>
+                Paper Max Exposure (USD)
+              </label>
+              <input
+                className="copy-form-input"
+                type="number"
+                value={paperMaxExp}
+                onChange={(e) => setPaperMaxExp(e.target.value)}
+                step="100"
+                min="0"
+              />
+              <span className="copy-form-hint">
+                Max SUM(size) across all OPEN PAPER positions. 0 = unlimited.
+              </span>
+            </div>
+          </div>
+          {/* Example skip log reference */}
+          <div style={{
+            marginTop: '0.75rem',
+            padding: '0.6rem 0.85rem',
+            background: 'rgba(248,250,252,0.03)',
+            border: '1px solid rgba(248,250,252,0.08)',
+            borderRadius: '0.5rem',
+            fontSize: '0.7rem',
+            color: 'rgba(248,250,252,0.4)',
+            lineHeight: 1.6,
+          }}>
+            <strong style={{ color: 'rgba(248,250,252,0.6)' }}>Worker skip log example</strong> when cap blocks a trade:
+            <br />
+            <code style={{ fontSize: '0.68rem', color: 'rgba(248,250,252,0.55)' }}>
+              {'{ "allowed": false, "skip_reason": "exposure_cap_exceeded",'}
+              <br />
+              {'  "current_exposure": 9500, "proposed_size": 600, "would_be": 10100, "cap": 10000 }'}
+            </code>
+            <br />
+            The worker writes <code style={{ fontSize: '0.68rem' }}>&quot;exposure_cap_exceeded&quot;</code> to{' '}
+            <code style={{ fontSize: '0.68rem' }}>copy_attempts.skip_reason</code>.
           </div>
         </div>
 

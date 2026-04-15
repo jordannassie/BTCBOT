@@ -48,6 +48,8 @@ export async function PATCH(request: Request) {
 
     const numericFields = [
       'max_total_live_exposure',
+      'live_max_exposure_usd',
+      'paper_max_exposure_usd',
       'default_slippage_cap',
       'default_position_size',
       'default_max_positions',

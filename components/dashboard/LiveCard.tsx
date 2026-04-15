@@ -79,7 +79,13 @@ const formatUSD = (value?: number | null) =>
     maximumFractionDigits: 2
   }).format(value ?? 0);
 
-type ExposureMetrics = { count: number; exposure: number; avg: number };
+type ExposureMetrics = {
+  count: number;
+  exposure: number;
+  avg: number;
+  cap: number;          // 0 = unlimited
+  remaining: number | null; // null when unlimited
+};
 
 export default function LiveCard() {
   const [settings, setSettings] = useState<BotSettings | null>(null);
@@ -275,24 +281,43 @@ export default function LiveCard() {
           )}
         </div>
 
-        {/* Available headroom */}
-        {!exposureLoading && settings?.live_balance_usd != null && (() => {
-          const headroom = settings.live_balance_usd - (liveExposure?.exposure ?? 0);
-          const headroomColor = headroom >= 0 ? '#34d399' : '#f87171';
+        {/* Cap + remaining rows */}
+        {!exposureLoading && (() => {
+          const cap       = liveExposure?.cap ?? 0;
+          const remaining = liveExposure?.remaining ?? null;
+          const exposure  = liveExposure?.exposure ?? 0;
+          const pct       = cap > 0 ? Math.min(100, (exposure / cap) * 100) : 0;
+          const remColor  = remaining === null
+            ? 'rgba(248,250,252,0.55)'
+            : remaining <= 0 ? '#f87171' : remaining < cap * 0.2 ? '#fbbf24' : '#34d399';
+
           return (
-            <div style={{
-              marginTop: '0.55rem',
-              paddingTop: '0.45rem',
-              borderTop: '1px solid rgba(255,255,255,0.06)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              fontSize: '0.72rem',
-            }}>
-              <span style={{ color: 'rgba(248,250,252,0.35)' }}>Available</span>
-              <span style={{ fontWeight: 700, color: headroomColor, fontVariantNumeric: 'tabular-nums' }}>
-                {formatUSD(headroom)}
-              </span>
+            <div style={{ marginTop: '0.55rem', paddingTop: '0.45rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              {/* Max Exposure row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', marginBottom: '0.25rem' }}>
+                <span style={{ color: 'rgba(248,250,252,0.35)' }}>Max Exposure</span>
+                <span style={{ color: 'rgba(248,250,252,0.55)', fontVariantNumeric: 'tabular-nums' }}>
+                  {cap > 0 ? formatUSD(cap) : 'Unlimited'}
+                </span>
+              </div>
+              {/* Remaining row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
+                <span style={{ color: 'rgba(248,250,252,0.35)' }}>Remaining</span>
+                <span style={{ fontWeight: 700, color: remColor, fontVariantNumeric: 'tabular-nums' }}>
+                  {remaining === null ? 'Unlimited' : formatUSD(remaining)}
+                </span>
+              </div>
+              {/* Utilisation bar — only shown when a cap is set */}
+              {cap > 0 && (
+                <div style={{ marginTop: '0.4rem', height: '3px', borderRadius: '99px', background: 'rgba(255,255,255,0.07)' }}>
+                  <div style={{
+                    height: '100%', borderRadius: '99px',
+                    width: `${pct}%`,
+                    background: pct >= 100 ? '#f87171' : pct >= 80 ? '#fbbf24' : '#34d399',
+                    transition: 'width 0.3s ease',
+                  }} />
+                </div>
+              )}
             </div>
           );
         })()}

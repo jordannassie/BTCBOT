@@ -1,14 +1,22 @@
-// Open-position exposure split by bot mode (LIVE vs PAPER).
+// Open-position exposure split by bot mode (LIVE vs PAPER),
+// enriched with the configured exposure caps from copy_global_settings.
 //
-// Uses two explicit queries instead of a PostgREST FK join to guarantee
-// reliability regardless of how Supabase has named the FK constraint.
+// Convention: cap = 0 means unlimited (no enforcement).
 //
 // Response shape:
-//   live:  { count, exposure, avg }  — OPEN positions where copy_bots.mode = 'LIVE'
-//   paper: { count, exposure, avg }  — OPEN positions where copy_bots.mode = 'PAPER'
+//   live: {
+//     count, exposure, avg,
+//     cap,        ← live_max_exposure_usd (0 = unlimited)
+//     remaining,  ← cap - exposure when cap > 0, else null
+//   }
+//   paper: { same, using paper_max_exposure_usd }
 //
 // Exposure source: copied_positions.size (the sole sizing column, displayed
 // as "Size ($)" in the positions table UI — interpreted as USD).
+//
+// This endpoint is consumed by:
+//   - LiveCard + CopyPaperBankrollCard (display)
+//   - /api/copy/exposure-check (pre-trade enforcement helper)
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -23,11 +31,15 @@ function getServiceClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-function computeExposure(sizes: number[]) {
+function computeExposure(
+  sizes: number[],
+  cap: number,
+) {
   const count    = sizes.length;
   const exposure = sizes.reduce((s, v) => s + v, 0);
   const avg      = count > 0 ? exposure / count : 0;
-  return { count, exposure, avg };
+  const remaining = cap > 0 ? Math.max(0, cap - exposure) : null;
+  return { count, exposure, avg, cap, remaining };
 }
 
 export async function GET() {
@@ -40,29 +52,37 @@ export async function GET() {
   }
 
   try {
-    // Query 1: all bots → build id→mode map
-    const { data: bots, error: botsErr } = await client
-      .from('copy_bots')
-      .select('id, mode');
+    // Run all three reads in parallel
+    const [botsRes, positionsRes, settingsRes] = await Promise.all([
+      client.from('copy_bots').select('id, mode'),
+      client.from('copied_positions').select('size, copy_bot_id').eq('status', 'OPEN'),
+      client
+        .from('copy_global_settings')
+        .select('live_max_exposure_usd, paper_max_exposure_usd')
+        .eq('id', 1)
+        .maybeSingle(),
+    ]);
 
-    if (botsErr) throw botsErr;
+    if (botsRes.error)     throw botsRes.error;
+    if (positionsRes.error) throw positionsRes.error;
+    // settings error is non-fatal — fall back to 0 (unlimited)
+
+    const settings = settingsRes.data as {
+      live_max_exposure_usd: number;
+      paper_max_exposure_usd: number;
+    } | null;
+
+    const liveCap  = settings?.live_max_exposure_usd  ?? 0;
+    const paperCap = settings?.paper_max_exposure_usd ?? 0;
 
     const botMode = new Map<string, string>(
-      (bots ?? []).map((b) => [b.id as string, b.mode as string])
+      (botsRes.data ?? []).map((b) => [b.id as string, b.mode as string])
     );
-
-    // Query 2: all OPEN positions → join mode client-side
-    const { data: positions, error: posErr } = await client
-      .from('copied_positions')
-      .select('size, copy_bot_id')
-      .eq('status', 'OPEN');
-
-    if (posErr) throw posErr;
 
     const liveSizes: number[]  = [];
     const paperSizes: number[] = [];
 
-    for (const p of positions ?? []) {
+    for (const p of positionsRes.data ?? []) {
       const mode = botMode.get(p.copy_bot_id as string);
       const size = (p.size as number | null) ?? 0;
       if (mode === 'LIVE')  liveSizes.push(size);
@@ -72,8 +92,8 @@ export async function GET() {
     return NextResponse.json(
       {
         ok: true,
-        live:  computeExposure(liveSizes),
-        paper: computeExposure(paperSizes),
+        live:  computeExposure(liveSizes,  liveCap),
+        paper: computeExposure(paperSizes, paperCap),
         fetchedAt: new Date().toISOString(),
       },
       { headers: { 'Cache-Control': 'no-store, max-age=0' } }
