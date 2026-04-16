@@ -132,10 +132,18 @@ export default function CopyPaperBankrollCard() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Keep exposure numbers fresh during active trading without a full page reload.
+  // Keep exposure numbers fresh at the same cadence as the Overview cards
+  // (copy_open_exposure_by_mode RPC, 15 s poll + visibility wake-up).
+  // Both components call the same Supabase RPC so they converge to the same
+  // DB truth within one poll cycle rather than drifting apart indefinitely.
   useEffect(() => {
-    const interval = setInterval(() => { void loadExposure(); }, 30_000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => { void loadExposure(); }, 15_000);
+    const onVisible = () => { if (!document.hidden) void loadExposure(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [loadExposure]);
 
   const showFeedback = (text: string, type: 'success' | 'error') => {
@@ -356,7 +364,12 @@ export default function CopyPaperBankrollCard() {
         />
       </div>
 
-      {/* ── Paper Open Exposure — always rendered, shows skeleton while loading ── */}
+      {/* ── Paper Open Exposure ─────────────────────────────────────────────────
+           Source: /api/copy/exposure → copy_open_exposure_by_mode() RPC, PAPER row.
+           Identical source + scope to CopyOverviewCards "Paper Open Exposure" card.
+           count, exposure, avg, cap, remaining all come from this single endpoint.
+           Polls every 15 s (matching Overview cadence) + refreshes on tab focus and
+           on copy:paper-reset events to stay in sync after a Restart Paper.      ── */}
       <div style={{
         marginBottom: '0.85rem',
         padding: '0.75rem 1rem',
