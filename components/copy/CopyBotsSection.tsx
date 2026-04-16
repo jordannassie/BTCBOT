@@ -78,6 +78,17 @@ const truncate  = (addr: string) => addr.length > 14 ? `${addr.slice(0, 8)}…${
 const fmtDate   = (d: string)    => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const fmtLimit  = (n: number)    => n === 0 ? <span title="Unlimited" style={{ opacity: 0.5 }}>∞</span> : n;
 
+// Deterministic random name — same algorithm as TrackedWalletsSection so
+// the same address always produces the same name across both pages.
+const NAME_ADJ  = ['Shadow','Neon','Ghost','Iron','Silver','Dark','Swift','Bold','Quiet','Frost','Slick','Deep','Sharp','Wild','Jade','Steel','Copper','Golden','Crimson','Azure','Onyx','Ivory','Ember','Blind'];
+const NAME_NOUN = ['Whale','Wolf','Eagle','Hawk','Shark','Bull','Bear','Fox','Lynx','Raven','Falcon','Viper','Orca','Jaguar','Titan','Phantom','Cipher','Scout','Drifter','Nomad','Ranger','Stalker','Pilgrim','Alpha'];
+
+function generateWalletName(address: string): string {
+  let h = 0;
+  for (let i = 0; i < address.length; i++) h = Math.imul(h * 31 + address.charCodeAt(i), 1) >>> 0;
+  return `${NAME_ADJ[h % NAME_ADJ.length]} ${NAME_NOUN[(h >>> 4) % NAME_NOUN.length]}`;
+}
+
 function getLiveReadiness(bot: CopyBot, gs: GlobalSettings | null): LiveReadiness {
   if (bot.mode !== 'LIVE') return 'PAPER_ONLY';
   if (gs?.emergency_stop) return 'LIVE_STOPPED';
@@ -767,6 +778,15 @@ export default function CopyBotsSection() {
     [bots]
   );
 
+  // Fast wallet-address → display label lookup used in the bot name cell
+  const walletNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const w of wallets) {
+      m.set(w.wallet_address, w.display_name || generateWalletName(w.wallet_address));
+    }
+    return m;
+  }, [wallets]);
+
   return (
     <>
       {/* Edit modal (single bot) */}
@@ -971,7 +991,11 @@ export default function CopyBotsSection() {
                         <td>
                           <input type="checkbox" className="copy-bulk-check" checked={isSelected} onChange={() => toggleSelect(bot.id)} />
                         </td>
-                        <td><span className="copy-td-name">{bot.name}</span></td>
+                        <td>
+                          <span className="copy-td-name" title={bot.name}>
+                            {walletNameMap.get(bot.wallet_address) ?? bot.name}
+                          </span>
+                        </td>
                         <td><span className="copy-mono" title={bot.wallet_address}>{truncate(bot.wallet_address)}</span></td>
                         <td><ModeBadge mode={bot.mode} /></td>
                         <td>
