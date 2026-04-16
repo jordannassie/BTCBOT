@@ -2,36 +2,41 @@
 
 // Hot Wallets — discovery / ranking panel.
 //
-// Shows wallet_metrics rows for addresses NOT yet in tracked_wallets,
-// ranked by a server-computed `hot_score` (fast-turnover copy suitability).
+// Data sources (in priority order):
+//   1. Polymarket trading leaderboard (fetched server-side via /api/copy/hot-wallets).
+//      Top 100 traders by 30-day P&L; no auth required; no CORS issues.
+//   2. Operator-seeded manual candidates stored in localStorage.
+//      Useful for specific addresses not on the leaderboard.
+//
+// Already-tracked wallets are excluded on the server side.
+// The ignore list is maintained client-side in localStorage.
 //
 // Actions per row:
 //   + Track   → POST /api/copy/wallets (auto-creates a PAPER copy bot)
-//   Ignore    → stores address in localStorage; hides from the list
-//   [↗ link]  → opens polymarket.com/profile/<address> in a new tab
-//
-// Ignore list is kept in localStorage only — operator preference,
-// no DB table needed.
+//   Ignore    → localStorage; hides from list until "Show ignored" is toggled
+//   ↗ link    → opens polymarket.com/profile/<address>
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-const IGNORE_LS_KEY = 'copy-hot-wallets-ignored';
-const POLL_MS       = 60_000; // 1-minute poll (candidates change slowly)
+const IGNORE_LS_KEY    = 'copy-hot-wallets-ignored';
+const MANUAL_LS_KEY    = 'copy-hot-wallets-manual';
+const POLL_MS          = 90_000; // 90 s — leaderboard changes slowly
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type HotWallet = {
   wallet_address:    string;
+  display_name:      string | null;
   hot_score:         number;
-  copy_score:        number | null;
-  pnl_7d:            number | null;
   pnl_30d:           number | null;
+  pnl_7d:            number | null;
   win_rate:          number | null;
   avg_hold_minutes:  number | null;
   trade_count:       number | null;
   volume:            number | null;
-  category_focus:    string | null;
   last_trade_at:     string | null;
+  category_focus:    string | null;
+  source:            'leaderboard' | 'manual';
 };
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -65,7 +70,7 @@ function fmtRelative(d: string | null): string {
   if (mins < 1)  return 'just now';
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs  < 24) return `${hrs}h ago`;
+  if (hrs < 24)  return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
@@ -78,27 +83,25 @@ function pnlClass(v: number | null): string {
   return v >= 0 ? 'copy-num-pos' : 'copy-num-neg';
 }
 
-function hotScoreClass(score: number): string {
-  if (score >= 70) return 'copy-score-high';
-  if (score >= 40) return 'copy-score-mid';
-  return 'copy-score-low';
-}
-
-// Hold-time coloring: fast = green, medium = neutral, slow = muted
 function holdClass(minutes: number | null): string {
   if (minutes == null) return 'copy-td-muted';
-  if (minutes < 60)  return 'copy-num-pos';
-  if (minutes < 360) return '';
+  if (minutes < 60)   return 'copy-num-pos';
+  if (minutes < 360)  return '';
   return 'copy-td-muted';
 }
 
-// Win-rate colour
 function winColor(rate: number | null): string {
   if (rate == null) return 'inherit';
   const pct = rate * 100;
   if (pct >= 55) return '#34d399';
   if (pct >= 40) return '#fbbf24';
   return '#f87171';
+}
+
+function hotScoreClass(score: number): string {
+  if (score >= 70) return 'copy-score-high';
+  if (score >= 40) return 'copy-score-mid';
+  return 'copy-score-low';
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -123,16 +126,6 @@ function ExternalLinkIcon() {
   );
 }
 
-// Flame icon for the section header badge
-function FlameIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2c-.5 2-2.5 3.5-3.5 5.5C7.5 9.5 8 11.5 9 13c-1-.5-1.5-1.5-1.5-2.5C5 12.5 4 15 5 18c1 2.5 3.5 4 7 4s7-2 7-5c0-2.5-1-4.5-2.5-6C17 13 17 15 16 16c.5-2 0-5-4-14z"/>
-    </svg>
-  );
-}
-
-// HotScore bar — visual representation of score out of 100
 function HotScoreBar({ score }: { score: number }) {
   const pct   = Math.min(100, Math.max(0, score));
   const color = score >= 70 ? '#34d399' : score >= 40 ? '#fbbf24' : 'rgba(248,250,252,0.2)';
@@ -141,59 +134,96 @@ function HotScoreBar({ score }: { score: number }) {
       <span className={`copy-score-badge ${hotScoreClass(score)}`}>
         {score.toFixed(0)}
       </span>
-      <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.06)', minWidth: 48 }}>
+      <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.06)', minWidth: 44 }}>
         <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: color, transition: 'width 0.3s' }} />
       </div>
     </div>
   );
 }
 
+function SourceBadge({ source }: { source: HotWallet['source'] }) {
+  if (source === 'leaderboard') {
+    return (
+      <span style={{
+        display: 'inline-block',
+        fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.06em',
+        padding: '0.1em 0.4em', borderRadius: '0.25rem',
+        background: 'rgba(96,165,250,0.1)', color: '#60a5fa',
+        border: '1px solid rgba(96,165,250,0.18)', whiteSpace: 'nowrap',
+      }}>
+        LB
+      </span>
+    );
+  }
+  return (
+    <span style={{
+      display: 'inline-block',
+      fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.06em',
+      padding: '0.1em 0.4em', borderRadius: '0.25rem',
+      background: 'rgba(251,191,36,0.1)', color: '#fbbf24',
+      border: '1px solid rgba(251,191,36,0.18)', whiteSpace: 'nowrap',
+    }}>
+      MANUAL
+    </span>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function HotWalletsSection() {
-  const [rows,       setRows]       = useState<HotWallet[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState<string | null>(null);
-  const [ignored,    setIgnored]    = useState<Set<string>>(new Set());
-  const [showIgnored,setShowIgnored]= useState(false);
-  const [adding,     setAdding]     = useState<string | null>(null);
-  const [addedSet,   setAddedSet]   = useState<Set<string>>(new Set());
-  const [addError,   setAddError]   = useState<string | null>(null);
+  const [rows,        setRows]        = useState<HotWallet[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState<string | null>(null);
+  const [lbError,     setLbError]     = useState<string | null>(null);
+  const [ignored,     setIgnored]     = useState<Set<string>>(new Set());
+  const [manual,      setManual]      = useState<string[]>([]);
+  const [showIgnored, setShowIgnored] = useState(false);
+  const [showForm,    setShowForm]    = useState(false);
+  const [adding,      setAdding]      = useState<string | null>(null);
+  const [addedSet,    setAddedSet]    = useState<Set<string>>(new Set());
+  const [addError,    setAddError]    = useState<string | null>(null);
 
-  // ── Ignore list (localStorage) ──────────────────────────────────────────────
+  // Manual form
+  const [fAddr,  setFAddr]  = useState('');
+  const [fError, setFError] = useState<string | null>(null);
+
+  // ── LocalStorage bootstrap (runs once on mount, client-side only) ───────────
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(IGNORE_LS_KEY);
-      if (raw) setIgnored(new Set(JSON.parse(raw) as string[]));
+      const ig = localStorage.getItem(IGNORE_LS_KEY);
+      if (ig) setIgnored(new Set(JSON.parse(ig) as string[]));
+    } catch {}
+    try {
+      const mn = localStorage.getItem(MANUAL_LS_KEY);
+      if (mn) setManual(JSON.parse(mn) as string[]);
     } catch {}
   }, []);
 
-  const persistIgnored = (next: Set<string>) => {
+  const saveIgnored = (next: Set<string>) => {
     setIgnored(next);
     try { localStorage.setItem(IGNORE_LS_KEY, JSON.stringify([...next])); } catch {}
   };
 
-  const handleIgnore = (addr: string) => {
-    persistIgnored(new Set([...ignored, addr]));
+  const saveManual = (next: string[]) => {
+    setManual(next);
+    try { localStorage.setItem(MANUAL_LS_KEY, JSON.stringify(next)); } catch {}
   };
 
-  const handleUnignore = (addr: string) => {
-    const next = new Set(ignored);
-    next.delete(addr);
-    persistIgnored(next);
-  };
+  // ── Data loading ─────────────────────────────────────────────────────────────
 
-  // ── Data loading ────────────────────────────────────────────────────────────
-
-  const load = useCallback(async () => {
+  const load = useCallback(async (manualList?: string[]) => {
     setLoading(true);
     setError(null);
+    // use the arg (if freshly updated) or fall back to the ref closed over at mount
+    const addresses = manualList ?? manual;
+    const qs = addresses.length > 0 ? `?manual=${addresses.join(',')}` : '';
     try {
-      const res     = await fetch('/api/copy/hot-wallets', { cache: 'no-store' });
+      const res     = await fetch(`/api/copy/hot-wallets${qs}`, { cache: 'no-store' });
       const payload = await res.json();
       if (payload.ok) {
         setRows(payload.rows ?? []);
+        setLbError(payload.leaderboard_error ?? null);
       } else {
         setError(payload.error ?? 'Failed to load hot wallets');
       }
@@ -202,12 +232,14 @@ export default function HotWalletsSection() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [manual]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { load(); }, [load]);
+  // Initial load
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Polling + visibility
   useEffect(() => {
-    const poll      = setInterval(load, POLL_MS);
+    const poll      = setInterval(() => load(), POLL_MS);
     const onVisible = () => { if (!document.hidden) load(); };
     const onRefresh = () => load();
     document.addEventListener('visibilitychange', onVisible);
@@ -219,36 +251,75 @@ export default function HotWalletsSection() {
     };
   }, [load]);
 
-  // ── Add to tracked wallets ──────────────────────────────────────────────────
+  // ── Manual candidate form ─────────────────────────────────────────────────
 
-  const handleAdd = async (w: HotWallet) => {
+  const handleAddManual = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFError(null);
+    const addr = fAddr.trim();
+    if (!addr) { setFError('Address required'); return; }
+    if (!addr.startsWith('0x')) { setFError('Must start with 0x'); return; }
+    if (manual.includes(addr)) { setFError('Already in candidate list'); return; }
+    const next = [...manual, addr];
+    saveManual(next);
+    setFAddr('');
+    setShowForm(false);
+    // reload with the fresh manual list immediately
+    load(next);
+  };
+
+  const handleRemoveManual = (addr: string) => {
+    const next = manual.filter((a) => a !== addr);
+    saveManual(next);
+    load(next);
+  };
+
+  // ── Ignore actions ─────────────────────────────────────────────────────────
+
+  const handleIgnore = (addr: string) => {
+    saveIgnored(new Set([...ignored, addr]));
+  };
+  const handleUnignore = (addr: string) => {
+    const next = new Set(ignored);
+    next.delete(addr);
+    saveIgnored(next);
+  };
+
+  // ── Add to tracked wallets ─────────────────────────────────────────────────
+
+  const handleTrack = async (w: HotWallet) => {
     setAdding(w.wallet_address);
     setAddError(null);
     try {
       const res = await fetch('/api/copy/wallets', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ wallet_address: w.wallet_address }),
-        cache:   'no-store',
+        body:    JSON.stringify({
+          wallet_address: w.wallet_address,
+          display_name:   w.display_name ?? undefined,
+          source:         'hot_wallets',
+        }),
+        cache: 'no-store',
       });
       const payload = await res.json();
       if (payload.ok) {
         setAddedSet((prev) => new Set([...prev, w.wallet_address]));
-        // Refresh after a short delay so Supabase completes the write
-        setTimeout(load, 800);
+        // Also remove from manual list if it was manually added
+        if (manual.includes(w.wallet_address)) handleRemoveManual(w.wallet_address);
+        setTimeout(() => load(), 800);
       } else {
         setAddError(payload.error ?? 'Failed to add wallet');
         setTimeout(() => setAddError(null), 5000);
       }
     } catch {
-      setAddError('Network error adding wallet');
+      setAddError('Network error');
       setTimeout(() => setAddError(null), 5000);
     } finally {
       setAdding(null);
     }
   };
 
-  // ── Derived state ────────────────────────────────────────────────────────────
+  // ── Derived state ──────────────────────────────────────────────────────────
 
   const visible = useMemo(() => {
     if (showIgnored) return rows;
@@ -260,20 +331,25 @@ export default function HotWalletsSection() {
     [rows, ignored]
   );
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  const lbCount     = rows.filter((r) => r.source === 'leaderboard').length;
+  const manualCount = rows.filter((r) => r.source === 'manual').length;
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="copy-section copy-hot-wallets-section">
-      {/* ── Section header ── */}
+
+      {/* ── Header ── */}
       <div className="copy-section-head">
         <div className="copy-section-title-row">
           <h2 className="copy-section-title">Hot Wallets</h2>
           {!loading && visible.length > 0 && (
             <span className="copy-section-count">{visible.length}</span>
           )}
-          {/* DISCOVERY badge */}
           <span className="copy-hot-badge">
-            <FlameIcon />
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2c-.5 2-2.5 3.5-3.5 5.5C7.5 9.5 8 11.5 9 13c-1-.5-1.5-1.5-1.5-2.5C5 12.5 4 15 5 18c1 2.5 3.5 4 7 4s7-2 7-5c0-2.5-1-4.5-2.5-6C17 13 17 15 16 16c.5-2 0-5-4-14z"/>
+            </svg>
             DISCOVERY
           </span>
         </div>
@@ -284,36 +360,117 @@ export default function HotWalletsSection() {
               className="copy-btn copy-btn-secondary copy-btn-sm"
               onClick={() => setShowIgnored((v) => !v)}
             >
-              {showIgnored ? `Hide ignored` : `Ignored (${ignoredCount})`}
+              {showIgnored ? 'Hide ignored' : `Ignored (${ignoredCount})`}
             </button>
           )}
           <button
+            className={`copy-btn copy-btn-sm ${showForm ? 'copy-btn-secondary' : 'copy-btn-secondary'}`}
+            onClick={() => setShowForm((v) => !v)}
+            title="Add a specific wallet address as a candidate"
+          >
+            {showForm ? 'Cancel' : '+ Add address'}
+          </button>
+          <button
             className="copy-btn copy-btn-secondary copy-btn-sm"
-            onClick={load}
+            onClick={() => load()}
             disabled={loading}
             title="Refresh"
           >
-            ↻ Refresh
+            ↻
           </button>
         </div>
       </div>
 
-      {/* Subtitle */}
+      {/* ── Source summary ── */}
       <div className="copy-hot-subtitle">
-        Untracked wallets with strong fast-exit metrics — ranked by copy suitability.
-        Add any wallet to begin monitoring it and auto-creating a PAPER copy bot.
+        {loading ? 'Loading…' : (
+          <>
+            {lbError ? (
+              <span style={{ color: '#f87171' }}>
+                Leaderboard unavailable: {lbError}.{' '}
+                {manualCount > 0 ? `Showing ${manualCount} manual candidate${manualCount !== 1 ? 's' : ''}.` : 'Add addresses manually below.'}
+              </span>
+            ) : (
+              <>
+                {lbCount > 0
+                  ? `${lbCount} candidate${lbCount !== 1 ? 's' : ''} from Polymarket 30-day leaderboard`
+                  : 'No leaderboard candidates'
+                }
+                {manualCount > 0 && ` + ${manualCount} manually added`}
+                {lbCount === 0 && manualCount === 0 && ' — all top traders are already tracked, or the leaderboard returned no results.'}
+                {'. '}
+                Wallets already in your tracked list are excluded.
+              </>
+            )}
+          </>
+        )}
       </div>
 
-      {/* Add error */}
+      {/* ── Add address form ── */}
+      {showForm && (
+        <form className="copy-add-form" onSubmit={handleAddManual}>
+          <div className="copy-form-title">Add Candidate Address</div>
+          <div style={{ fontSize: '0.73rem', color: 'rgba(248,250,252,0.4)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
+            Paste a Polymarket wallet address to add it as a discovery candidate.
+            The system will attempt to fetch its stats from Polymarket.
+          </div>
+          <div className="copy-form-grid">
+            <div className="copy-form-field copy-form-grid-wide">
+              <label className="copy-form-label">Wallet Address <span style={{ color: '#f87171' }}>*</span></label>
+              <input
+                className="copy-form-input"
+                value={fAddr}
+                onChange={(e) => setFAddr(e.target.value)}
+                placeholder="0x…"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              {fError && <span className="copy-form-msg copy-form-error">{fError}</span>}
+            </div>
+          </div>
+          <div className="copy-form-actions">
+            <button className="copy-btn copy-btn-primary" type="submit">Add Candidate</button>
+          </div>
+        </form>
+      )}
+
+      {/* ── Global add error ── */}
       {addError && (
         <div style={{ padding: '0 1.5rem 0.5rem' }}>
           <span className="copy-form-msg copy-form-error">{addError}</span>
         </div>
       )}
 
+      {/* ── Manual candidates chip list ── */}
+      {manual.length > 0 && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: '0.4rem',
+          padding: '0 1.5rem 0.75rem',
+        }}>
+          <span style={{ fontSize: '0.7rem', color: 'rgba(248,250,252,0.3)', alignSelf: 'center' }}>Manual:</span>
+          {manual.map((addr) => (
+            <span key={addr} style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+              fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '0.4rem',
+              background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.15)',
+              color: 'rgba(248,250,252,0.55)',
+            }}>
+              <span className="copy-mono">{truncate(addr)}</span>
+              <button
+                onClick={() => handleRemoveManual(addr)}
+                style={{ background: 'none', border: 'none', color: 'rgba(248,250,252,0.3)', cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: '0.75rem' }}
+                title="Remove from candidate list"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* ── States ── */}
       {loading ? (
-        <div className="copy-loading">Scanning for hot wallets…</div>
+        <div className="copy-loading">Fetching leaderboard…</div>
 
       ) : error ? (
         <div className="copy-empty">
@@ -327,10 +484,12 @@ export default function HotWalletsSection() {
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
           </div>
-          <p className="copy-empty-title">No candidates yet</p>
+          <p className="copy-empty-title">No candidates</p>
           <p className="copy-empty-sub">
-            Candidates appear here when <code>wallet_metrics</code> contains entries for
-            wallets not yet in your tracked list.
+            {lbError
+              ? 'Polymarket leaderboard is unreachable. Use "+ Add address" to add candidates manually.'
+              : 'All top leaderboard traders are already in your tracked list, or the leaderboard returned an empty result. Use "+ Add address" to add a specific wallet.'
+            }
             {ignoredCount > 0 && (
               <>
                 {' '}
@@ -338,7 +497,7 @@ export default function HotWalletsSection() {
                   style={{ background: 'none', border: 'none', color: '#fbbf24', cursor: 'pointer', padding: 0, fontSize: 'inherit' }}
                   onClick={() => setShowIgnored(true)}
                 >
-                  Show {ignoredCount} ignored wallet{ignoredCount !== 1 ? 's' : ''}.
+                  Show {ignoredCount} ignored.
                 </button>
               </>
             )}
@@ -348,21 +507,19 @@ export default function HotWalletsSection() {
       ) : (
         /* ── Ranked table ── */
         <div className="copy-table-wrap copy-table-scroll">
-          <table className="copy-table" style={{ minWidth: '1100px' }}>
+          <table className="copy-table" style={{ minWidth: '1120px' }}>
             <thead>
               <tr>
                 <th className="copy-th-rank">#</th>
-                <th style={{ minWidth: 190 }}>Wallet</th>
+                <th style={{ minWidth: 200 }}>Wallet</th>
                 <th style={{ minWidth: 130 }} title="Composite fast-copy suitability score (0–100)">Hot Score</th>
-                <th title="Average hold time — lower = faster exits = easier to copy">Avg Hold</th>
-                <th title="Total trades in wallet_metrics">Trades</th>
+                <th title="Average hold time (fast exits = more copy-friendly). Only available for manually-enriched profiles.">Avg Hold</th>
+                <th title="Total trades recorded">Trades</th>
                 <th>Win Rate</th>
                 <th>30d P/L</th>
-                <th>7d P/L</th>
                 <th>Volume</th>
                 <th>Last Active</th>
-                <th>Category</th>
-                <th style={{ minWidth: 140 }}>Actions</th>
+                <th style={{ minWidth: 150 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -372,36 +529,40 @@ export default function HotWalletsSection() {
                 const isAdding  = adding === w.wallet_address;
 
                 return (
-                  <tr
-                    key={w.wallet_address}
-                    className={isIgnored ? 'copy-row-inactive' : ''}
-                  >
+                  <tr key={w.wallet_address} className={isIgnored ? 'copy-row-inactive' : ''}>
+
                     {/* Rank */}
                     <td className="copy-td-rank">{idx + 1}</td>
 
-                    {/* Wallet identity */}
+                    {/* Identity */}
                     <td>
-                      <a
-                        className="copy-td-name copy-wallet-pm-link"
-                        href={`https://polymarket.com/profile/${w.wallet_address}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={`View ${w.wallet_address} on Polymarket`}
-                      >
-                        {truncate(w.wallet_address)}
-                        <ExternalLinkIcon />
-                      </a>
-                      <span className="copy-td-sub copy-mono" style={{ fontSize: '0.65rem', opacity: 0.35 }}>
-                        {w.wallet_address}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <SourceBadge source={w.source} />
+                        <div>
+                          {w.display_name && (
+                            <div className="copy-td-name" style={{ fontWeight: 600, fontSize: '0.8rem', color: '#f8fafc' }}>
+                              {w.display_name}
+                            </div>
+                          )}
+                          <a
+                            className="copy-wallet-pm-link"
+                            href={`https://polymarket.com/profile/${w.wallet_address}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`View on Polymarket: ${w.wallet_address}`}
+                            style={{ fontSize: '0.72rem' }}
+                          >
+                            <span className="copy-mono">{truncate(w.wallet_address)}</span>
+                            <ExternalLinkIcon />
+                          </a>
+                        </div>
+                      </div>
                     </td>
 
-                    {/* Hot score with mini-bar */}
-                    <td>
-                      <HotScoreBar score={w.hot_score} />
-                    </td>
+                    {/* Hot score bar */}
+                    <td><HotScoreBar score={w.hot_score} /></td>
 
-                    {/* Avg hold time */}
+                    {/* Avg hold */}
                     <td className={`copy-td-num ${holdClass(w.avg_hold_minutes)}`}>
                       {fmtHold(w.avg_hold_minutes)}
                     </td>
@@ -417,14 +578,11 @@ export default function HotWalletsSection() {
                         <span style={{ color: winColor(w.win_rate), fontWeight: 600 }}>
                           {fmtPct(w.win_rate)}
                         </span>
-                      ) : (
-                        <span className="copy-td-muted">—</span>
-                      )}
+                      ) : <span className="copy-td-muted">—</span>}
                     </td>
 
-                    {/* P/L columns */}
+                    {/* P/L */}
                     <td className={`copy-td-num ${pnlClass(w.pnl_30d)}`}>{fmtCompact(w.pnl_30d)}</td>
-                    <td className={`copy-td-num ${pnlClass(w.pnl_7d)}`}>{fmtCompact(w.pnl_7d)}</td>
 
                     {/* Volume */}
                     <td className="copy-td-num copy-td-muted">{fmtCompact(w.volume)}</td>
@@ -432,15 +590,6 @@ export default function HotWalletsSection() {
                     {/* Last active */}
                     <td className="copy-td-muted" style={{ fontSize: '0.71rem', whiteSpace: 'nowrap' }}>
                       {fmtRelative(w.last_trade_at)}
-                    </td>
-
-                    {/* Category */}
-                    <td>
-                      {w.category_focus ? (
-                        <span className="copy-badge copy-badge-purple">{w.category_focus}</span>
-                      ) : (
-                        <span className="copy-td-muted">—</span>
-                      )}
                     </td>
 
                     {/* Actions */}
@@ -451,7 +600,7 @@ export default function HotWalletsSection() {
                         ) : (
                           <button
                             className="copy-btn copy-btn-primary copy-btn-sm"
-                            onClick={() => handleAdd(w)}
+                            onClick={() => handleTrack(w)}
                             disabled={isAdding}
                             title="Add to Tracked Wallets and create a PAPER copy bot"
                           >
@@ -463,7 +612,6 @@ export default function HotWalletsSection() {
                           <button
                             className="copy-btn copy-btn-secondary copy-btn-sm"
                             onClick={() => handleUnignore(w.wallet_address)}
-                            title="Remove from ignore list"
                           >
                             Unignore
                           </button>
@@ -471,9 +619,20 @@ export default function HotWalletsSection() {
                           <button
                             className="copy-btn copy-btn-secondary copy-btn-sm copy-hot-ignore-btn"
                             onClick={() => handleIgnore(w.wallet_address)}
-                            title="Hide this wallet from the discovery list"
+                            title="Hide from discovery list"
                           >
                             Ignore
+                          </button>
+                        )}
+
+                        {w.source === 'manual' && (
+                          <button
+                            className="copy-btn copy-btn-secondary copy-btn-sm"
+                            onClick={() => handleRemoveManual(w.wallet_address)}
+                            title="Remove from candidate list"
+                            style={{ color: 'rgba(248,250,252,0.25)' }}
+                          >
+                            ×
                           </button>
                         )}
                       </div>
@@ -486,7 +645,7 @@ export default function HotWalletsSection() {
         </div>
       )}
 
-      {/* Ignored wallets footer note */}
+      {/* Footer: ignored count */}
       {!showIgnored && ignoredCount > 0 && visible.length > 0 && (
         <div className="copy-hot-ignore-note">
           {ignoredCount} wallet{ignoredCount !== 1 ? 's' : ''} hidden.{' '}

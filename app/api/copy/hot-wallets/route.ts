@@ -1,25 +1,43 @@
 // GET /api/copy/hot-wallets
 //
-// Returns wallet_metrics rows for wallets NOT yet in tracked_wallets,
-// enriched with a computed `hot_score` that ranks fast-turnover copy suitability.
+// WHY THE PREVIOUS VERSION WAS ALWAYS EMPTY
+// ──────────────────────────────────────────
+// The previous implementation queried wallet_metrics WHERE wallet_address NOT IN
+// tracked_wallets. This can never return any rows because wallet_metrics has a
+// hard FK constraint → tracked_wallets (ON DELETE CASCADE). PostgreSQL physically
+// prevents a wallet_metrics row from existing unless the wallet is already tracked.
+// There is also no discovery pipeline: the Worker only writes wallet_metrics for
+// wallets already in tracked_wallets. So the query always returned [].
 //
-// Hot score factors (all server-side, based on existing wallet_metrics columns):
-//   copy_score        — base score from Worker analysis (0–100)
-//   avg_hold_minutes  — lower = faster exits = copy-friendly
-//   pnl_30d           — positive recent PnL adds confidence
-//   win_rate          — accuracy bonus
-//   last_trade_at     — recency bonus for active wallets
-//   trade_count       — volume of evidence
+// THIS VERSION
+// ────────────────────────────────────────────────────────────────────────────────
+// 1. PRIMARY source  — Polymarket's public trading leaderboard API.
+//    Fetches the top 100 traders by 30-day P&L from:
+//      https://data.polymarket.com/trading-leaderboard?timeframe=1m&limit=100
+//    No auth required. Runs server-side so there are no CORS issues.
 //
-// The ignore list is stored client-side in localStorage (no DB needed).
+// 2. MANUAL candidates — operator-seeded addresses passed as ?manual=addr1,addr2
+//    The HotWalletsSection stores these in localStorage and sends them as a query
+//    parameter. For manual candidates the Polymarket user profile is fetched to
+//    get basic stats.
+//
+// Both sources are filtered against tracked_wallets so already-tracked wallets
+// are excluded. Each candidate gets a computed hot_score (0–100).
+//
+// The response always includes a `source` field per row:
+//   'leaderboard' — came from the Polymarket leaderboard
+//   'manual'      — operator-added by address
+//   'error'       — leaderboard unreachable; fallback to manual-only mode
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-export const dynamic = 'force-dynamic';
+export const dynamic  = 'force-dynamic';
 export const revalidate = 0;
 
 const NO_CACHE = { 'Cache-Control': 'no-store, max-age=0' };
+
+// ─── Supabase ─────────────────────────────────────────────────────────────────
 
 function getServiceClient() {
   let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
@@ -29,68 +47,190 @@ function getServiceClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-type MetricsRow = {
-  wallet_address: string;
-  copy_score: number | null;
-  pnl_7d: number | null;
-  pnl_30d: number | null;
-  pnl_all: number | null;
-  win_rate: number | null;
-  trade_count: number | null;
-  volume: number | null;
-  avg_hold_minutes: number | null;
-  max_drawdown: number | null;
-  category_focus: string | null;
-  last_trade_at: string | null;
-  updated_at: string | null;
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type CandidateSource = 'leaderboard' | 'manual';
+
+type Candidate = {
+  wallet_address:    string;
+  display_name:      string | null;
+  pnl_30d:           number | null;
+  pnl_7d:            number | null;
+  win_rate:          number | null;
+  trade_count:       number | null;
+  volume:            number | null;
+  avg_hold_minutes:  number | null;
+  last_trade_at:     string | null;
+  category_focus:    string | null;
+  hot_score:         number;
+  source:            CandidateSource;
 };
 
-// Compute a 0–100 hot score optimised for fast-turnover copy trading.
-// Starts from the Worker's copy_score and applies bonuses for traits
-// that make a wallet especially suitable for quick copy positions.
-function computeHotScore(m: MetricsRow): number {
-  // Base: Worker's composite copy score (already 0–100)
-  let score = m.copy_score ?? 50;
+// ─── Hot score ────────────────────────────────────────────────────────────────
+// Computes a 0–100 suitability score for fast-turnover copy trading.
+// Weights are tuned toward the ranking factors the operator specified:
+//   – fast hold time          (avg_hold_minutes)
+//   – high activity           (trade_count, last_trade_at)
+//   – positive recent PnL     (pnl_30d)
+//   – accuracy                (win_rate)
 
-  // Speed bonus — fast exits mean less slippage exposure and easier position management.
-  //   < 30 min  → +15   (scalper-tier)
-  //   < 2 h     → +10
-  //   < 6 h     → +5
-  //   ≥ 6 h     → no bonus (but no penalty — long-hold wallets just rank lower)
-  if (m.avg_hold_minutes != null) {
-    if      (m.avg_hold_minutes < 30)  score += 15;
-    else if (m.avg_hold_minutes < 120) score += 10;
-    else if (m.avg_hold_minutes < 360) score += 5;
+function hotScore(c: Omit<Candidate, 'hot_score' | 'source'>): number {
+  let s = 50; // neutral base
+
+  // Speed: lower hold → faster exits → easier position management
+  if (c.avg_hold_minutes != null) {
+    if      (c.avg_hold_minutes < 30)  s += 20;
+    else if (c.avg_hold_minutes < 120) s += 12;
+    else if (c.avg_hold_minutes < 360) s +=  6;
+    else if (c.avg_hold_minutes > 1440) s -= 10; // >1 day hold is slow
   }
 
-  // Win rate bonus (high accuracy above 55% is meaningful signal)
-  if (m.win_rate != null) {
-    if      (m.win_rate >= 0.65) score += 8;
-    else if (m.win_rate >= 0.55) score += 4;
+  // Win rate accuracy bonus
+  if (c.win_rate != null) {
+    if      (c.win_rate >= 0.70) s += 12;
+    else if (c.win_rate >= 0.60) s +=  7;
+    else if (c.win_rate >= 0.50) s +=  3;
+    else                         s -=  5;
   }
 
-  // Recent profitable 30d PnL adds confidence (cap bonus at 8 pts)
-  if (m.pnl_30d != null && m.pnl_30d > 0) {
-    score += Math.min(8, m.pnl_30d / 500);
+  // Positive 30d PnL — capped at +12 pts
+  if (c.pnl_30d != null) {
+    if      (c.pnl_30d > 0)  s += Math.min(12, c.pnl_30d / 300);
+    else if (c.pnl_30d < 0)  s -= Math.min(10, Math.abs(c.pnl_30d) / 300);
   }
 
-  // Recency bonus — active recently means the strategy is still live.
-  if (m.last_trade_at) {
-    const hoursSince = (Date.now() - new Date(m.last_trade_at).getTime()) / 3_600_000;
-    if      (hoursSince < 24)  score += 8;
-    else if (hoursSince < 72)  score += 4;
-    else if (hoursSince < 168) score += 2;
+  // Recency — active recently = still valid strategy
+  if (c.last_trade_at) {
+    const h = (Date.now() - new Date(c.last_trade_at).getTime()) / 3_600_000;
+    if      (h < 24)  s +=  8;
+    else if (h < 72)  s +=  4;
+    else if (h < 168) s +=  2;
+    else if (h > 720) s -=  5; // inactive for 30+ days
   }
 
-  // Evidence bonus — more trades = more reliable signal (cap at 5 pts)
-  if (m.trade_count != null && m.trade_count > 0) {
-    score += Math.min(5, Math.log10(m.trade_count) * 2);
+  // Evidence volume (more trades = more reliable signal)
+  if (c.trade_count != null && c.trade_count > 0) {
+    s += Math.min(6, Math.log10(c.trade_count) * 2.5);
   }
 
-  return Math.max(0, Math.min(100, score));
+  return Math.max(0, Math.min(100, Math.round(s)));
 }
 
-export async function GET() {
+// ─── Polymarket leaderboard ───────────────────────────────────────────────────
+// Fetches the top traders from Polymarket's public data API.
+// The response is an array (or { data: [...] }) of trader objects.
+// We accept multiple field names since the API has had minor format changes.
+
+type PolyEntry = Record<string, unknown>;
+
+function extractStr(e: PolyEntry, ...keys: string[]): string | null {
+  for (const k of keys) if (typeof e[k] === 'string') return e[k] as string;
+  return null;
+}
+function extractNum(e: PolyEntry, ...keys: string[]): number | null {
+  for (const k of keys) {
+    const v = e[k];
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string' && !isNaN(Number(v))) return Number(v);
+  }
+  return null;
+}
+
+async function fetchLeaderboard(): Promise<Candidate[]> {
+  const url =
+    'https://data.polymarket.com/trading-leaderboard?timeframe=1m&limit=100';
+
+  const res = await fetch(url, {
+    signal:  AbortSignal.timeout(6_000),
+    headers: { Accept: 'application/json', 'User-Agent': 'btcbot/1.0' },
+    cache:   'no-store',
+  });
+
+  if (!res.ok) throw new Error(`Polymarket leaderboard ${res.status}`);
+
+  const json = await res.json();
+  const items: PolyEntry[] = Array.isArray(json)
+    ? json
+    : (json.data ?? json.results ?? json.traders ?? []);
+
+  return items
+    .map((e): Candidate | null => {
+      // Address may be in proxyWallet, wallet, address, or pseudonymousAddress
+      const addr = extractStr(e, 'proxyWallet', 'wallet', 'address', 'pseudonymousAddress');
+      if (!addr || !addr.startsWith('0x')) return null;
+
+      const partial = {
+        wallet_address:    addr,
+        display_name:      extractStr(e, 'name', 'username', 'pseudonym'),
+        pnl_30d:           extractNum(e, 'pnl', 'profit_and_loss', 'positiveProfit', 'netProfit'),
+        pnl_7d:            null,
+        win_rate:          extractNum(e, 'winRate', 'win_rate', 'winPercentage'),
+        trade_count:       extractNum(e, 'tradeCount', 'trade_count', 'numTrades'),
+        volume:            extractNum(e, 'volume', 'totalVolume'),
+        avg_hold_minutes:  null,  // leaderboard doesn't expose hold time
+        last_trade_at:     extractStr(e, 'lastTradeAt', 'last_trade_at', 'updatedAt'),
+        category_focus:    null,
+      } as const;
+
+      // win_rate: normalise to 0–1 if API returns 0–100
+      const wr = partial.win_rate;
+      const winRateNorm = wr != null && wr > 1 ? wr / 100 : wr;
+
+      const candidate = { ...partial, win_rate: winRateNorm, source: 'leaderboard' as const };
+      return { ...candidate, hot_score: hotScore(candidate) };
+    })
+    .filter((c): c is Candidate => c !== null);
+}
+
+// ─── Manual candidate enrichment ─────────────────────────────────────────────
+// For operator-added addresses we try to fetch basic stats from Polymarket's
+// user profile endpoint. If that fails we return the address with null metrics.
+
+async function enrichManual(address: string): Promise<Candidate> {
+  const base: Omit<Candidate, 'hot_score'> = {
+    wallet_address:    address,
+    display_name:      null,
+    pnl_30d:           null,
+    pnl_7d:            null,
+    win_rate:          null,
+    trade_count:       null,
+    volume:            null,
+    avg_hold_minutes:  null,
+    last_trade_at:     null,
+    category_focus:    null,
+    source:            'manual',
+  };
+
+  try {
+    // Try Polymarket's public user profile endpoint
+    const res = await fetch(
+      `https://polymarket.com/api/profile/${address}`,
+      { signal: AbortSignal.timeout(4_000), cache: 'no-store' }
+    );
+    if (res.ok) {
+      const j = await res.json();
+      const wr = typeof j.winRate === 'number' ? j.winRate : null;
+      const enriched = {
+        ...base,
+        display_name: j.name ?? j.username ?? null,
+        pnl_30d:      j.pnl ?? j.profit_and_loss ?? null,
+        win_rate:     wr != null && wr > 1 ? wr / 100 : wr,
+        trade_count:  j.tradeCount ?? j.numTrades ?? null,
+        volume:       j.volume ?? null,
+        last_trade_at:j.lastTradeAt ?? null,
+      };
+      return { ...enriched, hot_score: hotScore(enriched) };
+    }
+  } catch {
+    // silently fall through to base with null metrics
+  }
+
+  return { ...base, hot_score: hotScore(base) };
+}
+
+// ─── Route handler ────────────────────────────────────────────────────────────
+
+export async function GET(request: Request) {
   const client = getServiceClient();
   if (!client) {
     return NextResponse.json(
@@ -99,31 +239,60 @@ export async function GET() {
     );
   }
 
+  const { searchParams } = new URL(request.url);
+  // Operator-added manual addresses from localStorage (comma-separated)
+  const manualRaw = searchParams.get('manual') ?? '';
+  const manualAddrs = manualRaw
+    .split(',')
+    .map((a) => a.trim())
+    .filter((a) => a.startsWith('0x') && a.length >= 20);
+
   try {
-    const [metricsRes, trackedRes] = await Promise.all([
-      client.from('wallet_metrics').select('*'),
-      client.from('tracked_wallets').select('wallet_address'),
-    ]);
-
-    if (metricsRes.error) {
-      return NextResponse.json(
-        { ok: false, error: metricsRes.error.message },
-        { status: 500, headers: NO_CACHE }
-      );
-    }
-
-    // Build set of already-tracked addresses for O(1) lookup
+    // Fetch tracked wallets for deduplication
+    const { data: trackedData } = await client
+      .from('tracked_wallets')
+      .select('wallet_address');
     const trackedSet = new Set(
-      (trackedRes.data ?? []).map((r: { wallet_address: string }) => r.wallet_address)
+      (trackedData ?? []).map((r: { wallet_address: string }) => r.wallet_address)
     );
 
-    // Filter to untracked wallets and compute hot score
-    const candidates = (metricsRes.data as MetricsRow[] ?? [])
-      .filter((m) => !trackedSet.has(m.wallet_address))
-      .map((m) => ({ ...m, hot_score: computeHotScore(m) }))
+    // Fetch leaderboard candidates
+    let leaderboardCandidates: Candidate[] = [];
+    let leaderboardError: string | null = null;
+    try {
+      leaderboardCandidates = await fetchLeaderboard();
+    } catch (err) {
+      leaderboardError = err instanceof Error ? err.message : 'Leaderboard unavailable';
+    }
+
+    // Enrich manual candidates (parallel, 5 s timeout total)
+    const manualCandidates: Candidate[] = await Promise.all(
+      manualAddrs.map((addr) => enrichManual(addr))
+    );
+
+    // Merge: leaderboard first, then manual extras not already in leaderboard
+    const lbAddrs = new Set(leaderboardCandidates.map((c) => c.wallet_address));
+    const merged = [
+      ...leaderboardCandidates,
+      ...manualCandidates.filter((c) => !lbAddrs.has(c.wallet_address)),
+    ];
+
+    // Remove already-tracked wallets
+    const candidates = merged
+      .filter((c) => !trackedSet.has(c.wallet_address))
       .sort((a, b) => b.hot_score - a.hot_score);
 
-    return NextResponse.json({ ok: true, rows: candidates }, { headers: NO_CACHE });
+    return NextResponse.json(
+      {
+        ok: true,
+        rows: candidates,
+        leaderboard_error: leaderboardError,
+        total_leaderboard: leaderboardCandidates.length,
+        total_manual:       manualCandidates.length,
+        total_tracked:      trackedSet.size,
+      },
+      { headers: NO_CACHE }
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500, headers: NO_CACHE });
