@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+const POLL_MS = 15_000;
 
 type CopiedPosition = {
   id: string;
@@ -53,6 +55,8 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
   const [filter, setFilter] = useState<Filter>('ALL');
   // Server-confirmed exposure totals — never limited by the table row cap
   const [exposureSummary, setExposureSummary] = useState<ExposureSummary | null>(null);
+  // Keep the current filter accessible inside event callbacks without re-subscribing
+  const filterRef = useRef<Filter>('ALL');
 
   const load = useCallback(async (statusFilter: Filter) => {
     setLoading(true);
@@ -99,16 +103,36 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
     }
   }, []);
 
+  // Keep filterRef in sync so the polling/event callbacks always use the current filter.
+  useEffect(() => { filterRef.current = filter; }, [filter]);
+
+  // Initial load + reload whenever the filter pill changes.
   useEffect(() => { load(filter); }, [load, filter]);
 
-  // Immediately reload when a Paper Restart completes so the table switches
-  // the just-cancelled positions from OPEN → CANCELLED without waiting for a
-  // manual refresh.  The exposure summary bar also refreshes via the same load.
+  // Live polling + event-driven refresh so new Worker positions appear automatically.
   useEffect(() => {
-    const onPaperReset = () => load(filter);
+    // 15 s poll — same cadence as CopyOverviewCards / CopyTradingTabs summary poll.
+    const poll = setInterval(() => load(filterRef.current), POLL_MS);
+
+    // Reload when the operator clicks the page-level Refresh button.
+    const onRefresh    = () => load(filterRef.current);
+    // Reload after Paper Restart so OPEN → CANCELLED transition is immediate.
+    const onPaperReset = () => load(filterRef.current);
+    // Reload when the browser tab regains focus (catches activity that happened
+    // while the operator was on another tab).
+    const onVisible    = () => { if (!document.hidden) load(filterRef.current); };
+
+    window.addEventListener('copy:refresh',    onRefresh);
     window.addEventListener('copy:paper-reset', onPaperReset);
-    return () => window.removeEventListener('copy:paper-reset', onPaperReset);
-  }, [load, filter]);
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(poll);
+      window.removeEventListener('copy:refresh',    onRefresh);
+      window.removeEventListener('copy:paper-reset', onPaperReset);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [load]);
 
   const totalPnl = useMemo(() =>
     rows.filter((r) => r.status !== 'OPEN').reduce((sum, r) => sum + r.pnl, 0),
@@ -245,7 +269,7 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
         </div>
       ) : (
         <div className={`copy-table-wrap${scrollable ? ' copy-table-scroll' : ''}`}>
-          <table className="copy-table">
+          <table className="copy-table" style={{ minWidth: '1050px' }}>
             <thead>
               <tr>
                 <th>Opened</th>

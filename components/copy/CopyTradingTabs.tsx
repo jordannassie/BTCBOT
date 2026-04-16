@@ -4,7 +4,8 @@
 // The bankroll cards (LiveCard + CopyPaperBankrollCard) live above this
 // component, server-rendered. This component owns everything below them.
 //
-// Tabs: Overview · Master · Wallets · Bots · Attempts · Positions · Settings
+// Tabs: Overview · Wallets · Bots · Attempts · Positions · Settings
+// (Master Strategy is now in Settings → Advanced, not a top-level tab)
 //
 // UX:
 //   - Active tab persisted to localStorage (key: 'btcbot-copy-tab')
@@ -16,7 +17,6 @@ import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 
 import CopyOverviewCards from './CopyOverviewCards';
-import LiveCopySafetyCard from './LiveCopySafetyCard';
 
 const TrackedWalletsSection  = dynamic(() => import('./TrackedWalletsSection'));
 const CopyBotsSection        = dynamic(() => import('./CopyBotsSection'));
@@ -27,7 +27,7 @@ const GlobalSettingsPanel    = dynamic(() => import('./GlobalSettingsPanel'));
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'master' | 'wallets' | 'bots' | 'attempts' | 'positions' | 'settings';
+type TabId = 'overview' | 'wallets' | 'bots' | 'attempts' | 'positions' | 'settings';
 
 const LS_KEY  = 'btcbot-copy-tab';
 const POLL_MS = 15_000;
@@ -51,7 +51,6 @@ interface TabDef {
 //   Positions → openPositionCount  (OPEN only)
 const TABS: TabDef[] = [
   { id: 'overview',  label: 'Overview' },
-  { id: 'master',    label: 'Master' },
   { id: 'wallets',   label: 'Wallets',   countKey: 'walletsActive',      countKeyTotal: 'walletsTotal' },
   { id: 'bots',      label: 'Bots',      countKey: 'activeBotCount',     countKeyTotal: 'botsTotal' },
   { id: 'attempts',  label: 'Attempts',  countKey: 'attemptsTodayCount' },
@@ -168,11 +167,8 @@ export default function CopyTradingTabs() {
         {tab === 'overview' && (
           <div className="copy-tabs-overview">
             <CopyOverviewCards />
-            <LiveCopySafetyCard />
           </div>
         )}
-
-        {tab === 'master' && <MasterStrategySection />}
 
         {tab === 'wallets' && <TrackedWalletsSection />}
 
@@ -182,7 +178,37 @@ export default function CopyTradingTabs() {
 
         {tab === 'positions' && <CopiedPositionsSection scrollable />}
 
-        {tab === 'settings' && <GlobalSettingsPanel />}
+        {tab === 'settings' && (
+          <div>
+            <GlobalSettingsPanel />
+            {/* Master Strategy — advanced template tool, collapsed by default */}
+            <details style={{ marginTop: '0.5rem' }}>
+              <summary style={{
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                color: 'rgba(248,250,252,0.38)',
+                cursor: 'pointer',
+                padding: '1rem 0.25rem',
+                userSelect: 'none',
+                borderTop: '1px solid rgba(255,255,255,0.07)',
+                listStyle: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+              }}>
+                <span style={{ fontSize: '0.65rem', display: 'inline-block', transition: 'transform 0.15s' }}>▶</span>
+                Master Strategy
+                <span style={{
+                  fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.06em',
+                  padding: '0.1em 0.5em', borderRadius: '0.3rem',
+                  background: 'rgba(248,250,252,0.06)', color: 'rgba(248,250,252,0.3)',
+                  border: '1px solid rgba(248,250,252,0.1)',
+                }}>ADVANCED</span>
+              </summary>
+              <MasterStrategySection />
+            </details>
+          </div>
+        )}
       </div>
     </div>
   );

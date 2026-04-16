@@ -924,7 +924,7 @@ export default function CopyBotsSection() {
           <EmptyBots onAdd={() => setShowForm(true)} />
         ) : (
           <div className="copy-table-wrap">
-            <table className="copy-table">
+            <table className="copy-table" style={{ minWidth: '1150px' }}>
               <thead>
                 <tr>
                   <th style={{ width: 36 }}>

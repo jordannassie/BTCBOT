@@ -186,8 +186,8 @@ export default function GlobalSettingsPanel() {
               <div className="copy-safety-label-group">
                 <span className="copy-safety-label">Live Trading Gate</span>
                 <span className="copy-safety-sublabel">
-                  Master switch for all live copy execution. Must be ON for any live bot to place real orders.
-                  Disable to safely pause all live activity without changing individual bot state.
+                  Master switch for all live copy execution. Must be ON for ARM LIVE bots to place real orders.
+                  Multiple ARM LIVE bots may run simultaneously — disable this gate to safely pause all live activity without changing individual bot settings.
                 </span>
               </div>
               <div className="copy-safety-controls">
@@ -239,6 +239,29 @@ export default function GlobalSettingsPanel() {
           </div>
         </div>
 
+        {/* ── Multi-bot live safety note ── */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '0.6rem',
+          padding: '0.7rem 0.9rem',
+          borderRadius: '0.5rem',
+          background: 'rgba(59,130,246,0.07)',
+          border: '1px solid rgba(59,130,246,0.18)',
+          marginTop: '0.75rem',
+        }}>
+          <span style={{ color: '#60a5fa', flexShrink: 0, marginTop: '0.05rem' }}><IconShield /></span>
+          <div style={{ fontSize: '0.73rem', color: 'rgba(248,250,252,0.55)', lineHeight: 1.55 }}>
+            <strong style={{ color: 'rgba(248,250,252,0.8)', fontWeight: 600 }}>Multiple ARM LIVE bots are allowed to run at the same time.</strong>
+            {' '}Live risk is managed at the system level, not per-bot:
+            <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0, listStyle: 'disc' }}>
+              <li><strong style={{ color: 'rgba(248,250,252,0.7)' }}>Live Max Exposure</strong> — caps total USD open across all live bots</li>
+              <li><strong style={{ color: 'rgba(248,250,252,0.7)' }}>Shared Bankroll</strong> — live bots draw from the same live capital pool</li>
+              <li><strong style={{ color: 'rgba(248,250,252,0.7)' }}>Emergency Stop</strong> — halts all live execution immediately, regardless of bot count</li>
+            </ul>
+          </div>
+        </div>
+
         {/* ── Exposure Controls ── */}
         <div>
           <div className="copy-safety-block-head" style={{ marginBottom: '0.75rem' }}>
@@ -246,7 +269,8 @@ export default function GlobalSettingsPanel() {
             <span className="copy-safety-block-title">Exposure Controls</span>
           </div>
           <p style={{ fontSize: '0.73rem', color: 'rgba(248,250,252,0.4)', marginBottom: '1rem', lineHeight: 1.5 }}>
-            Stop opening new positions when the total allocated capital for a mode would exceed these caps.
+            These caps apply across <em>all</em> bots combined — not per-bot. New positions are blocked when
+            the total allocated capital for a mode would exceed the cap.
             Set to <strong style={{ color: 'rgba(248,250,252,0.6)' }}>0</strong> to disable the cap (unlimited).
             Caps only block <em>new opens</em> — closing positions is always allowed.
           </p>
@@ -298,97 +322,93 @@ export default function GlobalSettingsPanel() {
               </span>
             </div>
           </div>
-          {/* Example skip log reference */}
-          <div style={{
-            marginTop: '0.75rem',
-            padding: '0.6rem 0.85rem',
-            background: 'rgba(248,250,252,0.03)',
-            border: '1px solid rgba(248,250,252,0.08)',
-            borderRadius: '0.5rem',
-            fontSize: '0.7rem',
-            color: 'rgba(248,250,252,0.4)',
-            lineHeight: 1.6,
+        </div>
+
+        {/* ── Advanced Risk Defaults — collapsed by default ── */}
+        <details style={{ marginTop: '0.25rem' }}>
+          <summary style={{
+            fontSize: '0.78rem',
+            fontWeight: 600,
+            color: 'rgba(248,250,252,0.38)',
+            cursor: 'pointer',
+            padding: '0.85rem 0',
+            userSelect: 'none',
+            borderTop: '1px solid rgba(255,255,255,0.07)',
+            listStyle: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.45rem',
           }}>
-            <strong style={{ color: 'rgba(248,250,252,0.6)' }}>Worker skip log example</strong> when cap blocks a trade:
-            <br />
-            <code style={{ fontSize: '0.68rem', color: 'rgba(248,250,252,0.55)' }}>
-              {'{ "allowed": false, "skip_reason": "exposure_cap_exceeded",'}
-              <br />
-              {'  "current_exposure": 9500, "proposed_size": 600, "would_be": 10100, "cap": 10000 }'}
-            </code>
-            <br />
-            The worker writes <code style={{ fontSize: '0.68rem' }}>&quot;exposure_cap_exceeded&quot;</code> to{' '}
-            <code style={{ fontSize: '0.68rem' }}>copy_attempts.skip_reason</code>.
-          </div>
-        </div>
+            <span style={{ fontSize: '0.65rem' }}>▶</span>
+            Advanced Risk Defaults
+          </summary>
 
-        {/* ── Risk Defaults ── */}
-        <div>
-          <div className="copy-form-title">Risk Defaults</div>
-          <div className="copy-settings-field-row">
-            <div className="copy-form-field">
-              <label className="copy-form-label">Max Total Live Exposure (USD)</label>
-              <input
-                className="copy-form-input"
-                type="number"
-                value={exposure}
-                onChange={(e) => setExposure(e.target.value)}
-                step="10"
-                min="0"
-              />
-              <span className="copy-form-hint">Portfolio-level USD cap across all live bots</span>
+          <div style={{ paddingTop: '0.5rem' }}>
+            <div className="copy-settings-field-row">
+              <div className="copy-form-field">
+                <label className="copy-form-label">Max Total Live Exposure (USD)</label>
+                <input
+                  className="copy-form-input"
+                  type="number"
+                  value={exposure}
+                  onChange={(e) => setExposure(e.target.value)}
+                  step="10"
+                  min="0"
+                />
+                <span className="copy-form-hint">Portfolio-level USD cap across all live bots</span>
+              </div>
+              <div className="copy-form-field">
+                <label className="copy-form-label">Default Slippage Cap</label>
+                <input
+                  className="copy-form-input"
+                  type="number"
+                  value={slippage}
+                  onChange={(e) => setSlippage(e.target.value)}
+                  step="0.001"
+                  min="0"
+                  max="1"
+                />
+                <span className="copy-form-hint">e.g. 0.03 = 3% tolerance</span>
+              </div>
+              <div className="copy-form-field">
+                <label className="copy-form-label">Default Position Size (USD)</label>
+                <input
+                  className="copy-form-input"
+                  type="number"
+                  value={posSize}
+                  onChange={(e) => setPosSize(e.target.value)}
+                  step="1"
+                  min="0"
+                />
+                <span className="copy-form-hint">Fallback size per trade if bot has none set</span>
+              </div>
+              <div className="copy-form-field">
+                <label className="copy-form-label">Default Max Open Positions</label>
+                <input
+                  className="copy-form-input"
+                  type="number"
+                  value={maxPos}
+                  onChange={(e) => setMaxPos(e.target.value)}
+                  step="1"
+                  min="0"
+                />
+              </div>
             </div>
-            <div className="copy-form-field">
-              <label className="copy-form-label">Default Slippage Cap</label>
-              <input
-                className="copy-form-input"
-                type="number"
-                value={slippage}
-                onChange={(e) => setSlippage(e.target.value)}
-                step="0.001"
-                min="0"
-                max="1"
-              />
-              <span className="copy-form-hint">e.g. 0.03 = 3% tolerance</span>
-            </div>
-            <div className="copy-form-field">
-              <label className="copy-form-label">Default Position Size (USD)</label>
-              <input
-                className="copy-form-input"
-                type="number"
-                value={posSize}
-                onChange={(e) => setPosSize(e.target.value)}
-                step="1"
-                min="0"
-              />
-              <span className="copy-form-hint">Fallback size per trade if bot has none set</span>
-            </div>
-            <div className="copy-form-field">
-              <label className="copy-form-label">Default Max Open Positions</label>
-              <input
-                className="copy-form-input"
-                type="number"
-                value={maxPos}
-                onChange={(e) => setMaxPos(e.target.value)}
-                step="1"
-                min="0"
-              />
+
+            <div className="copy-settings-save-row">
+              <button
+                className="copy-btn copy-btn-primary"
+                onClick={handleSaveNumeric}
+                disabled={status === 'saving'}
+              >
+                {status === 'saving' ? 'Saving…' : 'Save Risk Defaults'}
+              </button>
+              <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.25)' }}>
+                Updated: {new Date(settings.updated_at).toLocaleString()}
+              </span>
             </div>
           </div>
-        </div>
-
-        <div className="copy-settings-save-row">
-          <button
-            className="copy-btn copy-btn-primary"
-            onClick={handleSaveNumeric}
-            disabled={status === 'saving'}
-          >
-            {status === 'saving' ? 'Saving…' : 'Save Risk Defaults'}
-          </button>
-          <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.25)' }}>
-            Updated: {new Date(settings.updated_at).toLocaleString()}
-          </span>
-        </div>
+        </details>
 
       </div>
     </div>

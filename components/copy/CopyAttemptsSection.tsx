@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+const POLL_MS = 15_000;
+
 type CopyAttempt = {
   id: string;
   copy_bot_id: string;
@@ -76,7 +78,7 @@ export default function CopyAttemptsSection({ scrollable = false }: { scrollable
     setError(null);
     try {
       const [attemptsRes, botsRes] = await Promise.all([
-        fetch('/api/copy/attempts?limit=100', { cache: 'no-store' }),
+        fetch('/api/copy/attempts?limit=200', { cache: 'no-store' }),
         fetch('/api/copy/bots', { cache: 'no-store' }),
       ]);
       const attemptsPayload = await attemptsRes.json();
@@ -99,7 +101,28 @@ export default function CopyAttemptsSection({ scrollable = false }: { scrollable
     }
   }, []);
 
+  // Initial load.
   useEffect(() => { load(); }, [load]);
+
+  // Live polling + event-driven refresh so new Worker attempts appear automatically.
+  useEffect(() => {
+    // 15 s poll — same cadence as CopyOverviewCards / CopyTradingTabs.
+    const poll = setInterval(load, POLL_MS);
+
+    // Reload when the operator clicks the page-level Refresh button.
+    const onRefresh = () => load();
+    // Reload when the browser tab regains focus.
+    const onVisible = () => { if (!document.hidden) load(); };
+
+    window.addEventListener('copy:refresh', onRefresh);
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(poll);
+      window.removeEventListener('copy:refresh', onRefresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [load]);
 
   // Filter rows based on active tab
   const filtered = useMemo(() => {
@@ -184,7 +207,7 @@ export default function CopyAttemptsSection({ scrollable = false }: { scrollable
         </div>
       ) : (
         <div className={`copy-table-wrap${scrollable ? ' copy-table-scroll' : ''}`}>
-          <table className="copy-table">
+          <table className="copy-table" style={{ minWidth: '1250px' }}>
             <thead>
               <tr>
                 <th>Time</th>

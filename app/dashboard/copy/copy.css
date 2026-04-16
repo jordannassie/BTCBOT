@@ -197,10 +197,9 @@
   background: rgba(15, 23, 42, 0.65);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 1.1rem;
-  /* overflow: clip preserves border-radius appearance without blocking
-     descendant scroll containers (overflow-x: auto on .copy-table-wrap).
-     'hidden' is listed first as a fallback for browsers that predate 'clip'. */
-  overflow: hidden;
+  /* overflow: clip clips the border-radius visually without creating a scroll
+     container, so descendant .copy-table-wrap elements can still scroll
+     horizontally. Do NOT use overflow: hidden here — it clips scroll content. */
   overflow: clip;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
@@ -384,13 +383,28 @@
   overflow-x: auto;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch; /* momentum scroll on iOS */
+  /* Thin horizontal scrollbar so the operator can see it on non-Mac platforms */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(248, 250, 252, 0.12) transparent;
+}
+
+.copy-table-wrap::-webkit-scrollbar {
+  height: 5px;
+}
+
+.copy-table-wrap::-webkit-scrollbar-thumb {
+  background: rgba(248, 250, 252, 0.12);
+  border-radius: 999px;
 }
 
 .copy-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.82rem;
-  min-width: 700px;
+  /* 900 px ensures an 8–10 column table always overflows a narrow viewport
+     and triggers the horizontal scrollbar on .copy-table-wrap. Tables with
+     more columns set a larger explicit min-width via inline style. */
+  min-width: 900px;
 }
 
 .copy-table thead {
@@ -1366,6 +1380,7 @@
    and let the table header stick to the top of the scroll container. */
 .copy-table-scroll {
   max-height: 560px;
+  overflow-x: auto;  /* explicit — combined with .copy-table-wrap's overflow-x: auto */
   overflow-y: auto;
   border-radius: 0 0 10px 10px;
   /* Thin scrollbar on Webkit */

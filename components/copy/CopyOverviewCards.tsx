@@ -19,6 +19,9 @@ type Overview = {
   walletsTotal: number;         // tracked_wallets all rows
   activeBotCount: number;       // copy_bots WHERE is_enabled = true
   botsTotal: number;            // copy_bots all rows
+  paperBotsEnabled: number;     // enabled bots in PAPER mode
+  armLiveBotsCount: number;     // enabled bots with arm_live = true
+  liveActiveNow: number;        // ARM LIVE bots that can fire (live_on gate must be open)
   // ── Overall totals (PAPER + LIVE combined) ──────────────────────────────────
   openPositionCount: number;    // copy_open_position_stats RPC: COUNT all OPEN
   openExposure: number;         // copy_open_position_stats RPC: SUM(size) all OPEN
@@ -214,10 +217,12 @@ export default function CopyOverviewCards() {
   const liveOn        = data.settings?.live_on ?? false;
   const emergencyStop = data.settings?.emergency_stop ?? false;
 
-  const walletsActive = data.walletsActive ?? data.walletCount;
-  const walletsTotal  = data.walletsTotal ?? walletsActive;
-  const botsEnabled   = data.activeBotCount;
-  const botsTotal     = data.botsTotal ?? botsEnabled;
+  const walletsActive  = data.walletsActive ?? data.walletCount;
+  const walletsTotal   = data.walletsTotal ?? walletsActive;
+  const botsEnabled    = data.activeBotCount;
+  const botsTotal      = data.botsTotal ?? botsEnabled;
+  const armLiveBots    = data.armLiveBotsCount ?? 0;
+  const liveActiveNow  = data.liveActiveNow ?? 0;
 
   return (
     <>
@@ -258,6 +263,12 @@ export default function CopyOverviewCards() {
             {botsTotal > botsEnabled
               ? `${botsEnabled} enabled · ${botsTotal} total`
               : 'All bots are enabled'}
+            {armLiveBots > 0 && (
+              <span style={{ display: 'block', marginTop: '0.2rem' }}>
+                <span className="copy-stat-badge copy-stat-badge-live">ARM LIVE</span>
+                {' '}{armLiveBots} bot{armLiveBots !== 1 ? 's' : ''}
+              </span>
+            )}
           </div>
         </div>
 
@@ -340,7 +351,7 @@ export default function CopyOverviewCards() {
           </div>
         </div>
 
-        {/* ── Live On ── */}
+        {/* ── Live Trading Gate + Active Bot Counts ── */}
         <div className={`copy-stat-card${liveOn ? ' copy-stat-card-live' : ''}`}>
           <div className="copy-stat-header">
             <div className="copy-stat-icon"><IconLive /></div>
@@ -352,7 +363,16 @@ export default function CopyOverviewCards() {
               {liveOn ? 'LIVE ON' : 'OFF'}
             </div>
           </div>
-          <div className="copy-stat-helper">{liveOn ? 'Master gate is active' : 'Master gate is closed'}</div>
+          <div className="copy-stat-helper">
+            <span style={{ display: 'block' }}>
+              Live Active Bots:{' '}
+              <strong style={{ color: liveActiveNow > 0 ? '#60a5fa' : 'inherit' }}>{liveActiveNow}</strong>
+            </span>
+            <span style={{ display: 'block', marginTop: '0.15rem' }}>
+              ARM LIVE Bots:{' '}
+              <strong>{armLiveBots}</strong>
+            </span>
+          </div>
         </div>
 
         {/* ── Emergency Stop ── */}
