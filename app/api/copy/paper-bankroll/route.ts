@@ -10,6 +10,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const BOT_ID = 'copy_paper';
 const FALLBACK_DEFAULT = 1000;
 

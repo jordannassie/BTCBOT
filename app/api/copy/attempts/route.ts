@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const NO_CACHE = { 'Cache-Control': 'no-store, max-age=0' };
+
 function getServiceClient() {
   let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -12,7 +17,7 @@ function getServiceClient() {
 export async function GET(request: Request) {
   const client = getServiceClient();
   if (!client) {
-    return NextResponse.json({ ok: false, error: 'Supabase credentials missing' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'Supabase credentials missing' }, { status: 500, headers: NO_CACHE });
   }
 
   try {
@@ -26,12 +31,12 @@ export async function GET(request: Request) {
       .limit(limit);
 
     if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500, headers: NO_CACHE });
     }
 
-    return NextResponse.json({ ok: true, rows: data ?? [] });
+    return NextResponse.json({ ok: true, rows: data ?? [] }, { headers: NO_CACHE });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json({ ok: false, error: message }, { status: 500, headers: NO_CACHE });
   }
 }

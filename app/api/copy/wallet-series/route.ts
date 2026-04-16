@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // Cumulative P&L series per tracked wallet, built from closed copied_positions.
 // Used by the TrackedWalletsSection sparklines.
 
