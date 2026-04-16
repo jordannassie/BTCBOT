@@ -52,18 +52,21 @@ function getServiceClient() {
 type CandidateSource = 'leaderboard' | 'manual';
 
 type Candidate = {
-  wallet_address:    string;
-  display_name:      string | null;
-  pnl_30d:           number | null;
-  pnl_7d:            number | null;
-  win_rate:          number | null;
-  trade_count:       number | null;
-  volume:            number | null;
-  avg_hold_minutes:  number | null;
-  last_trade_at:     string | null;
-  category_focus:    string | null;
-  hot_score:         number;
-  source:            CandidateSource;
+  wallet_address:               string;
+  display_name:                 string | null;
+  pnl_30d:                      number | null;
+  pnl_7d:                       number | null;
+  pnl_daily:                    number | null;  // pnl_30d / 30
+  win_rate:                     number | null;
+  trade_count:                  number | null;
+  trades_per_day:               number | null;  // trade_count / 30 (leaderboard window)
+  volume:                       number | null;
+  avg_hold_minutes:             number | null;
+  last_trade_at:                string | null;
+  category_focus:               string | null;
+  exit_before_resolution_rate:  number | null;  // fraction 0–1
+  hot_score:                    number;
+  source:                       CandidateSource;
 };
 
 // ─── Hot score ────────────────────────────────────────────────────────────────
@@ -79,10 +82,18 @@ function hotScore(c: Omit<Candidate, 'hot_score' | 'source'>): number {
 
   // Speed: lower hold → faster exits → easier position management
   if (c.avg_hold_minutes != null) {
-    if      (c.avg_hold_minutes < 30)  s += 20;
-    else if (c.avg_hold_minutes < 120) s += 12;
-    else if (c.avg_hold_minutes < 360) s +=  6;
+    if      (c.avg_hold_minutes < 30)   s += 20;
+    else if (c.avg_hold_minutes < 120)  s += 12;
+    else if (c.avg_hold_minutes < 360)  s +=  6;
     else if (c.avg_hold_minutes > 1440) s -= 10; // >1 day hold is slow
+  }
+
+  // Exit-before-resolution rate: higher = trader actively closes early = better
+  // for copy trading (you can follow the exit before the market resolves)
+  if (c.exit_before_resolution_rate != null) {
+    if      (c.exit_before_resolution_rate >= 0.70) s += 10;
+    else if (c.exit_before_resolution_rate >= 0.50) s +=  6;
+    else if (c.exit_before_resolution_rate >= 0.30) s +=  3;
   }
 
   // Win rate accuracy bonus
@@ -159,24 +170,37 @@ async function fetchLeaderboard(): Promise<Candidate[]> {
       const addr = extractStr(e, 'proxyWallet', 'wallet', 'address', 'pseudonymousAddress');
       if (!addr || !addr.startsWith('0x')) return null;
 
-      const partial = {
-        wallet_address:    addr,
-        display_name:      extractStr(e, 'name', 'username', 'pseudonym'),
-        pnl_30d:           extractNum(e, 'pnl', 'profit_and_loss', 'positiveProfit', 'netProfit'),
-        pnl_7d:            null,
-        win_rate:          extractNum(e, 'winRate', 'win_rate', 'winPercentage'),
-        trade_count:       extractNum(e, 'tradeCount', 'trade_count', 'numTrades'),
-        volume:            extractNum(e, 'volume', 'totalVolume'),
-        avg_hold_minutes:  null,  // leaderboard doesn't expose hold time
-        last_trade_at:     extractStr(e, 'lastTradeAt', 'last_trade_at', 'updatedAt'),
-        category_focus:    null,
-      } as const;
+      const pnl30d       = extractNum(e, 'pnl', 'profit_and_loss', 'positiveProfit', 'netProfit');
+      const tradeCount   = extractNum(e, 'tradeCount', 'trade_count', 'numTrades');
+      const rawWinRate   = extractNum(e, 'winRate', 'win_rate', 'winPercentage');
+      const rawExitRate  = extractNum(e, 'earlyExitRate', 'exitBeforeResolutionRate',
+                                        'exit_before_resolution_rate', 'closeBeforeExpiry',
+                                        'unresolvedExitRate');
 
-      // win_rate: normalise to 0–1 if API returns 0–100
-      const wr = partial.win_rate;
-      const winRateNorm = wr != null && wr > 1 ? wr / 100 : wr;
+      // Leaderboard timeframe is 1 month (~30 days)
+      const pnlDaily      = pnl30d      != null ? pnl30d      / 30 : null;
+      const tradesPerDay  = tradeCount  != null ? tradeCount  / 30 : null;
+      // Normalise to 0–1 fraction if the API returns 0–100
+      const winRateNorm   = rawWinRate  != null && rawWinRate  > 1 ? rawWinRate  / 100 : rawWinRate;
+      const exitRateNorm  = rawExitRate != null && rawExitRate > 1 ? rawExitRate / 100 : rawExitRate;
 
-      const candidate = { ...partial, win_rate: winRateNorm, source: 'leaderboard' as const };
+      const candidate: Omit<Candidate, 'hot_score'> = {
+        wallet_address:              addr,
+        display_name:                extractStr(e, 'name', 'username', 'pseudonym'),
+        pnl_30d:                     pnl30d,
+        pnl_7d:                      null,
+        pnl_daily:                   pnlDaily,
+        win_rate:                    winRateNorm,
+        trade_count:                 tradeCount,
+        trades_per_day:              tradesPerDay,
+        volume:                      extractNum(e, 'volume', 'totalVolume'),
+        avg_hold_minutes:            null,  // leaderboard doesn't expose hold time
+        last_trade_at:               extractStr(e, 'lastTradeAt', 'last_trade_at', 'updatedAt'),
+        category_focus:              null,
+        exit_before_resolution_rate: exitRateNorm,
+        source:                      'leaderboard',
+      };
+
       return { ...candidate, hot_score: hotScore(candidate) };
     })
     .filter((c): c is Candidate => c !== null);
@@ -188,17 +212,20 @@ async function fetchLeaderboard(): Promise<Candidate[]> {
 
 async function enrichManual(address: string): Promise<Candidate> {
   const base: Omit<Candidate, 'hot_score'> = {
-    wallet_address:    address,
-    display_name:      null,
-    pnl_30d:           null,
-    pnl_7d:            null,
-    win_rate:          null,
-    trade_count:       null,
-    volume:            null,
-    avg_hold_minutes:  null,
-    last_trade_at:     null,
-    category_focus:    null,
-    source:            'manual',
+    wallet_address:               address,
+    display_name:                 null,
+    pnl_30d:                      null,
+    pnl_7d:                       null,
+    pnl_daily:                    null,
+    win_rate:                     null,
+    trade_count:                  null,
+    trades_per_day:               null,
+    volume:                       null,
+    avg_hold_minutes:             null,
+    last_trade_at:                null,
+    category_focus:               null,
+    exit_before_resolution_rate:  null,
+    source:                       'manual',
   };
 
   try {
@@ -209,15 +236,24 @@ async function enrichManual(address: string): Promise<Candidate> {
     );
     if (res.ok) {
       const j = await res.json();
-      const wr = typeof j.winRate === 'number' ? j.winRate : null;
-      const enriched = {
+      const rawWr  = typeof j.winRate  === 'number' ? j.winRate  : null;
+      const rawEbr = typeof j.earlyExitRate === 'number' ? j.earlyExitRate
+                   : typeof j.exitBeforeResolutionRate === 'number' ? j.exitBeforeResolutionRate
+                   : null;
+      const pnl30d     = j.pnl ?? j.profit_and_loss ?? null;
+      const tradeCount = j.tradeCount ?? j.numTrades ?? null;
+
+      const enriched: Omit<Candidate, 'hot_score'> = {
         ...base,
-        display_name: j.name ?? j.username ?? null,
-        pnl_30d:      j.pnl ?? j.profit_and_loss ?? null,
-        win_rate:     wr != null && wr > 1 ? wr / 100 : wr,
-        trade_count:  j.tradeCount ?? j.numTrades ?? null,
-        volume:       j.volume ?? null,
-        last_trade_at:j.lastTradeAt ?? null,
+        display_name:                 j.name ?? j.username ?? null,
+        pnl_30d:                      pnl30d,
+        pnl_daily:                    pnl30d     != null ? pnl30d     / 30 : null,
+        win_rate:                     rawWr      != null && rawWr > 1 ? rawWr / 100 : rawWr,
+        trade_count:                  tradeCount,
+        trades_per_day:               tradeCount != null ? tradeCount / 30 : null,
+        volume:                       j.volume ?? null,
+        last_trade_at:                j.lastTradeAt ?? null,
+        exit_before_resolution_rate:  rawEbr     != null && rawEbr > 1 ? rawEbr / 100 : rawEbr,
       };
       return { ...enriched, hot_score: hotScore(enriched) };
     }

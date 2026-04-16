@@ -20,6 +20,7 @@ import CopyOverviewCards from './CopyOverviewCards';
 
 const TrackedWalletsSection  = dynamic(() => import('./TrackedWalletsSection'));
 const HotWalletsSection      = dynamic(() => import('./HotWalletsSection'));
+const HotImportSection       = dynamic(() => import('./HotImportSection'));
 const CopyBotsSection        = dynamic(() => import('./CopyBotsSection'));
 const CopyAttemptsSection    = dynamic(() => import('./CopyAttemptsSection'));
 const CopiedPositionsSection = dynamic(() => import('./CopiedPositionsSection'));
@@ -28,7 +29,7 @@ const GlobalSettingsPanel    = dynamic(() => import('./GlobalSettingsPanel'));
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'wallets' | 'bots' | 'attempts' | 'positions' | 'settings';
+type TabId = 'overview' | 'wallets' | 'hot' | 'bots' | 'attempts' | 'positions' | 'settings';
 
 const LS_KEY  = 'btcbot-copy-tab';
 const POLL_MS = 15_000;
@@ -52,8 +53,9 @@ interface TabDef {
 //   Positions → openPositionCount  (OPEN only)
 const TABS: TabDef[] = [
   { id: 'overview',  label: 'Overview' },
-  { id: 'wallets',   label: 'Wallets',   countKey: 'walletsActive',      countKeyTotal: 'walletsTotal' },
-  { id: 'bots',      label: 'Bots',      countKey: 'activeBotCount',     countKeyTotal: 'botsTotal' },
+  { id: 'wallets',   label: 'Wallets',   countKey: 'walletsActive', countKeyTotal: 'walletsTotal' },
+  { id: 'hot',       label: 'HOT' },
+  { id: 'bots',      label: 'Bots',      countKey: 'activeBotCount', countKeyTotal: 'botsTotal' },
   { id: 'attempts',  label: 'Attempts',  countKey: 'attemptsTodayCount' },
   { id: 'positions', label: 'Positions', countKey: 'openPositionCount' },
   { id: 'settings',  label: 'Settings' },
@@ -177,6 +179,8 @@ export default function CopyTradingTabs() {
             <HotWalletsSection />
           </div>
         )}
+
+        {tab === 'hot' && <HotImportSection />}
 
         {tab === 'bots' && <CopyBotsSection />}
 

@@ -25,18 +25,21 @@ const POLL_MS          = 90_000; // 90 s — leaderboard changes slowly
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type HotWallet = {
-  wallet_address:    string;
-  display_name:      string | null;
-  hot_score:         number;
-  pnl_30d:           number | null;
-  pnl_7d:            number | null;
-  win_rate:          number | null;
-  avg_hold_minutes:  number | null;
-  trade_count:       number | null;
-  volume:            number | null;
-  last_trade_at:     string | null;
-  category_focus:    string | null;
-  source:            'leaderboard' | 'manual';
+  wallet_address:               string;
+  display_name:                 string | null;
+  hot_score:                    number;
+  pnl_30d:                      number | null;
+  pnl_7d:                       number | null;
+  pnl_daily:                    number | null;
+  win_rate:                     number | null;
+  avg_hold_minutes:             number | null;
+  trade_count:                  number | null;
+  trades_per_day:               number | null;
+  volume:                       number | null;
+  last_trade_at:                string | null;
+  category_focus:               string | null;
+  exit_before_resolution_rate:  number | null;
+  source:                       'leaderboard' | 'manual';
 };
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -58,22 +61,6 @@ function fmtCompact(v: number | null): string {
   return `${prefix}${abs.toFixed(2)}`;
 }
 
-function fmtPct(v: number | null): string {
-  if (v == null) return '—';
-  return `${(v * 100).toFixed(1)}%`;
-}
-
-function fmtRelative(d: string | null): string {
-  if (!d) return '—';
-  const diff = Date.now() - new Date(d).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1)  return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24)  return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
-
 function truncate(addr: string): string {
   return addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
 }
@@ -83,6 +70,17 @@ function pnlClass(v: number | null): string {
   return v >= 0 ? 'copy-num-pos' : 'copy-num-neg';
 }
 
+function fmtTradesPerDay(v: number | null): string {
+  if (v == null) return '—';
+  if (v < 1) return `${(v * 10).toFixed(1)}/10d`;
+  return `${v.toFixed(1)}/d`;
+}
+
+function fmtExitRate(v: number | null): string {
+  if (v == null) return '—';
+  return `${(v * 100).toFixed(0)}%`;
+}
+
 function holdClass(minutes: number | null): string {
   if (minutes == null) return 'copy-td-muted';
   if (minutes < 60)   return 'copy-num-pos';
@@ -90,12 +88,11 @@ function holdClass(minutes: number | null): string {
   return 'copy-td-muted';
 }
 
-function winColor(rate: number | null): string {
-  if (rate == null) return 'inherit';
-  const pct = rate * 100;
-  if (pct >= 55) return '#34d399';
-  if (pct >= 40) return '#fbbf24';
-  return '#f87171';
+function exitRateColor(rate: number | null): string {
+  if (rate == null) return 'rgba(248,250,252,0.3)';
+  if (rate >= 0.60) return '#34d399';  // green — actively exits early
+  if (rate >= 0.35) return '#fbbf24';  // amber — moderate
+  return '#f87171';                    // red — rarely exits before resolution
 }
 
 function hotScoreClass(score: number): string {
@@ -507,19 +504,28 @@ export default function HotWalletsSection() {
       ) : (
         /* ── Ranked table ── */
         <div className="copy-table-wrap copy-table-scroll">
-          <table className="copy-table" style={{ minWidth: '1120px' }}>
+          <table className="copy-table copy-hot-table" style={{ minWidth: '900px' }}>
             <thead>
               <tr>
                 <th className="copy-th-rank">#</th>
-                <th style={{ minWidth: 200 }}>Wallet</th>
-                <th style={{ minWidth: 130 }} title="Composite fast-copy suitability score (0–100)">Hot Score</th>
-                <th title="Average hold time (fast exits = more copy-friendly). Only available for manually-enriched profiles.">Avg Hold</th>
-                <th title="Total trades recorded">Trades</th>
-                <th>Win Rate</th>
-                <th>30d P/L</th>
-                <th>Volume</th>
-                <th>Last Active</th>
-                <th style={{ minWidth: 150 }}>Actions</th>
+                <th style={{ minWidth: 190 }}>Wallet</th>
+                <th
+                  style={{ minWidth: 130 }}
+                  title="Fast-copy suitability score (0–100). Factors: hold speed, exit-before-resolution rate, win rate, recent P/L, recency."
+                >
+                  Fast-Copy Score
+                </th>
+                <th title="Estimated daily profit (30d P/L ÷ 30)">Daily Profit</th>
+                <th title="30-day total trading volume">Volume</th>
+                <th title="Average trades per day over the leaderboard window">Trades/Day</th>
+                <th title="Average hold time. Shorter = easier to copy-exit before resolution.">Avg Hold</th>
+                <th
+                  className="copy-hot-col-ebr"
+                  title="Fraction of trades closed before market resolution. Higher = trader actively exits early."
+                >
+                  Exit-Before-Res%
+                </th>
+                <th style={{ minWidth: 130 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -540,7 +546,10 @@ export default function HotWalletsSection() {
                         <SourceBadge source={w.source} />
                         <div>
                           {w.display_name && (
-                            <div className="copy-td-name" style={{ fontWeight: 600, fontSize: '0.8rem', color: '#f8fafc' }}>
+                            <div
+                              className="copy-td-name"
+                              style={{ fontWeight: 600, fontSize: '0.8rem', color: '#f8fafc' }}
+                            >
                               {w.display_name}
                             </div>
                           )}
@@ -559,37 +568,32 @@ export default function HotWalletsSection() {
                       </div>
                     </td>
 
-                    {/* Hot score bar */}
+                    {/* Fast-copy score bar */}
                     <td><HotScoreBar score={w.hot_score} /></td>
+
+                    {/* Daily profit (estimated) */}
+                    <td className={`copy-td-num ${pnlClass(w.pnl_daily)}`}>
+                      {fmtCompact(w.pnl_daily)}
+                    </td>
+
+                    {/* Volume */}
+                    <td className="copy-td-num copy-td-muted">{fmtCompact(w.volume)}</td>
+
+                    {/* Trades per day */}
+                    <td className="copy-td-num copy-td-muted">
+                      {fmtTradesPerDay(w.trades_per_day)}
+                    </td>
 
                     {/* Avg hold */}
                     <td className={`copy-td-num ${holdClass(w.avg_hold_minutes)}`}>
                       {fmtHold(w.avg_hold_minutes)}
                     </td>
 
-                    {/* Trade count */}
-                    <td className="copy-td-num copy-td-muted">
-                      {w.trade_count != null ? w.trade_count.toLocaleString() : '—'}
-                    </td>
-
-                    {/* Win rate */}
-                    <td className="copy-td-num">
-                      {w.win_rate != null ? (
-                        <span style={{ color: winColor(w.win_rate), fontWeight: 600 }}>
-                          {fmtPct(w.win_rate)}
-                        </span>
-                      ) : <span className="copy-td-muted">—</span>}
-                    </td>
-
-                    {/* P/L */}
-                    <td className={`copy-td-num ${pnlClass(w.pnl_30d)}`}>{fmtCompact(w.pnl_30d)}</td>
-
-                    {/* Volume */}
-                    <td className="copy-td-num copy-td-muted">{fmtCompact(w.volume)}</td>
-
-                    {/* Last active */}
-                    <td className="copy-td-muted" style={{ fontSize: '0.71rem', whiteSpace: 'nowrap' }}>
-                      {fmtRelative(w.last_trade_at)}
+                    {/* Exit-before-resolution rate */}
+                    <td className="copy-td-num copy-hot-col-ebr">
+                      <span style={{ color: exitRateColor(w.exit_before_resolution_rate), fontWeight: 600 }}>
+                        {fmtExitRate(w.exit_before_resolution_rate)}
+                      </span>
                     </td>
 
                     {/* Actions */}

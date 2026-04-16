@@ -2811,3 +2811,416 @@
   color: rgba(248, 250, 252, 0.28);
   border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
+
+/* ─── Hot Wallets table — column modifiers ──────────────────────────────────── */
+
+/* Exit-before-resolution column: hide on narrow viewports to keep table tidy */
+.copy-hot-col-ebr {
+  white-space: nowrap;
+}
+
+/* Mobile: hide lower-priority columns so the essential ones fit without scroll */
+@media (max-width: 680px) {
+  .copy-hot-table .copy-hot-col-ebr {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  /* On very small screens only show: rank, wallet, fast-copy score, daily profit, actions */
+  .copy-hot-table th:nth-child(5),  /* Volume */
+  .copy-hot-table td:nth-child(5),
+  .copy-hot-table th:nth-child(6),  /* Trades/Day */
+  .copy-hot-table td:nth-child(6),
+  .copy-hot-table th:nth-child(7),  /* Avg Hold */
+  .copy-hot-table td:nth-child(7) {
+    display: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HOT TAB — Manual Leaderboard Import
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* HOT tab button — amber accent so it stands out from sibling tabs */
+.copy-tabs-btn[aria-controls="copy-tab-panel-hot"] {
+  color: #fbbf24;
+}
+.copy-tabs-btn[aria-controls="copy-tab-panel-hot"]:hover {
+  color: #fde68a;
+}
+.copy-tabs-btn[aria-controls="copy-tab-panel-hot"].active {
+  color: #fbbf24;
+  border-bottom-color: #fbbf24;
+}
+
+/* Section wrapper */
+.copy-hot-import-section {
+  padding-bottom: 2rem;
+}
+
+/* "MANUAL IMPORT" badge next to the title */
+.copy-hot-import-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  padding: 0.15em 0.55em;
+  border-radius: 0.35rem;
+  background: rgba(251, 191, 36, 0.08);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  margin-left: 0.6rem;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* Subtitle below the section title */
+.copy-hot-import-subtitle {
+  padding: 0.25rem 1.5rem 1rem;
+  font-size: 0.74rem;
+  color: rgba(248, 250, 252, 0.32);
+  line-height: 1.55;
+}
+
+/* ── 2-column layout ── */
+.copy-hot-import-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  padding: 0 1.5rem 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 780px) {
+  .copy-hot-import-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Left column ── */
+.copy-hot-import-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.copy-hot-import-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 0.6);
+  letter-spacing: 0.04em;
+}
+
+.copy-hot-import-textarea {
+  width: 100%;
+  min-height: 320px;
+  resize: vertical;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.6rem;
+  padding: 0.85rem 1rem;
+  font-size: 0.72rem;
+  font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', monospace;
+  color: rgba(248, 250, 252, 0.75);
+  line-height: 1.55;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.copy-hot-import-textarea::placeholder {
+  color: rgba(248, 250, 252, 0.18);
+  font-family: inherit;
+}
+
+.copy-hot-import-textarea:focus {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.copy-hot-import-left-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.copy-hot-import-left-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.copy-hot-import-char-count {
+  font-size: 0.68rem;
+  color: rgba(248, 250, 252, 0.2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Parsing guide block */
+.copy-hot-import-guide {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.copy-hot-import-guide-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  color: rgba(248, 250, 252, 0.25);
+  text-transform: uppercase;
+  margin-bottom: 0.1rem;
+}
+
+.copy-hot-import-guide-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.68rem;
+  color: rgba(248, 250, 252, 0.35);
+}
+
+/* ── Right column ── */
+.copy-hot-import-right {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 320px;
+}
+
+/* Empty / placeholder state */
+.copy-hot-import-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 220px;
+  padding: 2rem;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 0.6rem;
+  text-align: center;
+}
+
+.copy-hot-import-placeholder-icon {
+  color: rgba(248, 250, 252, 0.15);
+}
+
+.copy-hot-import-placeholder-text {
+  font-size: 0.77rem;
+  color: rgba(248, 250, 252, 0.3);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.copy-hot-import-placeholder-text strong {
+  color: rgba(248, 250, 252, 0.55);
+  font-weight: 700;
+}
+
+/* Stats chips row */
+.copy-hot-import-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.copy-hot-stat {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.2em 0.6em;
+  border-radius: 0.35rem;
+  letter-spacing: 0.04em;
+}
+
+.copy-hot-stat-total {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(248, 250, 252, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.copy-hot-stat-new {
+  background: rgba(96, 165, 250, 0.08);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.18);
+}
+
+.copy-hot-stat-dup {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(248, 250, 252, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.copy-hot-stat-added {
+  background: rgba(52, 211, 153, 0.08);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.18);
+}
+
+/* Scrollable candidate list */
+.copy-hot-import-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 420px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* List header row (select-all) */
+.copy-hot-import-list-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.copy-hot-import-list-head-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  color: rgba(248, 250, 252, 0.25);
+  text-transform: uppercase;
+}
+
+/* Individual candidate row */
+.copy-hot-import-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.1s;
+}
+
+.copy-hot-import-row:last-child {
+  border-bottom: none;
+}
+
+.copy-hot-import-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.copy-hot-import-row-added {
+  background: rgba(52, 211, 153, 0.04);
+}
+
+.copy-hot-import-row-dup {
+  opacity: 0.45;
+}
+
+.copy-hot-import-row-error {
+  background: rgba(248, 113, 113, 0.04);
+}
+
+/* Checkbox */
+.copy-hot-import-check-wrap {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.copy-hot-import-check {
+  width: 14px;
+  height: 14px;
+  accent-color: #fbbf24;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.copy-hot-import-check:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+/* Identity block */
+.copy-hot-import-identity {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.copy-hot-import-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.copy-hot-import-addr {
+  display: flex;
+  align-items: center;
+  font-size: 0.7rem;
+  color: rgba(248, 250, 252, 0.38);
+}
+
+/* Status label (right side of row) */
+.copy-hot-import-row-status {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.copy-hot-import-status-adding {
+  color: rgba(248, 250, 252, 0.4);
+  animation: copy-hot-pulse 1s ease-in-out infinite;
+}
+
+@keyframes copy-hot-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.9; }
+}
+
+.copy-hot-import-status-added {
+  color: #34d399;
+}
+
+.copy-hot-import-status-error {
+  color: #f87171;
+}
+
+.copy-hot-import-status-dup {
+  color: rgba(248, 250, 252, 0.22);
+  font-weight: 400;
+}
+
+/* Action buttons footer */
+.copy-hot-import-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding-top: 0.25rem;
+}
+
+/* All-done note */
+.copy-hot-import-done {
+  font-size: 0.75rem;
+  color: rgba(248, 250, 252, 0.45);
+  line-height: 1.55;
+  padding: 0.5rem 0;
+}
