@@ -76,8 +76,30 @@ function fmtRelative(d: string | null | undefined): string {
 const truncate = (addr: string) =>
   addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
 
+// Deterministic random name derived from the wallet address.
+// Same address always produces the same name — no DB write needed.
+const NAME_ADJ = [
+  'Shadow', 'Neon', 'Ghost', 'Iron', 'Silver', 'Dark', 'Swift', 'Bold',
+  'Quiet', 'Frost', 'Slick', 'Deep', 'Sharp', 'Wild', 'Jade', 'Steel',
+  'Copper', 'Golden', 'Crimson', 'Azure', 'Onyx', 'Ivory', 'Ember', 'Blind',
+];
+const NAME_NOUN = [
+  'Whale', 'Wolf', 'Eagle', 'Hawk', 'Shark', 'Bull', 'Bear', 'Fox',
+  'Lynx', 'Raven', 'Falcon', 'Viper', 'Orca', 'Jaguar', 'Titan',
+  'Phantom', 'Cipher', 'Scout', 'Drifter', 'Nomad', 'Ranger', 'Stalker',
+  'Pilgrim', 'Alpha',
+];
+
+function generateWalletName(address: string): string {
+  let h = 0;
+  for (let i = 0; i < address.length; i++) {
+    h = Math.imul(h * 31 + address.charCodeAt(i), 1) >>> 0;
+  }
+  return `${NAME_ADJ[h % NAME_ADJ.length]} ${NAME_NOUN[(h >>> 4) % NAME_NOUN.length]}`;
+}
+
 const walletLabel = (w: WalletRow) =>
-  w.display_name || truncate(w.wallet_address);
+  w.display_name || generateWalletName(w.wallet_address);
 
 function scoreColor(score: number | null | undefined): string {
   if (score == null) return 'copy-score-none';
@@ -659,7 +681,7 @@ export default function TrackedWalletsSection() {
                           rel="noopener noreferrer"
                           title="View on Polymarket"
                         >
-                          {w.display_name ?? <span style={{ opacity: 0.45 }}>Unnamed</span>}
+                          {w.display_name ?? generateWalletName(w.wallet_address)}
                           <ExternalLinkIcon />
                         </a>
                       </div>
