@@ -761,6 +761,12 @@ export default function CopyBotsSection() {
   const liveStopped = bots.filter((b) => getLiveReadiness(b, globalSettings) === 'LIVE_STOPPED').length;
   const paperOnly   = bots.filter((b) => getLiveReadiness(b, globalSettings) === 'PAPER_ONLY').length;
 
+  // Enabled bots always float above disabled ones; within each tier preserve API order
+  const sortedBots = useMemo(
+    () => [...bots].sort((a, b) => (b.is_enabled ? 1 : 0) - (a.is_enabled ? 1 : 0)),
+    [bots]
+  );
+
   return (
     <>
       {/* Edit modal (single bot) */}
@@ -948,7 +954,7 @@ export default function CopyBotsSection() {
                 </tr>
               </thead>
               <tbody>
-                {bots.map((bot) => {
+                {sortedBots.map((bot) => {
                   const readiness    = getLiveReadiness(bot, globalSettings);
                   const isDeleting   = deletingId === bot.id;
                   const isSelected   = selectedIds.has(bot.id);

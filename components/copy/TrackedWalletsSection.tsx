@@ -440,6 +440,10 @@ export default function TrackedWalletsSection() {
 
   const sorted = useMemo(() => {
     return [...wallets].sort((a, b) => {
+      // Active wallets always float above inactive ones
+      const activeDiff = (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0);
+      if (activeDiff !== 0) return activeDiff;
+      // Within same active tier, apply the chosen metric sort
       const av = a.metrics?.[sortKey] ?? -Infinity;
       const bv = b.metrics?.[sortKey] ?? -Infinity;
       return sortDir === 'desc' ? (bv as number) - (av as number) : (av as number) - (bv as number);
