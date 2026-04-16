@@ -2743,3 +2743,71 @@
   opacity: 0.35;
   cursor: not-allowed;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Hot Wallets — Discovery / Ranking Section
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Section top border accent — amber glow to distinguish from Tracked Wallets */
+.copy-hot-wallets-section {
+  border-top: 2px solid rgba(251, 191, 36, 0.18);
+}
+
+/* DISCOVERY badge next to the section title */
+.copy-hot-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.15em 0.55em;
+  border-radius: 0.35rem;
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.22);
+  margin-left: 0.5rem;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* Subtitle line below the header */
+.copy-hot-subtitle {
+  padding: 0 1.5rem 0.85rem;
+  font-size: 0.74rem;
+  color: rgba(248, 250, 252, 0.32);
+  line-height: 1.55;
+}
+
+/* Actions cell — button group per row */
+.copy-hot-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: nowrap;
+}
+
+/* "✓ Tracked" confirmation label after adding */
+.copy-hot-added {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #34d399;
+  white-space: nowrap;
+}
+
+/* Ignore button — dimmer than normal secondary so it doesn't compete visually */
+.copy-hot-ignore-btn {
+  color: rgba(248, 250, 252, 0.28) !important;
+}
+
+.copy-hot-ignore-btn:hover {
+  color: rgba(248, 250, 252, 0.55) !important;
+}
+
+/* Footer note shown when some wallets are hidden */
+.copy-hot-ignore-note {
+  padding: 0.6rem 1.5rem;
+  font-size: 0.72rem;
+  color: rgba(248, 250, 252, 0.28);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
