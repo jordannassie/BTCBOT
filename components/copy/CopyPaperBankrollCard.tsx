@@ -272,8 +272,19 @@ export default function CopyPaperBankrollCard() {
         // 1. Update balance / PnL in-place — no loading flash
         setState((prev) => prev ? { ...prev, balance: newBalance, pnl: 0 } : prev);
 
-        // 2. Set capInput and paper exposure optimistically to zero so the card
-        //    is visually instant even before the server re-fetch completes.
+        // 2. Apply the API-confirmed post-reset state directly.
+        //    The server returned positions_archived = N, meaning those rows are
+        //    committed as CANCELLED.  Open exposure is therefore 0 by definition.
+        //
+        //    We deliberately do NOT call loadExposure() here.  A fresh
+        //    /api/copy/exposure call immediately after the archive races against:
+        //      a) the worker re-opening paper positions in the same window
+        //      b) any transient lag between the archive UPDATE and the RPC read
+        //    Either race can return a non-zero count and overwrite the zeros,
+        //    which is exactly the "old values survive restart" bug.
+        //
+        //    The 15-second periodic poll (shared with CopyOverviewCards) will
+        //    reconcile both components to DB truth in one cadence without racing.
         setCapInput(String(newCap));
         setPaperExposure({
           count: 0,
@@ -283,22 +294,15 @@ export default function CopyPaperBankrollCard() {
           remaining: newCap,
         });
 
-        // 3. AWAIT the server-confirmed exposure refetch.
-        //    We do NOT use void here: keeping setFreshStarting=true until this
-        //    resolves means the card stays in "Restarting…" mode until the DB
-        //    confirms the cancellations.  If loadExposure returns non-zero (e.g.
-        //    the cancel partially failed), the display will reflect reality
-        //    rather than silently showing stale optimistic zeros.
-        await loadExposure();
-
-        // 4. Reset sparkline to a fresh season baseline
+        // 3. Reset sparkline to a fresh season baseline
         clearBankrollHistory('paper');
         appendBankrollPoint('paper', newBalance);
         setSparkPoints(getBankrollHistory('paper'));
 
-        // 5. Signal peer components (Overview, Positions table) to hard-refresh.
-        //    Both listen for this event and trigger their own re-fetch immediately
-        //    so the entire dashboard reflects the post-reset state at once.
+        // 4. Signal peer components immediately — dispatch BEFORE feedback so the
+        //    Overview and Positions table trigger their own re-fetch at the same
+        //    moment the Paper card is already showing zeros.  Both components poll
+        //    at 15 s and will sync to actual DB state on the next cycle.
         window.dispatchEvent(new CustomEvent('copy:paper-reset'));
 
         showFeedback(
