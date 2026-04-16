@@ -1980,3 +1980,61 @@
 .strategies-callout-cta:hover {
   box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
 }
+
+/* ─── Live card — LIVE ON active visual state ──────────────────────────────
+   Applied when isEnabled = true. Overrides the blue .live-card-featured
+   styles with a strong green border + glow so the operator cannot miss that
+   real-money trading is authorised at a glance.                            ── */
+
+.live-card--live-on {
+  border-color: rgba(52, 211, 153, 0.7);
+  box-shadow:
+    0 0 0 1px rgba(52, 211, 153, 0.14),
+    0 20px 55px rgba(16, 185, 129, 0.28),
+    0 0 48px rgba(16, 185, 129, 0.08);
+}
+
+/* ── LIVE ON prominence banner ─────────────────────────────────────────── */
+
+.live-active-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.9rem;
+  margin: 0.65rem 0 0;
+  background: rgba(16, 185, 129, 0.09);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 0.65rem;
+}
+
+.live-active-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #34d399;
+  flex-shrink: 0;
+  /* Reuse the existing livePulse keyframe defined in this file */
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+
+.live-active-text {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.live-active-label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #34d399;
+  line-height: 1;
+}
+
+.live-active-sub {
+  font-size: 0.7rem;
+  color: rgba(52, 211, 153, 0.55);
+  font-weight: 500;
+}

@@ -273,7 +273,7 @@ export default function LiveCard() {
   }
 
   return (
-    <div className="profile-card live-card live-card-featured">
+    <div className={`profile-card live-card live-card-featured${isEnabled ? ' live-card--live-on' : ''}`}>
       <div className="live-card-header">
         <span className="live-card-label">LIVE BANKROLL</span>
         <div className="pnl-indicator">
@@ -281,6 +281,17 @@ export default function LiveCard() {
           <span>LIVE</span>
         </div>
       </div>
+
+      {/* ── LIVE ON banner — rendered only when the master toggle is enabled ── */}
+      {isEnabled && (
+        <div className="live-active-banner" role="status" aria-label="Live trading is active">
+          <span className="live-active-dot" aria-hidden="true" />
+          <div className="live-active-text">
+            <span className="live-active-label">LIVE ON</span>
+            <span className="live-active-sub">Real-money trading active</span>
+          </div>
+        </div>
+      )}
 
       <div className="live-balance">
         <div className="pnl-amount">
