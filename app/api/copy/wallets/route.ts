@@ -90,14 +90,22 @@ export async function POST(request: Request) {
     const addr = wallet_address.trim();
     const name = display_name?.trim() || null;
 
+    // Use upsert so a previously-deleted wallet (or one that still exists in the
+    // DB) can always be re-added without a unique-constraint error.
+    // ON CONFLICT (wallet_address): restore is_active and update display_name /
+    // source if provided; all other fields (tags, avatar_url, etc.) are left
+    // as-is so existing metadata isn't wiped on re-add.
     const { data, error } = await client
       .from('tracked_wallets')
-      .insert({
-        wallet_address: addr,
-        display_name: name,
-        source: source || 'manual',
-        is_active: is_active !== false,
-      })
+      .upsert(
+        {
+          wallet_address: addr,
+          display_name:   name,
+          source:         source || 'manual',
+          is_active:      is_active !== false,
+        },
+        { onConflict: 'wallet_address' }
+      )
       .select('*')
       .single();
 
