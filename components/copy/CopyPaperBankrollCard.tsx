@@ -51,6 +51,8 @@ export default function CopyPaperBankrollCard() {
   // Starts as null (loading); always becomes an object after first fetch attempt.
   const [paperExposure, setPaperExposure] = useState<ExposureMetrics | null>(null);
   const [exposureLoading, setExposureLoading] = useState(true);
+  // Count of enabled bots in PAPER mode — from /api/copy/summary (same poll).
+  const [paperBotsEnabled, setPaperBotsEnabled] = useState<number | null>(null);
 
   // Input for new default amount
   const [inputValue, setInputValue] = useState('');
@@ -86,6 +88,7 @@ export default function CopyPaperBankrollCard() {
           const remaining = cap > 0 ? Math.max(0, cap - exposure) : null;
           return { count, exposure, avg, cap, remaining };
         });
+        setPaperBotsEnabled(Number(p.paperBotsEnabled ?? 0));
       }
     } catch { /* network error — leave previous state as-is */ }
   }, []);
@@ -137,7 +140,13 @@ export default function CopyPaperBankrollCard() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    // Also kick off loadExposure immediately so bot counts (paperBotsEnabled)
+    // and exposure metrics from the summary endpoint are available right away,
+    // without waiting for the first 15-second poll tick.
+    void loadExposure();
+  }, [load, loadExposure]);
 
   // Keep exposure numbers fresh at the same cadence as the Overview cards
   // (copy_open_exposure_by_mode RPC, 15 s poll + visibility wake-up).
@@ -425,6 +434,24 @@ export default function CopyPaperBankrollCard() {
               )}
             </>
           )}
+        </div>
+
+        {/* Active Paper Bots status line */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginTop: '0.45rem',
+          paddingTop: '0.4rem',
+          borderTop: '1px solid rgba(255,255,255,0.05)',
+          fontSize: '0.72rem',
+        }}>
+          <span style={{ color: 'rgba(248,250,252,0.35)' }}>Active Paper Bots</span>
+          <span style={{
+            fontWeight: 700,
+            color: paperBotsEnabled !== null && paperBotsEnabled > 0 ? '#34d399' : 'rgba(248,250,252,0.45)',
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            {paperBotsEnabled !== null ? paperBotsEnabled : '—'}
+          </span>
         </div>
 
         {/* Cap + remaining rows */}

@@ -102,6 +102,9 @@ export default function LiveCard() {
   // so the block always renders regardless of API success.
   const [liveExposure, setLiveExposure] = useState<ExposureMetrics | null>(null);
   const [exposureLoading, setExposureLoading] = useState(true);
+  // Count of enabled bots with arm_live = true — from /api/copy/summary.
+  // liveActiveNow is computed on render: isEnabled ? armLiveBots : 0.
+  const [armLiveBots, setArmLiveBots] = useState<number | null>(null);
   // Inline live-cap editor
   const [capInput, setCapInput] = useState('0');
   const [savingCap, setSavingCap] = useState(false);
@@ -111,9 +114,11 @@ export default function LiveCard() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const [settingsRes, exposureRes] = await Promise.all([
+      const [settingsRes, exposureRes, summaryRes] = await Promise.all([
         fetch('/api/bot-settings?bot_id=live', { cache: 'no-store' }),
         fetch('/api/copy/exposure', { cache: 'no-store' }),
+        // Summary provides arm_live bot counts for the status lines.
+        fetch('/api/copy/summary', { cache: 'no-store' }),
       ]);
 
       if (settingsRes.ok) {
@@ -151,6 +156,14 @@ export default function LiveCard() {
         setLiveExposure(zeroExposure);
       }
       setExposureLoading(false);
+
+      // ARM LIVE bot counts — non-fatal; previous state preserved on error.
+      if (summaryRes.ok) {
+        try {
+          const sumPayload = await summaryRes.json();
+          if (sumPayload.ok) setArmLiveBots(sumPayload.armLiveBotsCount ?? 0);
+        } catch { /* ignore — counts are non-critical */ }
+      }
     } finally {
       setLoading(false);
     }
@@ -501,6 +514,39 @@ export default function LiveCard() {
         <p className="operator-subtitle" style={{ marginTop: '-0.35rem' }}>
           Master toggle that authorizes strategies to go LIVE when ARM LIVE is enabled.
         </p>
+
+        {/* ── Bot status lines ── */}
+        {(() => {
+          const armCount      = armLiveBots ?? null;
+          const liveNow       = armCount !== null && isEnabled ? armCount : 0;
+          const liveNowColor  = liveNow > 0 ? '#34d399' : 'rgba(248,250,252,0.35)';
+          const armColor      = armCount !== null && armCount > 0 ? '#f8fafc' : 'rgba(248,250,252,0.35)';
+          return (
+            <div style={{
+              marginTop: '0.65rem',
+              padding: '0.55rem 0.75rem',
+              background: 'rgba(248,250,252,0.03)',
+              border: '1px solid rgba(248,250,252,0.07)',
+              borderRadius: '0.5rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.3rem',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
+                <span style={{ color: 'rgba(248,250,252,0.35)' }}>ARM LIVE Bots</span>
+                <span style={{ fontWeight: 700, color: armColor, fontVariantNumeric: 'tabular-nums' }}>
+                  {armCount !== null ? armCount : '—'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
+                <span style={{ color: 'rgba(248,250,252,0.35)' }}>Live Active Now</span>
+                <span style={{ fontWeight: 700, color: liveNowColor, fontVariantNumeric: 'tabular-nums' }}>
+                  {armCount !== null ? liveNow : '—'}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <button

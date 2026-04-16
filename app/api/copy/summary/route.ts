@@ -30,7 +30,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // Bumped on every fix to this route — visible in response JSON.
-const ROUTE_VERSION = 'v5-mode-split';
+const ROUTE_VERSION = 'v6-bot-counts';
 
 function makeClient() {
   let url = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim();
@@ -58,8 +58,10 @@ export async function GET() {
       totalWalletsRes,
       enabledBotsRes,
       totalBotsRes,
-      openStatsRes,   // overall totals (PAPER + LIVE combined)
-      modeStatsRes,   // per-mode split — drives the labelled overview cards
+      paperBotsRes,    // enabled bots in PAPER mode → "Active Paper Bots"
+      armLiveBotsRes,  // enabled bots with arm_live = true → "ARM LIVE Bots"
+      openStatsRes,    // overall totals (PAPER + LIVE combined)
+      modeStatsRes,    // per-mode split — drives the labelled overview cards
       attemptsTodayRes,
       settingsRes,
     ] = await Promise.all([
@@ -67,6 +69,10 @@ export async function GET() {
       client.from('tracked_wallets').select('*', { count: 'exact', head: true }),
       client.from('copy_bots').select('*', { count: 'exact', head: true }).eq('is_enabled', true),
       client.from('copy_bots').select('*', { count: 'exact', head: true }),
+      // Enabled bots in PAPER mode — shown on the Paper Bankroll card.
+      client.from('copy_bots').select('*', { count: 'exact', head: true }).eq('is_enabled', true).eq('mode', 'PAPER'),
+      // Enabled bots with arm_live = true — shown on the Live Bankroll card.
+      client.from('copy_bots').select('*', { count: 'exact', head: true }).eq('is_enabled', true).eq('arm_live', true),
 
       // Overall totals — COUNT/SUM/AVG/MAX with INNER JOIN copy_bots (no orphans).
       // Result = SUM(PAPER) + SUM(LIVE), no row cap.
@@ -118,20 +124,32 @@ export async function GET() {
 
     console.log(`[summary ${ROUTE_VERSION}] total: count=${openPositionCount} exposure=${openExposure} | paper: count=${paperPositionCount} exposure=${paperExposure} | live: count=${livePositionCount} exposure=${liveExposure}`);
 
+    // ── Bot-mode counts ────────────────────────────────────────────────────────
+    const paperBotsEnabled  = paperBotsRes.count   ?? 0;
+    const armLiveBotsCount  = armLiveBotsRes.count ?? 0;
+    // "Live Active Now" = ARM LIVE bots that can actually fire: requires master
+    // live_on gate to be open.  Computed here so the client has a single truth.
+    const liveOn            = (settingsRes.data as { live_on?: boolean } | null)?.live_on ?? false;
+    const liveActiveNow     = liveOn ? armLiveBotsCount : 0;
+
     // ── Response ───────────────────────────────────────────────────────────────
     return NextResponse.json(
       {
         ok: true,
-        route_version: ROUTE_VERSION,  // remove once confirmed working
+        route_version: ROUTE_VERSION,
 
         // Wallets
         walletsActive: activeWalletsRes.count ?? 0,
         walletsTotal:  totalWalletsRes.count  ?? 0,
         walletCount:   activeWalletsRes.count ?? 0,  // legacy alias
 
-        // Bots
+        // Bots — overall
         activeBotCount: enabledBotsRes.count ?? 0,
         botsTotal:      totalBotsRes.count   ?? 0,
+        // Bots — mode-specific counts for bankroll card status lines
+        paperBotsEnabled,   // enabled bots in PAPER mode
+        armLiveBotsCount,   // enabled bots with arm_live = true
+        liveActiveNow,      // armLiveBotsCount when live_on is true, else 0
 
         // OPEN positions — overall totals (PAPER + LIVE combined)
         openPositionCount,
