@@ -178,12 +178,26 @@ export default function HotImportSection() {
   const handleExtract = () => {
     if (!source.trim()) return;
     const parsed = parseSource(source);
-    const rows: CandidateRow[] = parsed.map((w) => ({
-      ...w,
-      isTracked: trackedSet.has(w.wallet_address),
-      addStatus: trackedSet.has(w.wallet_address) ? 'duplicate' : 'idle',
-      selected:  !trackedSet.has(w.wallet_address), // pre-select new ones
-    }));
+
+    // Assign sequential "Hot Alpha N" fallback names to wallets with no parsed name.
+    // Counter increments only for wallets without a name, preserving extraction order.
+    let alphaIdx = 0;
+    const rows: CandidateRow[] = parsed.map((w) => {
+      let displayName = w.display_name;
+      if (!displayName) {
+        alphaIdx += 1;
+        displayName = `Hot Alpha ${alphaIdx}`;
+      }
+      const isTracked = trackedSet.has(w.wallet_address);
+      return {
+        ...w,
+        display_name: displayName,
+        isTracked,
+        addStatus: isTracked ? 'duplicate' : 'idle',
+        selected:  !isTracked,
+      };
+    });
+
     setCandidates(rows);
     setExtracted(true);
     setGlobalError(null);
@@ -223,6 +237,7 @@ export default function HotImportSection() {
           wallet_address: w.wallet_address,
           display_name:   w.display_name ?? undefined,
           source:         'hot_import',
+          is_active:      false,   // always start disabled — operator reviews first
         }),
         cache: 'no-store',
       });

@@ -118,8 +118,13 @@ export async function POST(request: Request) {
         const botName = name || (addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr);
         // Use master strategy fields when "Use for New Bots" is ON; otherwise fall back to BOT_DEFAULTS
         const botDefaults = await getEffectiveBotDefaults(client, { ...BOT_DEFAULTS });
+        // HOT-imported wallets start fully disabled — operator must review before enabling
+        const hotOverrides = source === 'hot_import'
+          ? { is_enabled: false, arm_live: false }
+          : {};
         await client.from('copy_bots').insert({
           ...botDefaults,
+          ...hotOverrides,
           name: botName,
           wallet_address: addr,
         });

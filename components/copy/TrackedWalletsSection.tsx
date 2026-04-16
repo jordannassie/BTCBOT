@@ -91,6 +91,49 @@ function pnlClass(v: number | null | undefined): string {
   return v >= 0 ? 'copy-num-pos' : 'copy-num-neg';
 }
 
+// ─── Status + signal helpers ──────────────────────────────────────────────────
+
+type StatusInfo = { label: string; cls: string };
+
+function walletStatus(w: WalletRow): StatusInfo {
+  const m = w.metrics;
+  const hasData = m != null && (m.trade_count != null || m.copy_score != null);
+
+  if (!hasData) {
+    return w.is_active
+      ? { label: 'Tracking',    cls: 'copy-wallet-status-tracking' }
+      : { label: 'Imported',    cls: 'copy-wallet-status-imported' };
+  }
+  if (m?.avg_hold_minutes != null && m.avg_hold_minutes < 60) {
+    return { label: 'Fast Trader', cls: 'copy-wallet-status-fast' };
+  }
+  if (m?.avg_hold_minutes != null && m.avg_hold_minutes >= 360) {
+    return { label: 'Slow Trader', cls: 'copy-wallet-status-slow' };
+  }
+  if (m?.copy_score != null) {
+    return { label: 'Scoring', cls: 'copy-wallet-status-scoring' };
+  }
+  return { label: 'No Data Yet', cls: 'copy-wallet-status-nodata' };
+}
+
+function getSignals(w: WalletRow): string[] {
+  const m = w.metrics;
+  if (!m) return [];
+  const out: string[] = [];
+
+  if (m.last_trade_at) {
+    const h = (Date.now() - new Date(m.last_trade_at).getTime()) / 3_600_000;
+    if (h < 24) out.push('Active Today');
+  }
+  if (m.avg_hold_minutes != null) {
+    if      (m.avg_hold_minutes < 10) out.push('Fast 5m');
+    else if (m.avg_hold_minutes < 60) out.push('Quick Exit');
+  }
+  if (m.volume != null && m.volume > 10_000) out.push('High Volume');
+
+  return out.slice(0, 3);
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ExternalLinkIcon() {
@@ -224,6 +267,7 @@ export default function TrackedWalletsSection() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   // Sort state
   const [sortKey, setSortKey] = useState<SortKey>('copy_score');
@@ -292,33 +336,47 @@ export default function TrackedWalletsSection() {
   }, [wallets, sortKey, sortDir]);
 
   // ── Toggle single wallet ──────────────────────────────────────────────────
+  // Optimistic: flip immediately, revert + show inline error if save fails.
 
   const handleToggleActive = async (wallet: WalletRow) => {
-    const turningOff = wallet.is_active;
-    const linkedCount = wallet.bot_count ?? 0;
+    const nextActive = !wallet.is_active;
 
-    // Always confirm before toggling — make the bot sync effect explicit
-    const botLine = linkedCount > 0
-      ? `\nThis will also ${turningOff ? 'disable' : 're-enable'} ${linkedCount} linked bot${linkedCount !== 1 ? 's' : ''}.`
-      : '';
-    const confirmed = window.confirm(
-      `${turningOff ? 'Disable' : 'Enable'} "${walletLabel(wallet)}"?${botLine}`
+    // Flip immediately in local state so the toggle feels instant
+    setWallets((prev) =>
+      prev.map((w) =>
+        w.wallet_address === wallet.wallet_address ? { ...w, is_active: nextActive } : w
+      )
     );
-    if (!confirmed) return;
-
     setTogglingId(wallet.wallet_address);
+
     try {
       const res = await fetch('/api/copy/wallets', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet_address: wallet.wallet_address, is_active: !wallet.is_active }),
+        body: JSON.stringify({ wallet_address: wallet.wallet_address, is_active: nextActive }),
         cache: 'no-store',
       });
       const payload = await res.json();
       if (payload.ok) {
-        // Reload to get fresh bot counts from the server
-        await load();
+        await load(); // reload for accurate bot counts
+      } else {
+        // Revert optimistic change
+        setWallets((prev) =>
+          prev.map((w) =>
+            w.wallet_address === wallet.wallet_address ? { ...w, is_active: wallet.is_active } : w
+          )
+        );
+        setToggleError(payload.error ?? 'Failed to update — reverted');
+        setTimeout(() => setToggleError(null), 4_000);
       }
+    } catch {
+      setWallets((prev) =>
+        prev.map((w) =>
+          w.wallet_address === wallet.wallet_address ? { ...w, is_active: wallet.is_active } : w
+        )
+      );
+      setToggleError('Network error — change reverted');
+      setTimeout(() => setToggleError(null), 4_000);
     } finally {
       setTogglingId(null);
     }
@@ -344,24 +402,11 @@ export default function TrackedWalletsSection() {
   const handleBulkSetActive = async (activate: boolean) => {
     const targets  = wallets.filter((w) => selectedIds.has(w.wallet_address));
     const toChange = targets.filter((w) => w.is_active !== activate);
-    const totalBots = toChange.reduce((sum, w) => sum + (w.bot_count ?? 0), 0);
 
     if (toChange.length === 0) {
-      window.alert(`All selected wallets are already ${activate ? 'active' : 'inactive'}.`);
       clearSelection();
       return;
     }
-
-    const verb    = activate ? 'Enable' : 'Disable';
-    const verbPast = activate ? 'enabled' : 'disabled';
-    const botLine = totalBots > 0
-      ? `\nThis will also ${activate ? 're-enable' : 'disable'} ${totalBots} linked bot${totalBots !== 1 ? 's' : ''}.`
-      : '';
-
-    const confirmed = window.confirm(
-      `${verb} ${toChange.length} wallet${toChange.length !== 1 ? 's' : ''}?${botLine}`
-    );
-    if (!confirmed) return;
 
     setBulkWorking(true);
     try {
@@ -377,9 +422,9 @@ export default function TrackedWalletsSection() {
       );
       await load();
       clearSelection();
-      const botsNote = totalBots > 0 ? ` and ${totalBots} linked bot${totalBots !== 1 ? 's' : ''}` : '';
-      setBulkResult(`${toChange.length} wallet${toChange.length !== 1 ? 's' : ''}${botsNote} ${verbPast}.`);
-      setTimeout(() => setBulkResult(null), 5000);
+      const verbPast = activate ? 'enabled' : 'disabled';
+      setBulkResult(`${toChange.length} wallet${toChange.length !== 1 ? 's' : ''} ${verbPast}.`);
+      setTimeout(() => setBulkResult(null), 5_000);
     } finally {
       setBulkWorking(false);
     }
@@ -438,6 +483,11 @@ export default function TrackedWalletsSection() {
       {/* Bulk action result */}
       {bulkResult && (
         <div className="copy-backfill-result">✓ {bulkResult}</div>
+      )}
+
+      {/* Inline toggle error (auto-clears after 4 s) */}
+      {toggleError && (
+        <div className="copy-toggle-error">{toggleError}</div>
       )}
 
       {/* ── Bulk selection bar (appears when selection > 0) ── */}
@@ -597,19 +647,34 @@ export default function TrackedWalletsSection() {
 
                     {/* Wallet identity */}
                     <td>
-                      {/* Display name links to Polymarket profile */}
-                      <a
-                        className="copy-td-name copy-wallet-pm-link"
-                        href={`https://polymarket.com/profile/${w.wallet_address}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="View on Polymarket"
-                      >
-                        {w.display_name ?? <span style={{ opacity: 0.45 }}>Unnamed</span>}
-                        <ExternalLinkIcon />
-                      </a>
+                      {/* Name row: optional HOT source badge + display name link */}
+                      <div className="copy-wallet-identity-name-row">
+                        {w.source === 'hot_import' && (
+                          <span className="copy-wallet-hot-badge" title="Imported via HOT tab">HOT</span>
+                        )}
+                        <a
+                          className="copy-td-name copy-wallet-pm-link"
+                          href={`https://polymarket.com/profile/${w.wallet_address}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="View on Polymarket"
+                        >
+                          {w.display_name ?? <span style={{ opacity: 0.45 }}>Unnamed</span>}
+                          <ExternalLinkIcon />
+                        </a>
+                      </div>
                       {/* Address row: copy-to-clipboard + truncated address */}
                       <WalletAddressRow address={w.wallet_address} />
+                      {/* Status label + quick-trading signal chips */}
+                      <div className="copy-wallet-signals-row">
+                        {(() => {
+                          const s = walletStatus(w);
+                          return <span className={`copy-wallet-status ${s.cls}`}>{s.label}</span>;
+                        })()}
+                        {getSignals(w).map((sig) => (
+                          <span key={sig} className="copy-wallet-signal">{sig}</span>
+                        ))}
+                      </div>
                     </td>
 
                     {/* Active toggle */}
