@@ -75,12 +75,17 @@ export default function CopyTradingTabs() {
     } catch {}
   }, []);
 
-  // Fetch (and poll) the summary endpoint for tab badge counts
+  // Fetch (and poll) the summary endpoint for tab badge counts.
+  // Dispatches 'copy:data-fetched' after each successful fetch so the page
+  // header can update its "Updated X ago" timestamp without a separate fetch.
   const fetchCounts = useCallback(async () => {
     try {
       const r = await fetch('/api/copy/summary', { cache: 'no-store' });
       const p = await r.json();
-      if (p.ok) setCounts(p as Record<string, number>);
+      if (p.ok) {
+        setCounts(p as Record<string, number>);
+        window.dispatchEvent(new CustomEvent('copy:data-fetched'));
+      }
     } catch {}
   }, []);
 
@@ -94,9 +99,14 @@ export default function CopyTradingTabs() {
     const onVisible = () => { if (!document.hidden) fetchCounts(); };
     document.addEventListener('visibilitychange', onVisible);
 
+    // Re-fetch immediately when the page-level Refresh button is clicked
+    const onRefresh = () => fetchCounts();
+    window.addEventListener('copy:refresh', onRefresh);
+
     return () => {
       clearInterval(poll);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('copy:refresh', onRefresh);
     };
   }, [fetchCounts]);
 

@@ -148,11 +148,6 @@ function SkeletonCard() {
 export default function CopyOverviewCards() {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  // Client-side timestamp when we last received a successful response
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  // Used to force re-render of the "X ago" string every second
-  const [, setTick] = useState(0);
 
   const fetchSummary = useCallback(async () => {
     try {
@@ -160,7 +155,6 @@ export default function CopyOverviewCards() {
       const payload = await r.json();
       if (payload.ok) {
         setData(payload as Overview);
-        setLastUpdated(new Date());
         setError(null);
       } else {
         setError(payload.error ?? 'Failed to load summary');
@@ -169,12 +163,6 @@ export default function CopyOverviewCards() {
       setError('Network error loading summary');
     }
   }, []);
-
-  const handleManualRefresh = async () => {
-    setRefreshing(true);
-    await fetchSummary();
-    setRefreshing(false);
-  };
 
   useEffect(() => {
     // Initial fetch
@@ -192,14 +180,15 @@ export default function CopyOverviewCards() {
     const onPaperReset = () => fetchSummary();
     window.addEventListener('copy:paper-reset', onPaperReset);
 
-    // Tick every second to keep "X ago" fresh without re-fetching
-    const ticker = setInterval(() => setTick((n) => n + 1), 1000);
+    // Re-fetch when the page-level Refresh button is clicked
+    const onRefresh = () => fetchSummary();
+    window.addEventListener('copy:refresh', onRefresh);
 
     return () => {
       clearInterval(poll);
-      clearInterval(ticker);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('copy:paper-reset', onPaperReset);
+      window.removeEventListener('copy:refresh', onRefresh);
     };
   }, [fetchSummary]);
 
@@ -207,7 +196,7 @@ export default function CopyOverviewCards() {
     return (
       <div className="copy-section" style={{ padding: '1rem 1.5rem' }}>
         <p style={{ fontSize: '0.82rem', color: '#ef4444', margin: 0 }}>{error}</p>
-        <button className="copy-btn copy-btn-secondary copy-btn-sm" style={{ marginTop: '0.5rem' }} onClick={handleManualRefresh}>
+        <button className="copy-btn copy-btn-secondary copy-btn-sm" style={{ marginTop: '0.5rem' }} onClick={fetchSummary}>
           Retry
         </button>
       </div>
@@ -381,25 +370,6 @@ export default function CopyOverviewCards() {
           <div className="copy-stat-helper">{emergencyStop ? 'All live orders halted' : 'No active stop'}</div>
         </div>
 
-      </div>
-
-      {/* ── Last updated footer ── */}
-      <div className="copy-overview-footer">
-        <span className="copy-overview-freshness">
-          {lastUpdated
-            ? <>Updated {fmtAge(lastUpdated.toISOString())} · refreshes every 15s</>
-            : 'Loading…'}
-        </span>
-        <button
-          className="copy-overview-refresh-btn"
-          onClick={handleManualRefresh}
-          disabled={refreshing}
-          title="Refresh now"
-          aria-label="Refresh summary"
-        >
-          <IconRefresh />
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </button>
       </div>
     </>
   );
