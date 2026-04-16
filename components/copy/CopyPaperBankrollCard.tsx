@@ -67,19 +67,26 @@ export default function CopyPaperBankrollCard() {
   const [freshStarting, setFreshStarting] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // Lightweight exposure-only refresh — no loading spinner, no cap heuristics.
-  // The route now returns { ok: false } if the settings SELECT fails, so on any
-  // !p.ok response we return early and the previous state stays intact. This means
-  // the card never silently shows "Unlimited" due to a transient settings error.
+  // Lightweight exposure-only refresh — uses /api/copy/summary so the Paper card
+  // reads from the exact same endpoint and data shape as CopyOverviewCards.
+  // Preserving cap from previous state means the cap display never flickers due
+  // to the summary endpoint not returning cap; remaining is recomputed from the
+  // current cap + the freshly-fetched exposure total.
   const loadExposure = useCallback(async () => {
     try {
-      const res = await fetch('/api/copy/exposure', { cache: 'no-store' });
+      const res = await fetch('/api/copy/summary', { cache: 'no-store' });
       if (!res.ok) return;
       const p = await res.json();
       if (p.ok) {
-        setPaperExposure(p.paper as ExposureMetrics);
+        const count    = Number(p.paperPositionCount ?? 0);
+        const exposure = Number(p.paperExposure      ?? 0);
+        const avg      = Number(p.paperAvgSize        ?? 0);
+        setPaperExposure((prev) => {
+          const cap = prev?.cap ?? 0;
+          const remaining = cap > 0 ? Math.max(0, cap - exposure) : null;
+          return { count, exposure, avg, cap, remaining };
+        });
       }
-      // !p.ok → settings read failed server-side; leave previous state as-is.
     } catch { /* network error — leave previous state as-is */ }
   }, []);
 

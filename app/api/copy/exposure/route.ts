@@ -77,16 +77,13 @@ export async function GET() {
     }
     console.log('[exposure] copy_open_exposure_by_mode RPC OK, rows:', JSON.stringify(modeRes.data));
 
-    // Settings error is FATAL: returning cap=0 when the real cap is non-zero would show
-    // "Unlimited" on the cards — which is a worse UX than showing an error. If the SELECT
-    // fails the client keeps whatever cap it last knew about (loadExposure returns early
-    // on !p.ok), so the operator never sees a stale "Unlimited" label.
+    // Settings error is NON-FATAL: the position count and exposure are always
+    // returned even when the cap cannot be read.  Making this fatal was a regression
+    // — it caused loadExposure() to skip state updates entirely when settings failed,
+    // leaving stale count/exposure values on the Paper and Live cards indefinitely.
+    // cap: 0 means "unlimited" in the UI, which is a safe fallback for a read error.
     if (settingsRes.error) {
-      console.error('[exposure] copy_global_settings SELECT FAILED:', settingsRes.error);
-      return NextResponse.json(
-        { ok: false, error: settingsRes.error.message ?? 'Settings read failed' },
-        { status: 500 }
-      );
+      console.error('[exposure] copy_global_settings SELECT FAILED (non-fatal, cap defaults to 0):', settingsRes.error);
     }
 
     const settings = settingsRes.data as {
