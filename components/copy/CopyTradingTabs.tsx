@@ -19,7 +19,6 @@ import dynamic from 'next/dynamic';
 import CopyOverviewCards from './CopyOverviewCards';
 
 const TrackedWalletsSection  = dynamic(() => import('./TrackedWalletsSection'));
-const HotWalletsSection      = dynamic(() => import('./HotWalletsSection'));
 const HotImportSection       = dynamic(() => import('./HotImportSection'));
 const CopyBotsSection        = dynamic(() => import('./CopyBotsSection'));
 const CopyAttemptsSection    = dynamic(() => import('./CopyAttemptsSection'));
@@ -173,12 +172,7 @@ export default function CopyTradingTabs() {
           </div>
         )}
 
-        {tab === 'wallets' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <TrackedWalletsSection />
-            <HotWalletsSection />
-          </div>
-        )}
+        {tab === 'wallets' && <TrackedWalletsSection />}
 
         {tab === 'hot' && <HotImportSection />}
 
