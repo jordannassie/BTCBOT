@@ -142,12 +142,22 @@ export default function LiveCard() {
         const expPayload = await exposureRes.json();
         if (expPayload.ok) {
           const live = expPayload.live as ExposureMetrics;
-          setLiveExposure(live);
-          // Seed the cap input only once — periodic refreshes must not clobber
-          // a value the operator is currently typing.
           if (!capSynced.current) {
+            // First load: seed both the read-only cap display and the edit input
+            // from the API (the only moment we trust the API for cap).
+            setLiveExposure(live);
             setCapInput(String(live.cap));
             capSynced.current = true;
+          } else {
+            // Subsequent polls: preserve the locally-confirmed cap so a periodic
+            // refresh cannot snap the display back to a stale API value.
+            // Only count / exposure / avg are refreshed from the API here.
+            // Cap is only ever updated by handleSaveLiveCap (explicit save).
+            setLiveExposure((prev) => {
+              const cap       = prev?.cap ?? live.cap;
+              const remaining = cap > 0 ? Math.max(0, cap - live.exposure) : null;
+              return { ...live, cap, remaining };
+            });
           }
         } else {
           setLiveExposure(zeroExposure);
@@ -173,17 +183,21 @@ export default function LiveCard() {
     loadSettings();
   }, [loadSettings]);
 
-  // Lightweight exposure-only refresh — no loading spinner, no cap heuristics.
-  // Route returns { ok: false } if settings SELECT fails, so on !p.ok we return
-  // early and the previous state stays intact. capInput is not updated here;
-  // explicit save handlers own that responsibility.
+  // Lightweight exposure-only refresh — no loading spinner.
+  // Preserves the locally-confirmed cap (same policy as loadSettings) so
+  // calling this can never snap the display back to a stale API cap value.
   const loadExposure = useCallback(async () => {
     try {
       const res = await fetch('/api/copy/exposure', { cache: 'no-store' });
       if (!res.ok) return;
       const p = await res.json();
       if (p.ok) {
-        setLiveExposure(p.live as ExposureMetrics);
+        const live = p.live as ExposureMetrics;
+        setLiveExposure((prev) => {
+          const cap       = prev?.cap ?? live.cap;
+          const remaining = cap > 0 ? Math.max(0, cap - live.exposure) : null;
+          return { ...live, cap, remaining };
+        });
       }
       // !p.ok → settings read failed server-side; leave previous state as-is.
     } catch { /* network error — leave previous state as-is */ }
