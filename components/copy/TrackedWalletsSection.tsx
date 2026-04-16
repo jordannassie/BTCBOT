@@ -6,18 +6,20 @@ import WalletSparkline from './WalletSparkline';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type WalletMetrics = {
-  copy_score: number | null;
-  pnl_7d: number | null;
-  pnl_30d: number | null;
-  pnl_all: number | null;
-  win_rate: number | null;
-  trade_count: number | null;
-  volume: number | null;
+  copy_score:       number | null;
+  pnl_7d:           number | null;
+  pnl_30d:          number | null;
+  pnl_all:          number | null;
+  win_rate:         number | null;
+  trade_count:      number | null;
+  trades_per_day:   number | null;   // added by migration 0007 + enrichment
+  volume:           number | null;
   avg_hold_minutes: number | null;
-  max_drawdown: number | null;
-  category_focus: string | null;
-  last_trade_at: string | null;
-  updated_at: string | null;
+  quick_exit_rate:  number | null;   // added by migration 0007 (worker-populated)
+  max_drawdown:     number | null;
+  category_focus:   string | null;
+  last_trade_at:    string | null;
+  updated_at:       string | null;
 };
 
 type WalletRow = {
@@ -73,6 +75,29 @@ function fmtRelative(d: string | null | undefined): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function fmtHold(minutes: number | null | undefined): string {
+  if (minutes == null || minutes === 0) return '—';
+  if (minutes < 60) return `${Math.round(minutes)}m`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function fmtTradesPerDay(perDay: number | null | undefined, total: number | null | undefined): string {
+  // Use stored trades_per_day; fall back to trade_count / 30 (leaderboard window)
+  const val = perDay ?? (total != null ? total / 30 : null);
+  if (val == null) return '—';
+  if (val < 0.1) return '<0.1/d';
+  return `${val.toFixed(1)}/d`;
+}
+
+function holdClass(minutes: number | null | undefined): string {
+  if (minutes == null || minutes === 0) return 'copy-td-muted';
+  if (minutes < 60)  return 'copy-num-pos';
+  if (minutes < 360) return '';
+  return 'copy-td-muted';
+}
+
 const truncate = (addr: string) =>
   addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
 
@@ -119,20 +144,25 @@ type StatusInfo = { label: string; cls: string };
 
 function walletStatus(w: WalletRow): StatusInfo {
   const m = w.metrics;
-  const hasData = m != null && (m.trade_count != null || m.copy_score != null);
+  // "has real data" = metrics exist with a non-trivial score or trade count
+  const hasData = m != null && (
+    (m.trade_count != null && m.trade_count > 0) ||
+    (m.copy_score  != null && m.copy_score  > 0)
+  );
 
   if (!hasData) {
-    return w.is_active
-      ? { label: 'Tracking',    cls: 'copy-wallet-status-tracking' }
-      : { label: 'Imported',    cls: 'copy-wallet-status-imported' };
+    if (!w.is_active) return { label: 'Imported',         cls: 'copy-wallet-status-imported' };
+    if (!m)           return { label: 'Collecting Data',  cls: 'copy-wallet-status-tracking' };
+    return               { label: 'Tracking',            cls: 'copy-wallet-status-tracking' };
   }
-  if (m?.avg_hold_minutes != null && m.avg_hold_minutes < 60) {
+  // Avg hold time drives fast/slow trader classification
+  if (m?.avg_hold_minutes != null && m.avg_hold_minutes > 0 && m.avg_hold_minutes < 60) {
     return { label: 'Fast Trader', cls: 'copy-wallet-status-fast' };
   }
-  if (m?.avg_hold_minutes != null && m.avg_hold_minutes >= 360) {
+  if (m?.avg_hold_minutes != null && m.avg_hold_minutes >= 480) {
     return { label: 'Slow Trader', cls: 'copy-wallet-status-slow' };
   }
-  if (m?.copy_score != null) {
+  if ((m?.copy_score ?? 0) > 0) {
     return { label: 'Scoring', cls: 'copy-wallet-status-scoring' };
   }
   return { label: 'No Data Yet', cls: 'copy-wallet-status-nodata' };
@@ -143,14 +173,22 @@ function getSignals(w: WalletRow): string[] {
   if (!m) return [];
   const out: string[] = [];
 
+  // Active Today — last trade within 24 h
   if (m.last_trade_at) {
     const h = (Date.now() - new Date(m.last_trade_at).getTime()) / 3_600_000;
     if (h < 24) out.push('Active Today');
   }
-  if (m.avg_hold_minutes != null) {
+
+  // Fast-exit signals — prefer explicit quick_exit_rate, fall back to avg hold
+  if (m.quick_exit_rate != null) {
+    if      (m.quick_exit_rate >= 0.7) out.push('Quick Exit');
+    else if (m.avg_hold_minutes != null && m.avg_hold_minutes < 10) out.push('Fast 5m');
+  } else if (m.avg_hold_minutes != null) {
     if      (m.avg_hold_minutes < 10) out.push('Fast 5m');
     else if (m.avg_hold_minutes < 60) out.push('Quick Exit');
   }
+
+  // High Volume — > $10k in the Polymarket 30-day window
   if (m.volume != null && m.volume > 10_000) out.push('High Volume');
 
   return out.slice(0, 3);
@@ -286,6 +324,7 @@ export default function TrackedWalletsSection() {
   const [wallets, setWallets] = useState<WalletRow[]>([]);
   const [seriesMap, setSeriesMap] = useState<Map<string, SeriesPoint[]>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [enriching, setEnriching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -307,6 +346,49 @@ export default function TrackedWalletsSection() {
   const [fError, setFError] = useState<string | null>(null);
   const [fSuccess, setFSuccess] = useState(false);
 
+  // ── Background enrichment ─────────────────────────────────────────────────
+  // Fetches fresh Polymarket stats for wallets with missing or stale metrics
+  // (> 1 hour since last update) and silently merges them into React state.
+
+  const enrichStaleWallets = useCallback(async (walletList: WalletRow[]) => {
+    const threshold = Date.now() - 3_600_000; // 1 hour
+    const stale = walletList.filter((w) => {
+      if (!w.metrics) return true;
+      if (!w.metrics.updated_at) return true;
+      return new Date(w.metrics.updated_at).getTime() < threshold;
+    });
+    if (!stale.length) return;
+
+    setEnriching(true);
+    const addresses = stale.slice(0, 20).map((w) => w.wallet_address).join(',');
+    try {
+      const res = await fetch(
+        `/api/copy/wallet-enrich?addresses=${encodeURIComponent(addresses)}`,
+        { cache: 'no-store' }
+      );
+      const payload = await res.json();
+      if (!payload.ok) return;
+
+      const map = new Map<string, WalletMetrics>(
+        (payload.metrics ?? []).map((m: WalletMetrics & { wallet_address: string }) => [
+          m.wallet_address,
+          m,
+        ])
+      );
+
+      setWallets((prev) =>
+        prev.map((w) => {
+          const fresh = map.get(w.wallet_address);
+          return fresh ? { ...w, metrics: fresh } : w;
+        })
+      );
+    } catch {
+      // Best-effort — silently swallow network errors
+    } finally {
+      setEnriching(false);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -317,8 +399,10 @@ export default function TrackedWalletsSection() {
       ]);
 
       const walletsPayload = await walletsRes.json();
+      let loadedWallets: WalletRow[] = [];
       if (walletsPayload.ok) {
-        setWallets(walletsPayload.rows ?? []);
+        loadedWallets = walletsPayload.rows ?? [];
+        setWallets(loadedWallets);
       } else {
         setError(walletsPayload.error ?? 'Failed to load wallets');
       }
@@ -333,12 +417,17 @@ export default function TrackedWalletsSection() {
           setSeriesMap(map);
         }
       }
+
+      // Trigger background enrichment without blocking render
+      if (loadedWallets.length > 0) {
+        enrichStaleWallets(loadedWallets);
+      }
     } catch {
       setError('Network error loading wallets');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enrichStaleWallets]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -490,6 +579,11 @@ export default function TrackedWalletsSection() {
           {!loading && wallets.length > 0 && (
             <span className="copy-section-count">{wallets.length}</span>
           )}
+          {enriching && (
+            <span className="copy-wallet-enriching" title="Fetching fresh stats from Polymarket…">
+              ⟳ Enriching
+            </span>
+          )}
         </div>
         <div className="copy-section-actions">
           <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={load} disabled={loading} title="Refresh">↻</button>
@@ -606,7 +700,7 @@ export default function TrackedWalletsSection() {
       ) : wallets.length === 0 ? (
         <EmptyWallets onAdd={() => setShowForm(true)} />
       ) : (
-        <div className="copy-table-wrap">
+        <div className="copy-table-wrap copy-table-scroll">
           <table className="copy-table copy-table-leaderboard">
             <thead>
               <tr>
@@ -622,19 +716,18 @@ export default function TrackedWalletsSection() {
                   />
                 </th>
                 <th className="copy-th-rank">#</th>
-                <th style={{ minWidth: 180 }}>Wallet</th>
+                <th style={{ minWidth: 200 }}>Wallet</th>
                 <th style={{ minWidth: 50 }}>Active</th>
                 <th style={{ minWidth: 60 }} title="Linked copy bots (enabled / total)">Bots</th>
-                <SortHeader label="Score"    sortKey="copy_score"  active={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortHeader label="Score"      sortKey="copy_score"  active={sortKey} dir={sortDir} onSort={handleSort} />
                 <th style={{ minWidth: 92 }}>Trend</th>
-                <SortHeader label="7d P/L"   sortKey="pnl_7d"      active={sortKey} dir={sortDir} onSort={handleSort} />
-                <SortHeader label="30d P/L"  sortKey="pnl_30d"     active={sortKey} dir={sortDir} onSort={handleSort} />
-                <SortHeader label="All-time" sortKey="pnl_all"     active={sortKey} dir={sortDir} onSort={handleSort} />
-                <SortHeader label="Win Rate" sortKey="win_rate"    active={sortKey} dir={sortDir} onSort={handleSort} />
-                <SortHeader label="Trades"   sortKey="trade_count" active={sortKey} dir={sortDir} onSort={handleSort} />
-                <SortHeader label="Volume"   sortKey="volume"      active={sortKey} dir={sortDir} onSort={handleSort} />
-                <th>Category</th>
-                <th style={{ minWidth: 80 }}>Last Trade</th>
+                <SortHeader label="7d P/L"     sortKey="pnl_7d"      active={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortHeader label="30d P/L"    sortKey="pnl_30d"     active={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortHeader label="All-time"   sortKey="pnl_all"     active={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortHeader label="Win Rate"   sortKey="win_rate"    active={sortKey} dir={sortDir} onSort={handleSort} />
+                <th style={{ minWidth: 78 }} title="Estimated trades per day (trade_count ÷ 30-day window)">Trades/Day</th>
+                <SortHeader label="Volume"     sortKey="volume"      active={sortKey} dir={sortDir} onSort={handleSort} />
+                <th style={{ minWidth: 78 }} title="Average position hold time">Avg Hold</th>
               </tr>
             </thead>
             <tbody>
@@ -761,21 +854,16 @@ export default function TrackedWalletsSection() {
                       )}
                     </td>
 
-                    <td className="copy-td-num copy-td-muted">{fmtNum(m?.trade_count)}</td>
-                    <td className="copy-td-num copy-td-muted">{fmtCompact(m?.volume)}</td>
-
-                    {/* Category */}
-                    <td>
-                      {m?.category_focus ? (
-                        <span className="copy-badge copy-badge-purple">{m.category_focus}</span>
-                      ) : (
-                        <span className="copy-td-muted">—</span>
-                      )}
+                    {/* Trades/Day */}
+                    <td className="copy-td-num copy-td-muted">
+                      {fmtTradesPerDay(m?.trades_per_day, m?.trade_count)}
                     </td>
 
-                    {/* Last trade */}
-                    <td className="copy-td-muted" style={{ fontSize: '0.71rem', whiteSpace: 'nowrap' }}>
-                      {fmtRelative(m?.last_trade_at)}
+                    <td className="copy-td-num copy-td-muted">{fmtCompact(m?.volume)}</td>
+
+                    {/* Avg Hold */}
+                    <td className={`copy-td-num ${holdClass(m?.avg_hold_minutes)}`}>
+                      {fmtHold(m?.avg_hold_minutes)}
                     </td>
                   </tr>
                 );
