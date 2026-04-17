@@ -42,19 +42,69 @@ type WalletSeries = { wallet_address: string; points: SeriesPoint[] };
 
 type SortKey    = 'copy_score' | 'pnl_7d' | 'pnl_30d' | 'pnl_all' | 'win_rate' | 'trade_count' | 'volume';
 type SortDir    = 'desc' | 'asc';
-type FilterMode = 'all' | 'fast';
+type FilterMode = 'all' | 'proven' | 'candidate' | 'avoid';
 
-// ─── Fast-wallet predicate (shared by filter + sort) ─────────────────────────
-// A wallet is "fast" when ANY of the following are true:
-//   1. avg_hold_minutes ≤ 20  (FAST 5M / FAST 15M tier)
-//   2. tags array contains a fast / short indicator string
-//   3. quick_exit_rate ≥ 0.70 (proxy for short_market_pct ≥ 70 %)
-function isFastWallet(w: WalletRow): boolean {
+// ─── Wallet classification ────────────────────────────────────────────────────
+//
+// Field mapping (requested → available in wallet_metrics):
+//   short_market_pct  → quick_exit_rate × 100  (fraction of exits before resolution)
+//   closed_positions  → trade_count             (30-day trade count from Polymarket)
+//   median_hold_min   → avg_hold_minutes        (only avg available; used as proxy)
+//   quick_exit_pct    → quick_exit_rate × 100   (same field as short_market_pct proxy)
+//   tags              → w.tags[]                (fast / short / scalp / 5m / 15m strings)
+//
+// PROVEN SHORT:
+//   quick_exit_rate ≥ 0.80  (= short_market_pct ≥ 80%)
+//   AND trade_count ≥ 5     (= closed_positions ≥ 5)
+//   AND avg_hold_minutes ≤ 20  (= median_hold_min ≤ 20)
+//   [quick_exit_pct ≥ 60 is already implied by quick_exit_rate ≥ 0.80]
+//   Fallback when quick_exit_rate is null: avg_hold_minutes ≤ 10 AND trade_count ≥ 5
+//   OR tags contain proven/short/scalp indicators.
+//
+// SHORT CANDIDATE:
+//   (quick_exit_rate ≥ 0.80 OR avg_hold_minutes ≤ 20)
+//   AND trade_count ≥ 3
+//   AND NOT PROVEN SHORT
+//
+// AVOID:
+//   Has enough data (trade_count ≥ 5) but does not meet either short criteria
+//
+// null: insufficient data to classify (new wallet, no metrics yet)
+
+export type WalletClass = 'proven-short' | 'short-candidate' | 'avoid' | null;
+
+function classifyWallet(w: WalletRow): WalletClass {
   const m = w.metrics;
-  if (m?.avg_hold_minutes != null && m.avg_hold_minutes > 0 && m.avg_hold_minutes <= 20) return true;
-  if (m?.quick_exit_rate  != null && m.quick_exit_rate >= 0.70) return true;
-  if (w.tags?.some((t) => /fast|short|scalp|5m|15m/i.test(t))) return true;
-  return false;
+  if (!m) return null;
+
+  const exitRate = m.quick_exit_rate;                    // 0–1 fraction
+  const hold     = m.avg_hold_minutes;
+  const trades   = m.trade_count ?? 0;
+  const hasTags  = w.tags?.some((t) => /proven|short|scalp|5m|15m/i.test(t));
+
+  // Signals short-exit behaviour (primary: exitRate; fallback: hold time + tags)
+  const isShortMarket =
+    (exitRate != null && exitRate >= 0.80) ||
+    (hold != null && hold <= 10) ||
+    hasTags;
+
+  const hasEnoughData  = trades >= 5 || (hold != null && hold > 0);
+  const hasMinimumData = trades >= 3 || (hold != null && hold > 0);
+
+  if (!hasMinimumData) return null;
+
+  // PROVEN SHORT: strong signals across all dimensions
+  const provenHold = hold != null && hold > 0 && hold <= 20;
+  if (isShortMarket && trades >= 5 && provenHold) return 'proven-short';
+
+  // SHORT CANDIDATE: showing short patterns but lacking full confirmation
+  const candidateHold = hold != null && hold > 0 && hold <= 20;
+  if ((isShortMarket || candidateHold) && hasMinimumData) return 'short-candidate';
+
+  // AVOID: enough data, but clearly not a short trader
+  if (hasEnoughData) return 'avoid';
+
+  return null;
 }
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -359,7 +409,7 @@ export default function TrackedWalletsSection() {
   const [sortKey, setSortKey] = useState<SortKey>('copy_score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  // Filter mode — 'all' shows everything; 'fast' shows only fast-trader wallets
+  // Filter mode — which wallet class to show
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
 
   // Bulk selection
@@ -466,9 +516,34 @@ export default function TrackedWalletsSection() {
     else { setSortKey(key); setSortDir('desc'); }
   };
 
+  // Classification counts for filter pills — computed once per wallet load
+  const classCounts = useMemo(() => {
+    const counts = { proven: 0, candidate: 0, avoid: 0 };
+    for (const w of wallets) {
+      const c = classifyWallet(w);
+      if (c === 'proven-short')    counts.proven++;
+      else if (c === 'short-candidate') counts.candidate++;
+      else if (c === 'avoid')      counts.avoid++;
+    }
+    return counts;
+  }, [wallets]);
+
+  // Classification rank: proven-short=0, short-candidate=1, avoid=2, null=3
+  const classRank = (w: WalletRow) => {
+    const c = classifyWallet(w);
+    if (c === 'proven-short')    return 0;
+    if (c === 'short-candidate') return 1;
+    if (c === 'avoid')           return 2;
+    return 3;
+  };
+
   const sorted = useMemo(() => {
     // 1. Filter
-    const base = filterMode === 'fast' ? wallets.filter(isFastWallet) : wallets;
+    const filterClass: Record<FilterMode, WalletClass | null> = {
+      all: null, proven: 'proven-short', candidate: 'short-candidate', avoid: 'avoid',
+    };
+    const targetClass = filterClass[filterMode];
+    const base = targetClass ? wallets.filter((w) => classifyWallet(w) === targetClass) : wallets;
 
     // 2. Sort
     return [...base].sort((a, b) => {
@@ -476,22 +551,27 @@ export default function TrackedWalletsSection() {
       const activeDiff = (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0);
       if (activeDiff !== 0) return activeDiff;
 
-      // In Fast Traders view: sort by avg hold ascending so the fastest appear first
-      if (filterMode === 'fast') {
+      // In "All" view: proven-short first → candidate → avoid → unclassified
+      if (filterMode === 'all') {
+        const rankDiff = classRank(a) - classRank(b);
+        if (rankDiff !== 0) return rankDiff;
+      }
+
+      // Within same class group: sort by avg_hold_minutes ascending (fastest first)
+      // for proven/candidate views; fall back to metric sort otherwise
+      if (filterMode === 'proven' || filterMode === 'candidate' || filterMode === 'all') {
         const ah_a = a.metrics?.avg_hold_minutes ?? Infinity;
         const ah_b = b.metrics?.avg_hold_minutes ?? Infinity;
         if (ah_a !== ah_b) return ah_a - ah_b;
       }
 
-      // Within same active tier, apply the chosen metric sort
+      // Tiebreaker: chosen column sort
       const av = a.metrics?.[sortKey] ?? -Infinity;
       const bv = b.metrics?.[sortKey] ?? -Infinity;
       return sortDir === 'desc' ? (bv as number) - (av as number) : (av as number) - (bv as number);
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallets, sortKey, sortDir, filterMode]);
-
-  // Count fast wallets for the filter pill badge
-  const fastCount = useMemo(() => wallets.filter(isFastWallet).length, [wallets]);
 
   // ── Toggle single wallet ──────────────────────────────────────────────────
   // Optimistic: flip immediately, revert + show inline error if save fails.
@@ -625,7 +705,7 @@ export default function TrackedWalletsSection() {
           <h2 className="copy-section-title">Tracked Wallets</h2>
           {!loading && wallets.length > 0 && (
             <span className="copy-section-count">
-              {filterMode === 'fast' ? `${sorted.length} / ${wallets.length}` : wallets.length}
+              {filterMode !== 'all' ? `${sorted.length} / ${wallets.length}` : wallets.length}
             </span>
           )}
           {enriching && (
@@ -645,7 +725,7 @@ export default function TrackedWalletsSection() {
         </div>
       </div>
 
-      {/* ── Quick filter bar ── */}
+      {/* ── Classification filter bar ── */}
       {!loading && wallets.length > 0 && (
         <div className="copy-filter-bar">
           <button
@@ -656,12 +736,28 @@ export default function TrackedWalletsSection() {
             <span className="copy-filter-count">{wallets.length}</span>
           </button>
           <button
-            className={`copy-filter-btn copy-filter-btn-fast ${filterMode === 'fast' ? 'copy-filter-btn-active copy-filter-btn-fast-active' : ''}`}
-            onClick={() => setFilterMode('fast')}
-            title="avg hold ≤20m · quick_exit_rate ≥70% · fast/short/scalp tags"
+            className={`copy-filter-btn copy-filter-btn-proven ${filterMode === 'proven' ? 'copy-filter-btn-active copy-filter-btn-proven-active' : ''}`}
+            onClick={() => setFilterMode('proven')}
+            title="quick_exit_rate ≥80% · trade_count ≥5 · avg_hold ≤20m"
           >
-            ⚡ Fast Traders
-            {fastCount > 0 && <span className="copy-filter-count">{fastCount}</span>}
+            Proven Short
+            {classCounts.proven > 0 && <span className="copy-filter-count">{classCounts.proven}</span>}
+          </button>
+          <button
+            className={`copy-filter-btn copy-filter-btn-candidate ${filterMode === 'candidate' ? 'copy-filter-btn-active copy-filter-btn-candidate-active' : ''}`}
+            onClick={() => setFilterMode('candidate')}
+            title="avg_hold ≤20m · trade_count ≥3 · not yet Proven Short"
+          >
+            Short Candidate
+            {classCounts.candidate > 0 && <span className="copy-filter-count">{classCounts.candidate}</span>}
+          </button>
+          <button
+            className={`copy-filter-btn copy-filter-btn-avoid ${filterMode === 'avoid' ? 'copy-filter-btn-active copy-filter-btn-avoid-active' : ''}`}
+            onClick={() => setFilterMode('avoid')}
+            title="Has ≥5 trades but does not meet short-trader criteria"
+          >
+            Avoid
+            {classCounts.avoid > 0 && <span className="copy-filter-count">{classCounts.avoid}</span>}
           </button>
         </div>
       )}
@@ -769,9 +865,13 @@ export default function TrackedWalletsSection() {
         </div>
       ) : wallets.length === 0 ? (
         <EmptyWallets onAdd={() => setShowForm(true)} />
-      ) : sorted.length === 0 && filterMode === 'fast' ? (
+      ) : sorted.length === 0 && filterMode !== 'all' ? (
         <div className="copy-filter-empty">
-          <span>No fast traders yet.</span>
+          <span>
+            {filterMode === 'proven'    && 'No Proven Short wallets yet — needs quick_exit_rate ≥80%, avg hold ≤20m, and ≥5 trades.'}
+            {filterMode === 'candidate' && 'No Short Candidates yet — needs avg hold ≤20m and ≥3 trades.'}
+            {filterMode === 'avoid'     && 'No Avoid wallets — all tracked wallets are showing short-trader signals.'}
+          </span>
           <button className="copy-filter-empty-reset" onClick={() => setFilterMode('all')}>Show all wallets</button>
         </div>
       ) : (
@@ -812,6 +912,7 @@ export default function TrackedWalletsSection() {
                 const winPct     = m?.win_rate != null ? m.win_rate * 100 : null;
                 const isSelected = selectedIds.has(w.wallet_address);
                 const tier       = fastTier(m?.avg_hold_minutes);
+                const wClass     = classifyWallet(w);
 
                 return (
                   <tr
@@ -819,7 +920,10 @@ export default function TrackedWalletsSection() {
                     className={[
                       w.is_active ? '' : 'copy-row-inactive',
                       isSelected ? 'copy-row-selected' : '',
+                      // Fast-tier row tint (blue gradient by speed)
                       tier ? `copy-row-${tier.mod}` : '',
+                      // Classification row accent
+                      wClass === 'proven-short' ? 'copy-row-proven-short' : '',
                     ].filter(Boolean).join(' ')}
                   >
                     {/* Row checkbox */}
@@ -837,10 +941,25 @@ export default function TrackedWalletsSection() {
 
                     {/* Wallet identity */}
                     <td>
-                      {/* Name row: optional HOT badge, fast-trader badge, display name link */}
+                      {/* Name row: HOT badge · classification badge · fast-speed badge · name link */}
                       <div className="copy-wallet-identity-name-row">
                         {w.source === 'hot_import' && (
                           <span className="copy-wallet-hot-badge" title="Imported via HOT tab">HOT</span>
+                        )}
+                        {wClass === 'proven-short' && (
+                          <span className="copy-class-badge copy-class-badge-proven" title="quick_exit_rate ≥80% · avg hold ≤20m · ≥5 trades">
+                            PROVEN SHORT
+                          </span>
+                        )}
+                        {wClass === 'short-candidate' && (
+                          <span className="copy-class-badge copy-class-badge-candidate" title="avg hold ≤20m · ≥3 trades · not yet Proven Short">
+                            SHORT CANDIDATE
+                          </span>
+                        )}
+                        {wClass === 'avoid' && (
+                          <span className="copy-class-badge copy-class-badge-avoid" title="Sufficient data — does not meet short-trader criteria">
+                            AVOID
+                          </span>
                         )}
                         {tier && (
                           <span

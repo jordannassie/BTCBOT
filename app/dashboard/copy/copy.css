@@ -3381,23 +3381,22 @@
   border-color: rgba(255, 255, 255, 0.22);
 }
 
-/* Fast Traders button — blue accent */
-.copy-filter-btn-fast {
-  border-color: rgba(59, 130, 246, 0.25);
-  color: rgba(96, 165, 250, 0.7);
-}
-.copy-filter-btn-fast:hover {
-  background: rgba(59, 130, 246, 0.1);
-  color: #93c5fd;
-  border-color: rgba(59, 130, 246, 0.4);
-}
+/* Proven Short button — bright blue */
+.copy-filter-btn-proven { border-color: rgba(59,130,246,0.25); color: rgba(96,165,250,0.7); }
+.copy-filter-btn-proven:hover { background: rgba(59,130,246,0.1); color: #93c5fd; border-color: rgba(59,130,246,0.4); }
+.copy-filter-btn-proven-active { background: rgba(59,130,246,0.16); color: #93c5fd; border-color: rgba(59,130,246,0.5); }
+.copy-filter-btn-proven-active .copy-filter-count { background: rgba(59,130,246,0.28); color: #93c5fd; }
 
-/* Active: Fast Traders */
-.copy-filter-btn-fast-active {
-  background: rgba(59, 130, 246, 0.14);
-  color: #93c5fd;
-  border-color: rgba(59, 130, 246, 0.45);
-}
+/* Short Candidate button — soft blue-purple */
+.copy-filter-btn-candidate { border-color: rgba(139,92,246,0.2); color: rgba(167,139,250,0.65); }
+.copy-filter-btn-candidate:hover { background: rgba(139,92,246,0.08); color: #c4b5fd; border-color: rgba(139,92,246,0.35); }
+.copy-filter-btn-candidate-active { background: rgba(139,92,246,0.12); color: #c4b5fd; border-color: rgba(139,92,246,0.4); }
+.copy-filter-btn-candidate-active .copy-filter-count { background: rgba(139,92,246,0.2); color: #c4b5fd; }
+
+/* Avoid button — muted gray */
+.copy-filter-btn-avoid { border-color: rgba(255,255,255,0.1); color: rgba(248,250,252,0.35); }
+.copy-filter-btn-avoid:hover { background: rgba(255,255,255,0.06); color: rgba(248,250,252,0.55); }
+.copy-filter-btn-avoid-active { background: rgba(255,255,255,0.07); color: rgba(248,250,252,0.65); border-color: rgba(255,255,255,0.2); }
 
 /* Count pill inside filter button */
 .copy-filter-count {
@@ -3412,10 +3411,6 @@
   border-radius: 0.6rem;
   background: rgba(255, 255, 255, 0.09);
   color: rgba(248, 250, 252, 0.6);
-}
-.copy-filter-btn-fast-active .copy-filter-count {
-  background: rgba(59, 130, 246, 0.25);
-  color: #93c5fd;
 }
 
 /* Empty state when Fast Traders filter returns zero results */
@@ -3437,6 +3432,53 @@
   padding: 0;
 }
 .copy-filter-empty-reset:hover { color: #93c5fd; }
+
+/* ─── Wallet classification badges ──────────────────────────────────────────
+   Displayed in the wallet name row, before the display name link.            */
+
+.copy-class-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 0.18em 0.55em;
+  border-radius: 0.28rem;
+  white-space: nowrap;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* PROVEN SHORT — solid blue, clearly the primary signal */
+.copy-class-badge-proven {
+  background: rgba(37, 99, 235, 0.22);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 7px rgba(59, 130, 246, 0.2);
+}
+
+/* SHORT CANDIDATE — softer blue-purple */
+.copy-class-badge-candidate {
+  background: rgba(109, 40, 217, 0.14);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.38);
+}
+
+/* AVOID — muted gray, de-emphasised */
+.copy-class-badge-avoid {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(248, 250, 252, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ─── Proven Short row highlight ─────────────────────────────────────────────
+   Stronger blue accent than the fast-tier tints — this is the top signal.   */
+
+.copy-row-proven-short {
+  border-left: 2px solid rgba(59, 130, 246, 0.7) !important;
+  background: rgba(37, 99, 235, 0.07) !important;
+}
 
 /* ─── Fast-trader row tints ──────────────────────────────────────────────────
    Left border + very subtle blue background so fast rows stand out without
