@@ -124,7 +124,9 @@ export async function POST(request: Request) {
       typeof strategy_settings === 'object' &&
       !Array.isArray(strategy_settings)
     ) {
-      if (bot_id === 'paper_scalper') {
+      // Merge strategy_settings for bots where the Worker also writes to the same
+      // JSONB column — replacing would wipe Worker-written fields (e.g. ema9/signal).
+      if (bot_id === 'paper_scalper' || bot_id === 'btc_5m_ema') {
         const { data: existing } = await client
           .from('bot_settings')
           .select('strategy_settings')

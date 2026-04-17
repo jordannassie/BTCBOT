@@ -8,10 +8,12 @@ const BOT_ID = 'btc_5m_ema';
 type EmaSignal = 'YES' | 'NO' | 'NONE';
 
 type EmaStratSettings = {
-  ema9:       number | null;
-  ema200:     number | null;
-  last_close: number | null;
-  signal:     EmaSignal | null;
+  ema9:                   number | null;
+  ema200:                 number | null;
+  last_close:             number | null;
+  signal:                 EmaSignal | null;
+  paper_max_exposure_usd: number | null;
+  live_max_exposure_usd:  number | null;
 };
 
 // ── Formatters ────────────────────────────────────────────────────────────────
@@ -55,9 +57,11 @@ function getStatus(
 function parseStratSettings(settings: BotSettings | null): EmaStratSettings {
   const s = settings?.strategy_settings ?? {};
   return {
-    ema9:       typeof s.ema9       === 'number' ? s.ema9       : null,
-    ema200:     typeof s.ema200     === 'number' ? s.ema200     : null,
-    last_close: typeof s.last_close === 'number' ? s.last_close : null,
+    ema9:                   typeof s.ema9                   === 'number' ? s.ema9                   : null,
+    ema200:                 typeof s.ema200                 === 'number' ? s.ema200                 : null,
+    last_close:             typeof s.last_close             === 'number' ? s.last_close             : null,
+    paper_max_exposure_usd: typeof s.paper_max_exposure_usd === 'number' ? s.paper_max_exposure_usd : null,
+    live_max_exposure_usd:  typeof s.live_max_exposure_usd  === 'number' ? s.live_max_exposure_usd  : null,
     signal:
       s.signal === 'YES' || s.signal === 'NO' || s.signal === 'NONE'
         ? (s.signal as EmaSignal)
@@ -74,11 +78,15 @@ export default function Btc5mEmaCard() {
   const [msg,      setMsg]      = useState<{ text: string; ok: boolean } | null>(null);
 
   // Editable fields — synced from server on load, then locally controlled
-  const [isEnabled,  setIsEnabled]  = useState(false);
-  const [armLive,    setArmLive]    = useState(false);
-  const [mode,       setMode]       = useState<'PAPER' | 'LIVE'>('PAPER');
-  const [tradeSize,  setTradeSize]  = useState('10');
-  const [maxTrades,  setMaxTrades]  = useState('5');
+  const [isEnabled,      setIsEnabled]      = useState(false);
+  const [armLive,        setArmLive]        = useState(false);
+  const [mode,           setMode]           = useState<'PAPER' | 'LIVE'>('PAPER');
+  const [tradeSize,      setTradeSize]      = useState('10');
+  const [maxTrades,      setMaxTrades]      = useState('5');
+  // Bankroll fields
+  const [paperBalance,   setPaperBalance]   = useState('');
+  const [paperMaxExp,    setPaperMaxExp]    = useState('');
+  const [liveMaxExp,     setLiveMaxExp]     = useState('');
 
   const syncFromSettings = (s: BotSettings) => {
     setIsEnabled(s.is_enabled ?? false);
@@ -86,6 +94,11 @@ export default function Btc5mEmaCard() {
     setMode(s.mode ?? 'PAPER');
     setTradeSize(String(s.trade_size_usd ?? s.trade_size ?? 10));
     setMaxTrades(String(s.max_trades_per_hour ?? 5));
+    // Bankroll
+    const ss = s.strategy_settings ?? {};
+    setPaperBalance(s.paper_balance_usd != null ? String(s.paper_balance_usd) : '');
+    setPaperMaxExp(typeof ss.paper_max_exposure_usd === 'number' ? String(ss.paper_max_exposure_usd) : '');
+    setLiveMaxExp(typeof ss.live_max_exposure_usd  === 'number' ? String(ss.live_max_exposure_usd)  : '');
   };
 
   const load = useCallback(async () => {
@@ -125,6 +138,16 @@ export default function Btc5mEmaCard() {
     setSaving(true);
     setMsg(null);
     try {
+      // Build strategy_settings patch — only include fields the user has set.
+      // The API merges these into the existing JSONB (preserving Worker-written fields).
+      const stratPatch: Record<string, number> = {};
+      const parsedPaperMax = parseFloat(paperMaxExp);
+      const parsedLiveMax  = parseFloat(liveMaxExp);
+      if (!isNaN(parsedPaperMax) && parsedPaperMax >= 0) stratPatch.paper_max_exposure_usd = parsedPaperMax;
+      if (!isNaN(parsedLiveMax)  && parsedLiveMax  >= 0) stratPatch.live_max_exposure_usd  = parsedLiveMax;
+
+      const parsedPaperBal = parseFloat(paperBalance);
+
       const res = await fetch('/api/bot-settings', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,12 +158,24 @@ export default function Btc5mEmaCard() {
           mode,
           trade_size:          parseFloat(tradeSize) || 10,
           max_trades_per_hour: parseInt(maxTrades, 10) || 5,
+          ...(Number.isFinite(parsedPaperBal) && parsedPaperBal >= 0
+            ? { paper_balance_usd: parsedPaperBal }
+            : {}),
+          ...(Object.keys(stratPatch).length > 0
+            ? { strategy_settings: stratPatch }
+            : {}),
         }),
         cache: 'no-store',
       });
       const payload = await res.json();
       if (payload.ok) {
         setSettings(payload.settings);
+        // Re-sync bankroll inputs from confirmed server values
+        const saved = payload.settings as BotSettings;
+        const ss = saved?.strategy_settings ?? {};
+        if (saved?.paper_balance_usd != null) setPaperBalance(String(saved.paper_balance_usd));
+        if (typeof ss.paper_max_exposure_usd === 'number') setPaperMaxExp(String(ss.paper_max_exposure_usd));
+        if (typeof ss.live_max_exposure_usd  === 'number') setLiveMaxExp(String(ss.live_max_exposure_usd));
         setMsg({ text: 'Saved', ok: true });
       } else {
         setMsg({ text: payload.error ?? 'Save failed', ok: false });
@@ -273,6 +308,96 @@ export default function Btc5mEmaCard() {
             </span>
           </div>
         ))}
+      </div>
+
+      {/* ── Bankroll ── */}
+      <div style={{
+        marginBottom: '1.1rem',
+        borderRadius: '0.6rem',
+        overflow: 'hidden',
+        border: '1px solid rgba(255,255,255,0.07)',
+      }}>
+        {/* Paper sub-section */}
+        <div style={{
+          padding: '0.65rem 0.9rem',
+          background: 'rgba(96,165,250,0.05)',
+          borderBottom: '1px solid rgba(255,255,255,0.05)',
+        }}>
+          <div style={{
+            fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.09em',
+            textTransform: 'uppercase', color: '#60a5fa', marginBottom: '0.55rem',
+          }}>
+            Paper
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+            {/* Paper Balance */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.73rem' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Balance (USD)</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="—"
+                value={paperBalance}
+                onChange={(e) => setPaperBalance(e.target.value)}
+                style={{ ...inputStyle, width: '6rem' }}
+              />
+            </div>
+            {/* Paper Max Exposure */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.73rem' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Max Exposure (USD)</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="—"
+                value={paperMaxExp}
+                onChange={(e) => setPaperMaxExp(e.target.value)}
+                style={{ ...inputStyle, width: '6rem' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Live sub-section */}
+        <div style={{
+          padding: '0.65rem 0.9rem',
+          background: 'rgba(52,211,153,0.04)',
+        }}>
+          <div style={{
+            fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.09em',
+            textTransform: 'uppercase', color: '#34d399', marginBottom: '0.55rem',
+          }}>
+            Live
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+            {/* Live Balance — read-only, updated by the Worker */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.73rem' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Balance (USD)</span>
+              <span style={{
+                fontWeight: 600, color: '#f8fafc',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {settings?.live_balance_usd != null
+                  ? fmtPrice(settings.live_balance_usd)
+                  : '—'}
+              </span>
+            </div>
+            {/* Live Max Exposure */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.73rem' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Max Exposure (USD)</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="—"
+                value={liveMaxExp}
+                onChange={(e) => setLiveMaxExp(e.target.value)}
+                style={{ ...inputStyle, width: '6rem' }}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── Controls ── */}
