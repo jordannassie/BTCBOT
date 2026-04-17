@@ -40,8 +40,22 @@ type WalletRow = {
 type SeriesPoint = { x: string; y: number };
 type WalletSeries = { wallet_address: string; points: SeriesPoint[] };
 
-type SortKey = 'copy_score' | 'pnl_7d' | 'pnl_30d' | 'pnl_all' | 'win_rate' | 'trade_count' | 'volume';
-type SortDir = 'desc' | 'asc';
+type SortKey    = 'copy_score' | 'pnl_7d' | 'pnl_30d' | 'pnl_all' | 'win_rate' | 'trade_count' | 'volume';
+type SortDir    = 'desc' | 'asc';
+type FilterMode = 'all' | 'fast';
+
+// ─── Fast-wallet predicate (shared by filter + sort) ─────────────────────────
+// A wallet is "fast" when ANY of the following are true:
+//   1. avg_hold_minutes ≤ 20  (FAST 5M / FAST 15M tier)
+//   2. tags array contains a fast / short indicator string
+//   3. quick_exit_rate ≥ 0.70 (proxy for short_market_pct ≥ 70 %)
+function isFastWallet(w: WalletRow): boolean {
+  const m = w.metrics;
+  if (m?.avg_hold_minutes != null && m.avg_hold_minutes > 0 && m.avg_hold_minutes <= 20) return true;
+  if (m?.quick_exit_rate  != null && m.quick_exit_rate >= 0.70) return true;
+  if (w.tags?.some((t) => /fast|short|scalp|5m|15m/i.test(t))) return true;
+  return false;
+}
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -345,6 +359,9 @@ export default function TrackedWalletsSection() {
   const [sortKey, setSortKey] = useState<SortKey>('copy_score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
+  // Filter mode — 'all' shows everything; 'fast' shows only fast-trader wallets
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkWorking, setBulkWorking] = useState(false);
@@ -450,16 +467,31 @@ export default function TrackedWalletsSection() {
   };
 
   const sorted = useMemo(() => {
-    return [...wallets].sort((a, b) => {
+    // 1. Filter
+    const base = filterMode === 'fast' ? wallets.filter(isFastWallet) : wallets;
+
+    // 2. Sort
+    return [...base].sort((a, b) => {
       // Active wallets always float above inactive ones
       const activeDiff = (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0);
       if (activeDiff !== 0) return activeDiff;
+
+      // In Fast Traders view: sort by avg hold ascending so the fastest appear first
+      if (filterMode === 'fast') {
+        const ah_a = a.metrics?.avg_hold_minutes ?? Infinity;
+        const ah_b = b.metrics?.avg_hold_minutes ?? Infinity;
+        if (ah_a !== ah_b) return ah_a - ah_b;
+      }
+
       // Within same active tier, apply the chosen metric sort
       const av = a.metrics?.[sortKey] ?? -Infinity;
       const bv = b.metrics?.[sortKey] ?? -Infinity;
       return sortDir === 'desc' ? (bv as number) - (av as number) : (av as number) - (bv as number);
     });
-  }, [wallets, sortKey, sortDir]);
+  }, [wallets, sortKey, sortDir, filterMode]);
+
+  // Count fast wallets for the filter pill badge
+  const fastCount = useMemo(() => wallets.filter(isFastWallet).length, [wallets]);
 
   // ── Toggle single wallet ──────────────────────────────────────────────────
   // Optimistic: flip immediately, revert + show inline error if save fails.
@@ -592,7 +624,9 @@ export default function TrackedWalletsSection() {
         <div className="copy-section-title-row">
           <h2 className="copy-section-title">Tracked Wallets</h2>
           {!loading && wallets.length > 0 && (
-            <span className="copy-section-count">{wallets.length}</span>
+            <span className="copy-section-count">
+              {filterMode === 'fast' ? `${sorted.length} / ${wallets.length}` : wallets.length}
+            </span>
           )}
           {enriching && (
             <span className="copy-wallet-enriching" title="Fetching fresh stats from Polymarket…">
@@ -610,6 +644,27 @@ export default function TrackedWalletsSection() {
           </button>
         </div>
       </div>
+
+      {/* ── Quick filter bar ── */}
+      {!loading && wallets.length > 0 && (
+        <div className="copy-filter-bar">
+          <button
+            className={`copy-filter-btn ${filterMode === 'all' ? 'copy-filter-btn-active' : ''}`}
+            onClick={() => setFilterMode('all')}
+          >
+            All Wallets
+            <span className="copy-filter-count">{wallets.length}</span>
+          </button>
+          <button
+            className={`copy-filter-btn copy-filter-btn-fast ${filterMode === 'fast' ? 'copy-filter-btn-active copy-filter-btn-fast-active' : ''}`}
+            onClick={() => setFilterMode('fast')}
+            title="avg hold ≤20m · quick_exit_rate ≥70% · fast/short/scalp tags"
+          >
+            ⚡ Fast Traders
+            {fastCount > 0 && <span className="copy-filter-count">{fastCount}</span>}
+          </button>
+        </div>
+      )}
 
       {/* Bulk action result */}
       {bulkResult && (
@@ -714,6 +769,11 @@ export default function TrackedWalletsSection() {
         </div>
       ) : wallets.length === 0 ? (
         <EmptyWallets onAdd={() => setShowForm(true)} />
+      ) : sorted.length === 0 && filterMode === 'fast' ? (
+        <div className="copy-filter-empty">
+          <span>No fast traders yet.</span>
+          <button className="copy-filter-empty-reset" onClick={() => setFilterMode('all')}>Show all wallets</button>
+        </div>
       ) : (
         <div className="copy-table-wrap copy-table-scroll">
           <table className="copy-table copy-table-leaderboard">

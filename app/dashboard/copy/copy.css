@@ -3342,6 +3342,102 @@
   50%       { opacity: 1; }
 }
 
+/* ─── Quick filter bar ───────────────────────────────────────────────────────
+   Sits between the section header and the bulk-select bar.                   */
+
+.copy-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0;
+  flex-wrap: wrap;
+}
+
+.copy-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.73rem;
+  font-weight: 500;
+  padding: 0.28em 0.75em;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(248, 250, 252, 0.5);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.copy-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(248, 250, 252, 0.8);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Active: All Wallets */
+.copy-filter-btn-active {
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(248, 250, 252, 0.92);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+/* Fast Traders button — blue accent */
+.copy-filter-btn-fast {
+  border-color: rgba(59, 130, 246, 0.25);
+  color: rgba(96, 165, 250, 0.7);
+}
+.copy-filter-btn-fast:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* Active: Fast Traders */
+.copy-filter-btn-fast-active {
+  background: rgba(59, 130, 246, 0.14);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.45);
+}
+
+/* Count pill inside filter button */
+.copy-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 1.2rem;
+  padding: 0 0.3em;
+  height: 1.2rem;
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(248, 250, 252, 0.6);
+}
+.copy-filter-btn-fast-active .copy-filter-count {
+  background: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+}
+
+/* Empty state when Fast Traders filter returns zero results */
+.copy-filter-empty {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem 0.5rem;
+  font-size: 0.82rem;
+  color: rgba(248, 250, 252, 0.35);
+}
+.copy-filter-empty-reset {
+  font-size: 0.78rem;
+  color: #60a5fa;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+.copy-filter-empty-reset:hover { color: #93c5fd; }
+
 /* ─── Fast-trader row tints ──────────────────────────────────────────────────
    Left border + very subtle blue background so fast rows stand out without
    being garish. Intensity increases with how fast the tier is.              */
