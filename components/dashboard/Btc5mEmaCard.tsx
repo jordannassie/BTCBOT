@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { BotSettings } from '@/lib/botData';
+import MiniSparkline from '@/components/copy/MiniSparkline';
 
 const BOT_ID = 'btc_5m_ema';
 
@@ -14,6 +15,17 @@ type EmaStratSettings = {
   signal:                 EmaSignal | null;
   paper_max_exposure_usd: number | null;
   live_max_exposure_usd:  number | null;
+};
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type SparkPoint = { x: string; y: number };
+
+type EmaMetrics = {
+  open_count:    number;
+  open_exposure: number;
+  total_pnl:     number;
+  daily_series:  { date: string; cumulative_pnl: number }[];
 };
 
 // ── Formatters ────────────────────────────────────────────────────────────────
@@ -77,6 +89,10 @@ export default function Btc5mEmaCard() {
   const [saving,   setSaving]   = useState(false);
   const [msg,      setMsg]      = useState<{ text: string; ok: boolean } | null>(null);
 
+  // Performance metrics from /api/btc-ema-metrics
+  const [metrics,     setMetrics]     = useState<EmaMetrics | null>(null);
+  const [sparkPoints, setSparkPoints] = useState<SparkPoint[]>([]);
+
   // Editable fields — synced from server on load, then locally controlled
   const [isEnabled,      setIsEnabled]      = useState(false);
   const [armLive,        setArmLive]        = useState(false);
@@ -118,21 +134,41 @@ export default function Btc5mEmaCard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const loadMetrics = useCallback(async () => {
+    try {
+      const res     = await fetch('/api/btc-ema-metrics', { cache: 'no-store' });
+      const payload = await res.json();
+      if (payload.ok) {
+        setMetrics(payload as EmaMetrics);
+        // Build sparkline points from the cumulative daily series
+        const series = (payload.daily_series ?? []) as { date: string; cumulative_pnl: number }[];
+        setSparkPoints(series.map((d) => ({ x: d.date, y: d.cumulative_pnl })));
+      }
+    } catch { /* ignore — placeholders remain */ }
+  }, []);
+
   useEffect(() => {
     load();
-    // Poll every 30 s so signal / EMA values refresh when the Worker writes them
+    loadMetrics();
+    // Poll every 30 s so signal / EMA values and metrics refresh
     const interval = setInterval(async () => {
       try {
-        const res     = await fetch(`/api/bot-settings?bot_id=${BOT_ID}`, { cache: 'no-store' });
-        const payload = await res.json();
-        if (payload.ok && payload.settings) {
-          // Only refresh the signal read-only data — never overwrite form inputs mid-edit
-          setSettings(payload.settings);
+        const [settRes, metrRes] = await Promise.all([
+          fetch(`/api/bot-settings?bot_id=${BOT_ID}`, { cache: 'no-store' }),
+          fetch('/api/btc-ema-metrics', { cache: 'no-store' }),
+        ]);
+        const settPayload = await settRes.json();
+        if (settPayload.ok && settPayload.settings) setSettings(settPayload.settings);
+        const metrPayload = await metrRes.json();
+        if (metrPayload.ok) {
+          setMetrics(metrPayload as EmaMetrics);
+          const series = (metrPayload.daily_series ?? []) as { date: string; cumulative_pnl: number }[];
+          setSparkPoints(series.map((d) => ({ x: d.date, y: d.cumulative_pnl })));
         }
       } catch { /* ignore */ }
     }, 30_000);
     return () => clearInterval(interval);
-  }, [load]);
+  }, [load, loadMetrics]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -191,6 +227,15 @@ export default function Btc5mEmaCard() {
   const { label: statusLabel, color: statusColor } = getStatus(isEnabled, armLive, mode);
   const ema = parseStratSettings(settings);
 
+  // Balance: prefer mode-appropriate field
+  const balance = mode === 'LIVE'
+    ? (settings?.live_balance_usd ?? null)
+    : (settings?.paper_balance_usd ?? null);
+
+  const totalPnl     = metrics?.total_pnl     ?? null;
+  const openExposure = metrics?.open_exposure  ?? null;
+  const pnlColor = totalPnl == null ? 'rgba(248,250,252,0.4)' : totalPnl >= 0 ? '#34d399' : '#f87171';
+
   const signalColor =
     ema.signal === 'YES'  ? '#34d399' :
     ema.signal === 'NO'   ? '#f87171' :
@@ -246,6 +291,71 @@ export default function Btc5mEmaCard() {
         }}>
           {statusLabel}
         </span>
+      </div>
+
+      {/* ── Metrics block: Balance · Open Exposure · All-Time P/L + Sparkline ── */}
+      <div style={{
+        marginBottom: '1rem',
+        padding: '0.7rem 0.9rem',
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        borderRadius: '0.6rem',
+      }}>
+        {/* Three-stat row */}
+        <div style={{ display: 'flex', gap: '0', marginBottom: sparkPoints.length >= 2 ? '0.65rem' : 0 }}>
+          {/* Balance */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.57rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.32)', marginBottom: '0.2rem' }}>
+              {mode === 'LIVE' ? 'Live Balance' : 'Paper Balance'}
+            </div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>
+              {balance != null ? fmtPrice(balance) : '—'}
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div style={{ width: '1px', background: 'rgba(255,255,255,0.07)', margin: '0 0.75rem', flexShrink: 0 }} />
+
+          {/* Open Exposure */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.57rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.32)', marginBottom: '0.2rem' }}>
+              Open Exposure
+            </div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>
+              {openExposure != null ? fmtPrice(openExposure) : '—'}
+            </div>
+            {(metrics?.open_count ?? 0) > 0 && (
+              <div style={{ fontSize: '0.6rem', color: 'rgba(248,250,252,0.28)', marginTop: '0.1rem' }}>
+                {metrics!.open_count} open
+              </div>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div style={{ width: '1px', background: 'rgba(255,255,255,0.07)', margin: '0 0.75rem', flexShrink: 0 }} />
+
+          {/* All-Time P/L */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.57rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.32)', marginBottom: '0.2rem' }}>
+              All-Time P/L
+            </div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: pnlColor, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>
+              {totalPnl != null
+                ? `${totalPnl >= 0 ? '+' : ''}${fmtPrice(totalPnl)}`
+                : '—'}
+            </div>
+          </div>
+        </div>
+
+        {/* Trend sparkline — only rendered when series has ≥ 2 points */}
+        <div style={{ marginTop: '0.1rem' }}>
+          <MiniSparkline
+            points={sparkPoints}
+            id="btc-5m-ema-pnl"
+            width={240}
+            height={30}
+          />
+        </div>
       </div>
 
       {/* ── Current Signal block ── */}
