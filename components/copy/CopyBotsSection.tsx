@@ -49,8 +49,9 @@ type EditForm = {
 };
 
 // Bulk apply — each field has an "apply?" checkbox
+// Note: 'mode' (PAPER/LIVE) is intentionally excluded — set per-bot via Edit.
 type BulkFieldKey =
-  | 'mode' | 'copy_mode' | 'sizing_value' | 'max_trade_size'
+  | 'copy_mode' | 'sizing_value' | 'max_trade_size'
   | 'max_open_positions' | 'max_trades_per_hour' | 'max_slippage'
   | 'delay_seconds' | 'is_enabled' | 'arm_live' | 'opens_only'
   | 'copy_closes' | 'notes';
@@ -67,7 +68,6 @@ type FieldDef =
   | { key: BulkFieldKey; label: string; type: 'text'; hint?: string };
 
 const BULK_FIELDS: FieldDef[] = [
-  { key: 'mode',               label: 'Mode',               type: 'select',  options: ['PAPER', 'LIVE'] },
   { key: 'copy_mode',          label: 'Copy Mode',          type: 'select',  options: ['scaled', 'exact', 'percent'] },
   { key: 'sizing_value',       label: 'Sizing Value',       type: 'number',  step: '0.01', min: '0', hint: 'multiplier, fixed USD, or % of bankroll' },
   { key: 'max_trade_size',     label: 'Max Trade Size ($)', type: 'number',  step: '1',    min: '0', hint: 'hard cap per individual trade' },
@@ -225,11 +225,17 @@ function BulkEditModal({ bots, selectedIds, onClose, onApplied }: BulkEditModalP
     } catch {}
     return base;
   });
+  // Exit-mode section is toggled as a single unit (mode + TP% + max hold)
+  const [applyExitMode, setApplyExitMode] = useState(false);
+
   const [saveAsDefault, setSaveAsDefault] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const anyApplied = useMemo(() => Object.values(apply).some(Boolean), [apply]);
+  const anyApplied = useMemo(
+    () => Object.values(apply).some(Boolean) || applyExitMode,
+    [apply, applyExitMode]
+  );
   const targetCount = target === 'all' ? bots.length : selectedIds.size;
 
   const toggleApply = (key: BulkFieldKey) =>
@@ -238,8 +244,14 @@ function BulkEditModal({ bots, selectedIds, onClose, onApplied }: BulkEditModalP
   const setField = (key: keyof BulkForm, value: string | boolean) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
-  const selectAll = () => setApply(Object.fromEntries(BULK_FIELDS.map((f) => [f.key, true])) as BulkApply);
-  const clearAll  = () => setApply(Object.fromEntries(BULK_FIELDS.map((f) => [f.key, false])) as BulkApply);
+  const selectAll = () => {
+    setApply(Object.fromEntries(BULK_FIELDS.map((f) => [f.key, true])) as BulkApply);
+    setApplyExitMode(true);
+  };
+  const clearAll = () => {
+    setApply(Object.fromEntries(BULK_FIELDS.map((f) => [f.key, false])) as BulkApply);
+    setApplyExitMode(false);
+  };
 
   const handleApply = async () => {
     if (!anyApplied) { setError('Select at least one field to apply'); return; }
@@ -256,6 +268,17 @@ function BulkEditModal({ bots, selectedIds, onClose, onApplied }: BulkEditModalP
         fields[f.key] = form[f.key];
       } else {
         fields[f.key] = (form[f.key] as string).trim() || null;
+      }
+    }
+
+    // Exit settings applied as an atomic group
+    if (applyExitMode) {
+      fields.exit_mode = form.exit_mode;
+      if (form.exit_mode !== 'mirror_only') {
+        fields.take_profit_pct = parseFloat(form.take_profit_pct) || 8;
+      }
+      if (form.exit_mode === 'auto_profit_max_hold') {
+        fields.max_hold_minutes = parseInt(form.max_hold_minutes, 10) || 10;
       }
     }
 
@@ -289,6 +312,11 @@ function BulkEditModal({ bots, selectedIds, onClose, onApplied }: BulkEditModalP
           const toSave: Record<string, unknown> = {};
           for (const f of BULK_FIELDS) {
             if (apply[f.key]) toSave[f.key] = form[f.key];
+          }
+          if (applyExitMode) {
+            toSave.exit_mode = form.exit_mode;
+            toSave.take_profit_pct = form.take_profit_pct;
+            toSave.max_hold_minutes = form.max_hold_minutes;
           }
           localStorage.setItem(BOT_DEFAULTS_LS_KEY, JSON.stringify({ ...existing, ...toSave }));
         } catch {}
@@ -427,6 +455,76 @@ function BulkEditModal({ bots, selectedIds, onClose, onApplied }: BulkEditModalP
             })}
           </div>
 
+          {/* ── Exit Settings section ── */}
+          <div className="copy-form-section-head" style={{ marginTop: '0.75rem' }}>Exit Settings</div>
+          <div className={`copy-bulk-row${applyExitMode ? ' copy-bulk-row-active' : ''}`} style={{ alignItems: 'flex-start' }}>
+            <input
+              type="checkbox"
+              className="copy-bulk-check"
+              id="bulk-apply-exit"
+              checked={applyExitMode}
+              onChange={() => setApplyExitMode((v) => !v)}
+              style={{ marginTop: '0.15rem' }}
+            />
+            <label className="copy-bulk-row-label" htmlFor="bulk-apply-exit" style={{ paddingTop: '0.05rem' }}>
+              Exit Mode
+            </label>
+            <div className={`copy-bulk-row-control${!applyExitMode ? ' copy-bulk-row-disabled' : ''}`}>
+              <select
+                className="copy-form-select"
+                value={form.exit_mode}
+                onChange={(e) => setField('exit_mode', e.target.value as ExitMode)}
+                disabled={!applyExitMode}
+              >
+                {EXIT_MODE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <span className="copy-form-hint">
+                {EXIT_MODE_OPTIONS.find((o) => o.value === form.exit_mode)?.hint}
+              </span>
+
+              {/* Take Profit % — shown when auto_profit or auto_profit_max_hold */}
+              {applyExitMode && (form.exit_mode === 'auto_profit' || form.exit_mode === 'auto_profit_max_hold') && (
+                <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: '0.75rem', color: 'rgba(248,250,252,0.55)', flexShrink: 0 }}>
+                    Take Profit %
+                  </label>
+                  <input
+                    className="copy-form-input"
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    max="100"
+                    value={form.take_profit_pct}
+                    onChange={(e) => setField('take_profit_pct', e.target.value)}
+                    style={{ width: '5rem' }}
+                  />
+                  <span className="copy-form-hint">e.g. 8 = close at +8%</span>
+                </div>
+              )}
+
+              {/* Max Hold Minutes — shown only for auto_profit_max_hold */}
+              {applyExitMode && form.exit_mode === 'auto_profit_max_hold' && (
+                <div style={{ marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: '0.75rem', color: 'rgba(248,250,252,0.55)', flexShrink: 0 }}>
+                    Max Hold (min)
+                  </label>
+                  <input
+                    className="copy-form-input"
+                    type="number"
+                    step="1"
+                    min="1"
+                    value={form.max_hold_minutes}
+                    onChange={(e) => setField('max_hold_minutes', e.target.value)}
+                    style={{ width: '5rem' }}
+                  />
+                  <span className="copy-form-hint">Time-based close regardless of P/L</span>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Save as future default */}
           <div className="copy-bulk-save-default-row">
             <input
@@ -521,6 +619,9 @@ function EditModal({ bot, wallets, onClose, onSaved }: EditModalProps) {
           <button className="copy-modal-close" onClick={onClose} type="button" aria-label="Close">×</button>
         </div>
         <form className="copy-modal-body" onSubmit={handleSubmit}>
+
+          {/* ── Basic Settings ────────────────────────────────────────────── */}
+          <div className="copy-form-section-head">Basic Settings</div>
           <div className="copy-form-grid">
             <div className="copy-form-field">
               <label className="copy-form-label">Bot Name <span style={{ color: '#f87171' }}>*</span></label>
@@ -555,6 +656,25 @@ function EditModal({ bot, wallets, onClose, onSaved }: EditModalProps) {
               <label className="copy-form-label">Sizing Value</label>
               <input className="copy-form-input" type="number" step="0.01" value={form.sizing_value} onChange={(e) => set('sizing_value', e.target.value)} />
             </div>
+            <div className="copy-form-field copy-form-toggle-row">
+              <label className="copy-form-label">Enabled</label>
+              <div className="toggle-switch" style={{ width: 36, height: 20 }}><input type="checkbox" id="edit-is-enabled" checked={form.is_enabled} onChange={(e) => set('is_enabled', e.target.checked)} /><label className="toggle-slider" htmlFor="edit-is-enabled" /></div>
+            </div>
+            <div className="copy-form-field copy-form-toggle-row">
+              <label className="copy-form-label">ARM LIVE</label>
+              <div className="toggle-switch" style={{ width: 36, height: 20 }}><input type="checkbox" id="edit-arm-live" checked={form.arm_live} onChange={(e) => set('arm_live', e.target.checked)} /><label className="toggle-slider" htmlFor="edit-arm-live" /></div>
+              <span className="copy-form-hint" style={{ marginLeft: 0 }}>Secondary gate for live orders</span>
+            </div>
+            <div className="copy-form-field copy-form-toggle-row">
+              <label className="copy-form-label">Copy Closes</label>
+              <div className="toggle-switch" style={{ width: 36, height: 20 }}><input type="checkbox" id="edit-copy-closes" checked={form.copy_closes} onChange={(e) => set('copy_closes', e.target.checked)} /><label className="toggle-slider" htmlFor="edit-copy-closes" /></div>
+              <span className="copy-form-hint" style={{ marginLeft: 0 }}>Mirror source wallet exits</span>
+            </div>
+          </div>
+
+          {/* ── Risk / Limits ─────────────────────────────────────────────── */}
+          <div className="copy-form-section-head">Risk / Limits</div>
+          <div className="copy-form-grid">
             <div className="copy-form-field">
               <label className="copy-form-label">Max Trade Size ($)</label>
               <input className="copy-form-input" type="number" step="1" min="0" value={form.max_trade_size} onChange={(e) => set('max_trade_size', e.target.value)} />
@@ -578,24 +698,11 @@ function EditModal({ bot, wallets, onClose, onSaved }: EditModalProps) {
               <label className="copy-form-label">Delay Seconds</label>
               <input className="copy-form-input" type="number" step="1" min="0" value={form.delay_seconds} onChange={(e) => set('delay_seconds', e.target.value)} />
             </div>
-            <div className="copy-form-field copy-form-toggle-row">
-              <label className="copy-form-label">Enabled</label>
-              <div className="toggle-switch" style={{ width: 36, height: 20 }}><input type="checkbox" id="edit-is-enabled" checked={form.is_enabled} onChange={(e) => set('is_enabled', e.target.checked)} /><label className="toggle-slider" htmlFor="edit-is-enabled" /></div>
-            </div>
-            <div className="copy-form-field copy-form-toggle-row">
-              <label className="copy-form-label">ARM LIVE</label>
-              <div className="toggle-switch" style={{ width: 36, height: 20 }}><input type="checkbox" id="edit-arm-live" checked={form.arm_live} onChange={(e) => set('arm_live', e.target.checked)} /><label className="toggle-slider" htmlFor="edit-arm-live" /></div>
-              <span className="copy-form-hint" style={{ marginLeft: 0 }}>Secondary gate for live orders</span>
-            </div>
-            <div className="copy-form-field copy-form-toggle-row">
-              <label className="copy-form-label">Opens Only</label>
-              <div className="toggle-switch" style={{ width: 36, height: 20 }}><input type="checkbox" id="edit-opens-only" checked={form.opens_only} onChange={(e) => set('opens_only', e.target.checked)} /><label className="toggle-slider" htmlFor="edit-opens-only" /></div>
-            </div>
-            <div className="copy-form-field copy-form-toggle-row">
-              <label className="copy-form-label">Copy Closes</label>
-              <div className="toggle-switch" style={{ width: 36, height: 20 }}><input type="checkbox" id="edit-copy-closes" checked={form.copy_closes} onChange={(e) => set('copy_closes', e.target.checked)} /><label className="toggle-slider" htmlFor="edit-copy-closes" /></div>
-            </div>
-            {/* ── Exit Settings ── */}
+          </div>
+
+          {/* ── Exit Settings ─────────────────────────────────────────────── */}
+          <div className="copy-form-section-head">Exit Settings</div>
+          <div className="copy-form-grid">
             <div className="copy-form-field copy-form-grid-wide">
               <label className="copy-form-label">Exit Mode</label>
               <select
@@ -640,8 +747,18 @@ function EditModal({ bot, wallets, onClose, onSaved }: EditModalProps) {
                 <span className="copy-form-hint">Close after this many minutes regardless of P/L</span>
               </div>
             )}
+          </div>
+
+          {/* ── Advanced ──────────────────────────────────────────────────── */}
+          <div className="copy-form-section-head copy-form-section-head-muted">Advanced</div>
+          <div className="copy-form-grid">
+            <div className="copy-form-field copy-form-toggle-row">
+              <label className="copy-form-label copy-form-label-muted">Opens Only</label>
+              <div className="toggle-switch" style={{ width: 36, height: 20 }}><input type="checkbox" id="edit-opens-only" checked={form.opens_only} onChange={(e) => set('opens_only', e.target.checked)} /><label className="toggle-slider" htmlFor="edit-opens-only" /></div>
+              <span className="copy-form-hint" style={{ marginLeft: 0 }}>Copy opening trades only</span>
+            </div>
             <div className="copy-form-field copy-form-grid-wide">
-              <label className="copy-form-label">Notes</label>
+              <label className="copy-form-label copy-form-label-muted">Notes</label>
               <input className="copy-form-input" value={form.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Optional operator notes" />
             </div>
           </div>

@@ -3537,6 +3537,35 @@
 .copy-fast-hold     { color: #60a5fa; }      /* ≤20m — bright blue           */
 .copy-fast-hold-mid { color: #93c5fd; opacity: 0.85; } /* 20–60m — soft blue */
 
+/* ─── Edit / Bulk modal section headers ─────────────────────────────────────
+   Thin label separators between form sections (Basic / Risk / Exit / Advanced)  */
+
+.copy-form-section-head {
+  grid-column: 1 / -1;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.45);
+  padding: 0.6rem 0 0.3rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 0.5rem;
+}
+
+.copy-form-section-head:first-child {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.copy-form-section-head-muted {
+  color: rgba(248, 250, 252, 0.25);
+}
+
+.copy-form-label-muted {
+  opacity: 0.55;
+}
+
 /* ─── Exit-mode badges ───────────────────────────────────────────────────────
    Shown in copy-bot table rows and on open positions in the Positions tab.
    Mirror Only is not displayed (it's the silent default).                    */
