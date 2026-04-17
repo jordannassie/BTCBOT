@@ -52,6 +52,8 @@ export const BOT_IDS = {
   // allowlist to avoid breaking any in-flight DB rows.
   PAPER_COPY: 'paper_copy',
   PAPER_SCALPER: 'paper_scalper',
+  // Worker strategy — BTC 5-minute EMA crossover
+  BTC_5M_EMA: 'btc_5m_ema',
 } as const;
 
 /** All bot_id values accepted by /api/bot-settings. Derived from BOT_IDS. */
