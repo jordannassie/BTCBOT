@@ -6,6 +6,8 @@ import { SELECTED_BOTS_LS_KEY } from '@/lib/copy/masterStrategy';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type ExitMode = 'mirror_only' | 'auto_profit' | 'auto_profit_max_hold';
+
 type CopyBot = {
   id: string;
   name: string;
@@ -24,6 +26,10 @@ type CopyBot = {
   delay_seconds: number;
   notes: string | null;
   updated_at: string;
+  // Exit settings (migration 0008)
+  exit_mode: ExitMode;
+  take_profit_pct: number;
+  max_hold_minutes: number;
 };
 
 type TrackedWallet = { wallet_address: string; display_name: string | null };
@@ -36,6 +42,10 @@ type EditForm = {
   sizing_value: string; max_trade_size: string; max_open_positions: string;
   max_trades_per_hour: string; max_slippage: string; delay_seconds: string;
   opens_only: boolean; copy_closes: boolean; notes: string;
+  // Exit settings
+  exit_mode: ExitMode;
+  take_profit_pct: string;
+  max_hold_minutes: string;
 };
 
 // Bulk apply — each field has an "apply?" checkbox
@@ -106,6 +116,9 @@ function botToForm(bot: CopyBot): EditForm {
     max_slippage: String(bot.max_slippage), delay_seconds: String(bot.delay_seconds),
     opens_only: bot.opens_only ?? false, copy_closes: bot.copy_closes ?? true,
     notes: bot.notes ?? '',
+    exit_mode: bot.exit_mode ?? 'mirror_only',
+    take_profit_pct: String(bot.take_profit_pct ?? 8),
+    max_hold_minutes: String(bot.max_hold_minutes ?? 10),
   };
 }
 
@@ -125,6 +138,9 @@ function defaultForm(): EditForm {
     opens_only: BOT_DEFAULTS.opens_only,
     copy_closes: BOT_DEFAULTS.copy_closes,
     notes: '',
+    exit_mode: 'mirror_only',
+    take_profit_pct: '8',
+    max_hold_minutes: '10',
   };
 }
 
@@ -151,6 +167,21 @@ function ArmLiveBadge({ armed, mode }: { armed: boolean; mode: 'PAPER' | 'LIVE' 
   if (mode === 'PAPER') return <span className="copy-badge copy-badge-disabled" title="ARM LIVE has no effect in PAPER mode">—</span>;
   if (armed) return <span className="copy-badge copy-badge-arm-live" title="ARM LIVE is on">Armed</span>;
   return <span className="copy-badge copy-badge-disabled" title="ARM LIVE is off">Safe</span>;
+}
+
+// ── Exit-mode helpers ─────────────────────────────────────────────────────────
+
+const EXIT_MODE_OPTIONS: { value: ExitMode; label: string; hint: string }[] = [
+  { value: 'mirror_only',          label: 'Mirror Only',            hint: 'Close only when the source wallet closes' },
+  { value: 'auto_profit',          label: 'Auto Profit',            hint: 'Close when profit ≥ take-profit %' },
+  { value: 'auto_profit_max_hold', label: 'Auto Profit + Max Hold', hint: 'Auto-profit close OR time-based close' },
+];
+
+function ExitModeBadge({ mode }: { mode: ExitMode | undefined }) {
+  const m = mode ?? 'mirror_only';
+  if (m === 'auto_profit')          return <span className="copy-exit-badge copy-exit-badge-profit">AUTO PROFIT</span>;
+  if (m === 'auto_profit_max_hold') return <span className="copy-exit-badge copy-exit-badge-maxhold">AUTO PROFIT + MAX HOLD</span>;
+  return <span className="copy-exit-badge copy-exit-badge-mirror">MIRROR ONLY</span>;
 }
 
 function IconEdit()  { return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>; }
@@ -468,6 +499,10 @@ function EditModal({ bot, wallets, onClose, onSaved }: EditModalProps) {
           delay_seconds: parseInt(form.delay_seconds, 10) || 0,
           opens_only: form.opens_only, copy_closes: form.copy_closes,
           notes: form.notes.trim() || null,
+          // Exit settings
+          exit_mode: form.exit_mode,
+          take_profit_pct: parseFloat(form.take_profit_pct) || 8,
+          max_hold_minutes: parseInt(form.max_hold_minutes, 10) || 10,
         }),
         cache: 'no-store',
       });
@@ -560,6 +595,51 @@ function EditModal({ bot, wallets, onClose, onSaved }: EditModalProps) {
               <label className="copy-form-label">Copy Closes</label>
               <div className="toggle-switch" style={{ width: 36, height: 20 }}><input type="checkbox" id="edit-copy-closes" checked={form.copy_closes} onChange={(e) => set('copy_closes', e.target.checked)} /><label className="toggle-slider" htmlFor="edit-copy-closes" /></div>
             </div>
+            {/* ── Exit Settings ── */}
+            <div className="copy-form-field copy-form-grid-wide">
+              <label className="copy-form-label">Exit Mode</label>
+              <select
+                className="copy-form-select"
+                value={form.exit_mode}
+                onChange={(e) => set('exit_mode', e.target.value as ExitMode)}
+              >
+                {EXIT_MODE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <span className="copy-form-hint">
+                {EXIT_MODE_OPTIONS.find((o) => o.value === form.exit_mode)?.hint}
+              </span>
+            </div>
+            {(form.exit_mode === 'auto_profit' || form.exit_mode === 'auto_profit_max_hold') && (
+              <div className="copy-form-field">
+                <label className="copy-form-label">Take Profit %</label>
+                <input
+                  className="copy-form-input"
+                  type="number"
+                  step="0.5"
+                  min="0.5"
+                  max="100"
+                  value={form.take_profit_pct}
+                  onChange={(e) => set('take_profit_pct', e.target.value)}
+                />
+                <span className="copy-form-hint">e.g. 8 = close at +8% P/L</span>
+              </div>
+            )}
+            {form.exit_mode === 'auto_profit_max_hold' && (
+              <div className="copy-form-field">
+                <label className="copy-form-label">Max Hold (minutes)</label>
+                <input
+                  className="copy-form-input"
+                  type="number"
+                  step="1"
+                  min="1"
+                  value={form.max_hold_minutes}
+                  onChange={(e) => set('max_hold_minutes', e.target.value)}
+                />
+                <span className="copy-form-hint">Close after this many minutes regardless of P/L</span>
+              </div>
+            )}
             <div className="copy-form-field copy-form-grid-wide">
               <label className="copy-form-label">Notes</label>
               <input className="copy-form-input" value={form.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Optional operator notes" />
@@ -995,6 +1075,15 @@ export default function CopyBotsSection() {
                           <span className="copy-td-name" title={bot.name}>
                             {walletNameMap.get(bot.wallet_address) ?? bot.name}
                           </span>
+                          <div style={{ marginTop: '0.25rem' }}>
+                            <ExitModeBadge mode={bot.exit_mode} />
+                            {bot.exit_mode !== 'mirror_only' && (
+                              <span style={{ fontSize: '0.62rem', color: 'rgba(248,250,252,0.35)', marginLeft: '0.35rem' }}>
+                                {bot.exit_mode === 'auto_profit' && `${bot.take_profit_pct ?? 8}%`}
+                                {bot.exit_mode === 'auto_profit_max_hold' && `${bot.take_profit_pct ?? 8}% · ${bot.max_hold_minutes ?? 10}m`}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td><span className="copy-mono" title={bot.wallet_address}>{truncate(bot.wallet_address)}</span></td>
                         <td><ModeBadge mode={bot.mode} /></td>

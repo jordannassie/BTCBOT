@@ -21,7 +21,27 @@ type CopiedPosition = {
   pnl: number;
 };
 
-type BotMap = Record<string, { mode: 'PAPER' | 'LIVE'; name: string }>;
+type ExitMode = 'mirror_only' | 'auto_profit' | 'auto_profit_max_hold';
+type BotMap = Record<string, { mode: 'PAPER' | 'LIVE'; name: string; exit_mode?: ExitMode; take_profit_pct?: number; max_hold_minutes?: number }>;
+
+function ExitModeBadge({ mode, tpPct, maxMin }: { mode?: ExitMode; tpPct?: number; maxMin?: number }) {
+  const m = mode ?? 'mirror_only';
+  if (m === 'auto_profit') {
+    return (
+      <span className="copy-exit-badge copy-exit-badge-profit" title={`Close at +${tpPct ?? 8}% profit`}>
+        AP {tpPct ?? 8}%
+      </span>
+    );
+  }
+  if (m === 'auto_profit_max_hold') {
+    return (
+      <span className="copy-exit-badge copy-exit-badge-maxhold" title={`Close at +${tpPct ?? 8}% profit or after ${maxMin ?? 10}m`}>
+        AP {tpPct ?? 8}% · {maxMin ?? 10}m
+      </span>
+    );
+  }
+  return null; // mirror_only = no badge, it's the default
+}
 
 const truncate = (addr: string) =>
   addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
@@ -80,7 +100,13 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
       if (botsPayload.ok) {
         const map: BotMap = {};
         for (const b of botsPayload.rows ?? []) {
-          map[b.id] = { mode: b.mode, name: b.name };
+          map[b.id] = {
+            mode: b.mode,
+            name: b.name,
+            exit_mode: b.exit_mode ?? 'mirror_only',
+            take_profit_pct: b.take_profit_pct ?? 8,
+            max_hold_minutes: b.max_hold_minutes ?? 10,
+          };
         }
         setBotMap(map);
       }
@@ -299,6 +325,15 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
                             {bot.mode}
                           </span>
                           <span className="copy-td-sub">{bot.name}</span>
+                          {r.status === 'OPEN' && bot.exit_mode && bot.exit_mode !== 'mirror_only' && (
+                            <div style={{ marginTop: '0.2rem' }}>
+                              <ExitModeBadge
+                                mode={bot.exit_mode}
+                                tpPct={bot.take_profit_pct}
+                                maxMin={bot.max_hold_minutes}
+                              />
+                            </div>
+                          )}
                         </>
                       ) : (
                         <span className="copy-td-muted">—</span>

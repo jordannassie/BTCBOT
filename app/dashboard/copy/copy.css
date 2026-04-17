@@ -3537,3 +3537,38 @@
 .copy-fast-hold     { color: #60a5fa; }      /* ≤20m — bright blue           */
 .copy-fast-hold-mid { color: #93c5fd; opacity: 0.85; } /* 20–60m — soft blue */
 
+/* ─── Exit-mode badges ───────────────────────────────────────────────────────
+   Shown in copy-bot table rows and on open positions in the Positions tab.
+   Mirror Only is not displayed (it's the silent default).                    */
+
+.copy-exit-badge {
+  display: inline-block;
+  font-size: 0.57rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.12em 0.5em;
+  border-radius: 0.25rem;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.copy-exit-badge-mirror {
+  background: rgba(248, 250, 252, 0.05);
+  border-color: rgba(248, 250, 252, 0.1);
+  color: rgba(248, 250, 252, 0.3);
+}
+
+.copy-exit-badge-profit {
+  background: rgba(52, 211, 153, 0.1);
+  border-color: rgba(52, 211, 153, 0.25);
+  color: #34d399;
+}
+
+.copy-exit-badge-maxhold {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.25);
+  color: #fbbf24;
+}
+

@@ -89,6 +89,7 @@ export async function PATCH(
     const numericFields = [
       'sizing_value', 'max_trade_size', 'max_open_positions',
       'max_trades_per_hour', 'max_slippage', 'min_liquidity', 'delay_seconds',
+      'take_profit_pct', 'max_hold_minutes',
     ] as const;
 
     for (const field of numericFields) {
@@ -96,6 +97,11 @@ export async function PATCH(
         const parsed = Number(body[field]);
         if (Number.isFinite(parsed)) updates[field] = parsed;
       }
+    }
+
+    const VALID_EXIT_MODES = new Set(['mirror_only', 'auto_profit', 'auto_profit_max_hold']);
+    if (body.exit_mode != null && VALID_EXIT_MODES.has(body.exit_mode)) {
+      updates.exit_mode = body.exit_mode;
     }
 
     if (Array.isArray(body.category_filter)) updates.category_filter = body.category_filter;
