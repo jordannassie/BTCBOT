@@ -3342,3 +3342,60 @@
   50%       { opacity: 1; }
 }
 
+/* ─── Fast-trader row tints ──────────────────────────────────────────────────
+   Left border + very subtle blue background so fast rows stand out without
+   being garish. Intensity increases with how fast the tier is.              */
+
+.copy-row-fast5m,
+.copy-row-fast15m,
+.copy-row-fast {
+  border-left: 2px solid rgba(59, 130, 246, 0.55);
+}
+
+.copy-row-fast5m  { background: rgba(59, 130, 246, 0.055); }
+.copy-row-fast15m { background: rgba(59, 130, 246, 0.035); }
+.copy-row-fast    { background: rgba(59, 130, 246, 0.018); }
+
+/* ─── Fast-trader badge ──────────────────────────────────────────────────────
+   Blue chip displayed in the wallet name row.                                */
+
+.copy-fast-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 0.18em 0.55em;
+  border-radius: 0.28rem;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+/* FAST 5M — brightest blue */
+.copy-fast-badge-fast5m {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.18);
+}
+
+/* FAST 15M — medium blue */
+.copy-fast-badge-fast15m {
+  background: rgba(59, 130, 246, 0.13);
+  color: #7db8f7;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+
+/* FAST TRADER — softer blue */
+.copy-fast-badge-fast {
+  background: rgba(59, 130, 246, 0.08);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.22);
+}
+
+/* ─── Fast-trader avg-hold cell colours ─────────────────────────────────────*/
+
+.copy-fast-hold     { color: #60a5fa; }      /* ≤20m — bright blue           */
+.copy-fast-hold-mid { color: #93c5fd; opacity: 0.85; } /* 20–60m — soft blue */
+

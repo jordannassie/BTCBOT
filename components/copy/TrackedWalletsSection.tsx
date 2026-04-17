@@ -93,9 +93,25 @@ function fmtTradesPerDay(perDay: number | null | undefined, total: number | null
 
 function holdClass(minutes: number | null | undefined): string {
   if (minutes == null || minutes === 0) return 'copy-td-muted';
-  if (minutes < 60)  return 'copy-num-pos';
-  if (minutes < 360) return '';
+  if (minutes <= 20)  return 'copy-fast-hold';
+  if (minutes < 60)   return 'copy-fast-hold-mid';
+  if (minutes < 360)  return '';
   return 'copy-td-muted';
+}
+
+// ─── Fast-trader tier ─────────────────────────────────────────────────────────
+// Returns a display label + CSS modifier for the fast-trader badge and row tint.
+//   FAST 5M     → avg_hold_minutes ≤ 7  (scalper / ultra-short style)
+//   FAST 15M    → avg_hold_minutes ≤ 20 (short-hold swing)
+//   FAST TRADER → avg_hold_minutes < 60 (sub-hour, generally fast)
+//   null        → not a fast trader
+type FastTier = { label: string; mod: string } | null;
+function fastTier(minutes: number | null | undefined): FastTier {
+  if (minutes == null || minutes === 0) return null;
+  if (minutes <= 7)  return { label: 'FAST 5M',     mod: 'fast5m'  };
+  if (minutes <= 20) return { label: 'FAST 15M',    mod: 'fast15m' };
+  if (minutes < 60)  return { label: 'FAST TRADER', mod: 'fast'    };
+  return null;
 }
 
 const truncate = (addr: string) =>
@@ -179,14 +195,9 @@ function getSignals(w: WalletRow): string[] {
     if (h < 24) out.push('Active Today');
   }
 
-  // Fast-exit signals — prefer explicit quick_exit_rate, fall back to avg hold
-  if (m.quick_exit_rate != null) {
-    if      (m.quick_exit_rate >= 0.7) out.push('Quick Exit');
-    else if (m.avg_hold_minutes != null && m.avg_hold_minutes < 10) out.push('Fast 5m');
-  } else if (m.avg_hold_minutes != null) {
-    if      (m.avg_hold_minutes < 10) out.push('Fast 5m');
-    else if (m.avg_hold_minutes < 60) out.push('Quick Exit');
-  }
+  // Fast-exit signals — only show if quick_exit_rate is explicitly available
+  // (avg-hold-based fast labels are now shown as the blue fast badge instead)
+  if (m.quick_exit_rate != null && m.quick_exit_rate >= 0.7) out.push('Quick Exit');
 
   // High Volume — > $10k in the Polymarket 30-day window
   if (m.volume != null && m.volume > 10_000) out.push('High Volume');
@@ -721,6 +732,7 @@ export default function TrackedWalletsSection() {
                 </th>
                 <th className="copy-th-rank">#</th>
                 <th style={{ minWidth: 200 }}>Wallet</th>
+                <th style={{ minWidth: 68 }} title="Average position hold time — FAST 5M ≤7m · FAST 15M ≤20m · FAST TRADER <60m">Avg Hold</th>
                 <th style={{ minWidth: 50 }}>Active</th>
                 <th style={{ minWidth: 60 }} title="Linked copy bots (enabled / total)">Bots</th>
                 <SortHeader label="Score"      sortKey="copy_score"  active={sortKey} dir={sortDir} onSort={handleSort} />
@@ -731,17 +743,15 @@ export default function TrackedWalletsSection() {
                 <SortHeader label="Win Rate"   sortKey="win_rate"    active={sortKey} dir={sortDir} onSort={handleSort} />
                 <th style={{ minWidth: 78 }} title="Estimated trades per day (trade_count ÷ 30-day window)">Trades/Day</th>
                 <SortHeader label="Volume"     sortKey="volume"      active={sortKey} dir={sortDir} onSort={handleSort} />
-                <th style={{ minWidth: 78 }} title="Average position hold time">Avg Hold</th>
               </tr>
             </thead>
             <tbody>
               {sorted.map((w, idx) => {
-                const m        = w.metrics;
-                const points   = seriesMap.get(w.wallet_address) ?? [];
-                const winPct   = m?.win_rate != null ? m.win_rate * 100 : null;
+                const m          = w.metrics;
+                const points     = seriesMap.get(w.wallet_address) ?? [];
+                const winPct     = m?.win_rate != null ? m.win_rate * 100 : null;
                 const isSelected = selectedIds.has(w.wallet_address);
-
-                // No hint needed — bots always mirror wallet active state now
+                const tier       = fastTier(m?.avg_hold_minutes);
 
                 return (
                   <tr
@@ -749,6 +759,7 @@ export default function TrackedWalletsSection() {
                     className={[
                       w.is_active ? '' : 'copy-row-inactive',
                       isSelected ? 'copy-row-selected' : '',
+                      tier ? `copy-row-${tier.mod}` : '',
                     ].filter(Boolean).join(' ')}
                   >
                     {/* Row checkbox */}
@@ -766,10 +777,18 @@ export default function TrackedWalletsSection() {
 
                     {/* Wallet identity */}
                     <td>
-                      {/* Name row: optional HOT source badge + display name link */}
+                      {/* Name row: optional HOT badge, fast-trader badge, display name link */}
                       <div className="copy-wallet-identity-name-row">
                         {w.source === 'hot_import' && (
                           <span className="copy-wallet-hot-badge" title="Imported via HOT tab">HOT</span>
+                        )}
+                        {tier && (
+                          <span
+                            className={`copy-fast-badge copy-fast-badge-${tier.mod}`}
+                            title={`Avg hold: ${fmtHold(m?.avg_hold_minutes)}`}
+                          >
+                            {tier.label}
+                          </span>
                         )}
                         <a
                           className="copy-td-name copy-wallet-pm-link"
@@ -794,6 +813,11 @@ export default function TrackedWalletsSection() {
                           <span key={sig} className="copy-wallet-signal">{sig}</span>
                         ))}
                       </div>
+                    </td>
+
+                    {/* Avg Hold — moved to front for fast-trader visibility */}
+                    <td className={`copy-td-num ${holdClass(m?.avg_hold_minutes)}`} style={{ fontWeight: tier ? 600 : undefined }}>
+                      {fmtHold(m?.avg_hold_minutes)}
                     </td>
 
                     {/* Active toggle */}
@@ -864,11 +888,6 @@ export default function TrackedWalletsSection() {
                     </td>
 
                     <td className="copy-td-num copy-td-muted">{fmtCompact(m?.volume)}</td>
-
-                    {/* Avg Hold */}
-                    <td className={`copy-td-num ${holdClass(m?.avg_hold_minutes)}`}>
-                      {fmtHold(m?.avg_hold_minutes)}
-                    </td>
                   </tr>
                 );
               })}
