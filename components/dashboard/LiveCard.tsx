@@ -87,6 +87,14 @@ type ExposureMetrics = {
   remaining: number | null; // null when unlimited
 };
 
+type LivePnl = {
+  live_all_time_pnl_usd: number;
+  live_today_pnl_usd: number;
+  closed_count: number;
+  today_closed_count: number;
+  capped: boolean;
+};
+
 export default function LiveCard() {
   const [settings, setSettings] = useState<BotSettings | null>(null);
   const [isEnabled, setIsEnabled] = useState(false);
@@ -105,6 +113,8 @@ export default function LiveCard() {
   // Count of enabled bots with arm_live = true — from /api/copy/summary.
   // liveActiveNow is computed on render: isEnabled ? armLiveBots : 0.
   const [armLiveBots, setArmLiveBots] = useState<number | null>(null);
+  // Live P/L from /api/copy/live-pnl — realized P/L from CLOSED live positions.
+  const [livePnl, setLivePnl] = useState<LivePnl | null>(null);
   // Inline live-cap editor
   const [capInput, setCapInput] = useState('0');
   const [savingCap, setSavingCap] = useState(false);
@@ -114,11 +124,13 @@ export default function LiveCard() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const [settingsRes, exposureRes, summaryRes] = await Promise.all([
+      const [settingsRes, exposureRes, summaryRes, pnlRes] = await Promise.all([
         fetch('/api/bot-settings?bot_id=live', { cache: 'no-store' }),
         fetch('/api/copy/exposure', { cache: 'no-store' }),
         // Summary provides arm_live bot counts for the status lines.
         fetch('/api/copy/summary', { cache: 'no-store' }),
+        // Realized P/L from CLOSED live copied_positions.
+        fetch('/api/copy/live-pnl', { cache: 'no-store' }),
       ]);
 
       if (settingsRes.ok) {
@@ -173,6 +185,22 @@ export default function LiveCard() {
           const sumPayload = await summaryRes.json();
           if (sumPayload.ok) setArmLiveBots(sumPayload.armLiveBotsCount ?? 0);
         } catch { /* ignore — counts are non-critical */ }
+      }
+
+      // Live realized P/L — non-fatal; previous state preserved on error.
+      if (pnlRes.ok) {
+        try {
+          const pnlPayload = await pnlRes.json();
+          if (pnlPayload.ok) {
+            setLivePnl({
+              live_all_time_pnl_usd: pnlPayload.live_all_time_pnl_usd ?? 0,
+              live_today_pnl_usd:    pnlPayload.live_today_pnl_usd    ?? 0,
+              closed_count:          pnlPayload.closed_count           ?? 0,
+              today_closed_count:    pnlPayload.today_closed_count     ?? 0,
+              capped:                pnlPayload.capped                 ?? false,
+            });
+          }
+        } catch { /* ignore — P/L is display-only */ }
       }
     } finally {
       setLoading(false);
@@ -340,6 +368,107 @@ export default function LiveCard() {
           {settings?.live_updated_at ? new Date(settings.live_updated_at).toLocaleString() : '--'}
         </p>
       </div>
+
+      {/* ── Portfolio Overview block ────────────────────────────────────────── */}
+      {(() => {
+        const cash           = settings?.live_balance_usd ?? null;
+        const openValue      = liveExposure?.exposure ?? null;
+        const openCount      = liveExposure?.count ?? null;
+        const portfolio      = cash != null && openValue != null ? cash + openValue : null;
+        const allTimePnl     = livePnl?.live_all_time_pnl_usd ?? null;
+        const todayPnl       = livePnl?.live_today_pnl_usd    ?? null;
+        const pnlCapped      = livePnl?.capped ?? false;
+
+        const pnlColor = (v: number | null) =>
+          v == null ? 'rgba(248,250,252,0.55)'
+          : v > 0   ? '#34d399'
+          : v < 0   ? '#f87171'
+          :            'rgba(248,250,252,0.55)';
+
+        const pnlPrefix = (v: number | null) => (v != null && v > 0 ? '+' : '');
+
+        return (
+          <div style={{
+            marginTop: '1rem',
+            padding: '0.75rem 1rem',
+            background: 'rgba(248,250,252,0.03)',
+            border: '1px solid rgba(248,250,252,0.08)',
+            borderRadius: '0.65rem',
+          }}>
+            {/* Section label */}
+            <div style={{ marginBottom: '0.55rem' }}>
+              <span style={{
+                fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.09em',
+                textTransform: 'uppercase', color: 'rgba(248,250,252,0.4)',
+              }}>
+                Portfolio Overview
+              </span>
+            </div>
+
+            {/* Metric rows */}
+            {(
+              [
+                { label: 'Portfolio',            value: portfolio,  note: portfolio == null ? '(cash + open)' : null },
+                { label: 'Cash',                 value: cash,       note: null },
+                { label: 'Open Positions Value', value: openValue,  note: null },
+                { label: 'Open Positions',       value: null,       count: openCount },
+              ] as { label: string; value: number | null; note: string | null; count?: number | null }[]
+            ).map(({ label, value, note, count }) => (
+              <div key={label} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                fontSize: '0.72rem', marginBottom: '0.25rem',
+              }}>
+                <span style={{ color: 'rgba(248,250,252,0.38)' }}>
+                  {label}
+                  {note && (
+                    <span style={{ color: 'rgba(248,250,252,0.2)', fontSize: '0.6rem', marginLeft: '0.25rem' }}>
+                      {note}
+                    </span>
+                  )}
+                </span>
+                <span style={{ fontWeight: 700, color: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
+                  {count !== undefined
+                    ? (count != null ? String(count) : '—')
+                    : (value != null ? formatUSD(value) : '—')}
+                </span>
+              </div>
+            ))}
+
+            {/* Divider */}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', margin: '0.45rem 0' }} />
+
+            {/* P/L rows */}
+            {(
+              [
+                { label: 'All-Time P/L', value: allTimePnl, capped: pnlCapped },
+                { label: 'Today P/L',    value: todayPnl,   capped: false },
+              ] as { label: string; value: number | null; capped: boolean }[]
+            ).map(({ label, value, capped }) => (
+              <div key={label} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                fontSize: '0.72rem', marginBottom: '0.2rem',
+              }}>
+                <span style={{ color: 'rgba(248,250,252,0.38)' }}>
+                  {label}
+                  {capped && (
+                    <span title="Row limit reached — figure is a lower bound" style={{
+                      fontSize: '0.58rem', marginLeft: '0.3rem',
+                      color: '#fbbf24', verticalAlign: 'middle',
+                    }}>≥</span>
+                  )}
+                </span>
+                <span style={{
+                  fontWeight: 700,
+                  color: pnlColor(value),
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {value != null ? `${pnlPrefix(value)}${formatUSD(value)}` : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       <LiveWalletRow />
 
