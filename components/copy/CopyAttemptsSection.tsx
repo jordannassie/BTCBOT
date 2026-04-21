@@ -37,6 +37,55 @@ const truncateTradeId = (id: string | null) =>
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+// ── Skip reason helpers ──────────────────────────────────────────────────────
+// Maps raw worker skip_reason strings to readable UI labels.
+// The raw value is preserved in the title tooltip so operators can still
+// search logs by the exact tag.
+
+const SKIP_REASON_LABELS: Record<string, string> = {
+  // Phase 3 fast-copy gates
+  market_blocked:              'Blocked Market',
+  market_not_fast:             'Not Fast Market',
+  missing_fast_metrics:        'Missing Metrics',
+  wallet_unscorable:           'Wallet Unscorable',
+  wallet_not_fast_copy:        'Not Fast Copy',
+  entry_too_late:              'Entry Too Late',
+  // Pre-existing gates
+  closes_not_enabled:          'Closes Disabled',
+  copy_closes_disabled:        'Closes Disabled',
+  emergency_stop_active:       'Emergency Stop',
+  insufficient_funds:          'Insufficient Funds',
+  position_limit:              'Position Limit',
+  market_not_found:            'Market Not Found',
+  already_copied:              'Already Copied',
+  live_mode_not_supported_yet: 'Live Not Supported',
+  exposure_cap:                'Exposure Cap',
+  size_too_small:              'Size Too Small',
+  no_market_id:                'No Market ID',
+  price_missing:               'No Price',
+};
+
+function skipReasonLabel(reason: string | null): string {
+  if (!reason) return '—';
+  return SKIP_REASON_LABELS[reason] ?? reason.replace(/_/g, ' ');
+}
+
+// Badge colour by reason category:
+//   yellow  → market type / timing filter (G8, G9, G13)
+//   purple  → wallet scoring / fast-copy gate (G10, G11, G12)
+//   red     → safety stops (emergency stop, exposure cap)
+//   gray    → other (dedup, closes disabled, etc.)
+function skipReasonBadgeClass(reason: string | null): string {
+  if (!reason) return 'copy-badge-gray';
+  if (['market_blocked', 'market_not_fast', 'entry_too_late'].includes(reason))
+    return 'copy-badge-yellow';
+  if (['missing_fast_metrics', 'wallet_unscorable', 'wallet_not_fast_copy'].includes(reason))
+    return 'copy-badge-purple';
+  if (['emergency_stop_active', 'exposure_cap'].includes(reason))
+    return 'copy-badge-failed';
+  return 'copy-badge-gray';
+}
+
 function orderStatusBadge(status: string | null) {
   if (!status) return <span className="copy-badge copy-badge-gray">—</span>;
   const map: Record<string, string> = {
@@ -281,10 +330,18 @@ export default function CopyAttemptsSection({ scrollable = false }: { scrollable
                     <td className="copy-td-num copy-td-muted">
                       {r.slippage != null ? `${(r.slippage * 100).toFixed(2)}%` : '—'}
                     </td>
-                    <td className="copy-td-muted copy-td-truncate"
-                      title={r.skip_reason ?? undefined}
-                      style={{ fontSize: '0.72rem', maxWidth: 160 }}>
-                      {r.skip_reason ?? '—'}
+                    <td style={{ maxWidth: 180 }}>
+                      {r.skip_reason ? (
+                        <span
+                          className={`copy-badge ${skipReasonBadgeClass(r.skip_reason)}`}
+                          title={r.skip_reason}
+                          style={{ fontSize: '0.68rem', whiteSpace: 'nowrap' }}
+                        >
+                          {skipReasonLabel(r.skip_reason)}
+                        </span>
+                      ) : (
+                        <span className="copy-td-muted">—</span>
+                      )}
                     </td>
                   </tr>
                 );

@@ -19,6 +19,9 @@ type CopiedPosition = {
   closed_at: string | null;
   exit_price: number | null;
   pnl: number;
+  // Phase 3: close reason fields — present when DB migration applied
+  close_reason: string | null;                     // dedicated column (Phase 2 migration)
+  raw_json: Record<string, unknown> | null;         // fallback: raw_json["close_reason"]
 };
 
 type ExitMode = 'mirror_only' | 'auto_profit' | 'auto_profit_max_hold';
@@ -53,6 +56,59 @@ function statusBadge(status: string) {
   if (status === 'CLOSED')    return <span className="copy-badge copy-badge-closed">Closed</span>;
   if (status === 'CANCELLED') return <span className="copy-badge copy-badge-cancelled">Cancelled</span>;
   return <span className="copy-badge copy-badge-gray">{status}</span>;
+}
+
+// ── Hold time helpers ─────────────────────────────────────────────────────────
+// For OPEN positions: use current time (live timer in the cell).
+// For CLOSED/CANCELLED: use closed_at − opened_at.
+
+function computeHoldMinutes(
+  opened: string | null,
+  closed: string | null | undefined,
+  status: string,
+): number | null {
+  if (!opened) return null;
+  const openMs  = new Date(opened).getTime();
+  const closeMs = status !== 'OPEN' && closed ? new Date(closed).getTime() : Date.now();
+  if (isNaN(openMs) || isNaN(closeMs)) return null;
+  return Math.max(0, Math.round((closeMs - openMs) / 60_000));
+}
+
+function fmtHoldMins(mins: number | null): string {
+  if (mins == null) return '—';
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+// ── Close reason helpers ──────────────────────────────────────────────────────
+// Reads close_reason from the dedicated column first (Phase 2 migration),
+// then falls back to raw_json["close_reason"] (always written by worker).
+// Returns null for OPEN positions or when no reason is recorded.
+
+const CLOSE_REASON_LABELS: Record<string, string> = {
+  source_wallet_exit:    'Source Exit',
+  auto_profit:           'Auto Profit',
+  max_hold:              'Max Hold',
+  settled_market:        'Settled',
+  manual_reset:          'Manual Reset',
+  close_failed_retrying: 'Retrying Close',
+  close_failed_final:    'Close Failed',
+};
+
+const CLOSE_REASON_BADGE: Record<string, string> = {
+  source_wallet_exit:    'copy-badge-blue',
+  auto_profit:           'copy-badge-green',
+  max_hold:              'copy-badge-yellow',
+  settled_market:        'copy-badge-gray',
+  manual_reset:          'copy-badge-yellow',
+  close_failed_retrying: 'copy-badge-yellow',
+  close_failed_final:    'copy-badge-failed',
+};
+
+function getRawCloseReason(row: CopiedPosition): string | null {
+  return row.close_reason ?? (row.raw_json?.close_reason as string | undefined) ?? null;
 }
 
 type Filter = 'ALL' | 'OPEN' | 'CLOSED' | 'CANCELLED';
@@ -309,6 +365,8 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
                 <th>Status</th>
                 <th>P / L</th>
                 <th>Exit</th>
+                <th style={{ minWidth: 64 }} title="Time the position was held open">Hold</th>
+                <th style={{ minWidth: 108 }} title="Why the position was closed (source_wallet_exit · auto_profit · max_hold · settled_market · manual_reset)">Close Reason</th>
                 <th>Closed</th>
               </tr>
             </thead>
@@ -368,6 +426,34 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
                       )}
                     </td>
                     <td className="copy-td-num copy-td-muted">{r.exit_price != null ? r.exit_price.toFixed(3) : '—'}</td>
+
+                    {/* Hold time */}
+                    <td className="copy-td-num copy-td-muted">
+                      {fmtHoldMins(computeHoldMinutes(r.opened_at, r.closed_at, r.status))}
+                    </td>
+
+                    {/* Close Reason — reads dedicated column first, falls back to raw_json */}
+                    <td>
+                      {r.status !== 'OPEN' ? (() => {
+                        const raw   = getRawCloseReason(r);
+                        const label = raw ? (CLOSE_REASON_LABELS[raw] ?? raw.replace(/_/g, ' ')) : null;
+                        const cls   = raw ? (CLOSE_REASON_BADGE[raw] ?? 'copy-badge-gray') : 'copy-badge-gray';
+                        return label ? (
+                          <span
+                            className={`copy-badge ${cls}`}
+                            title={raw ?? undefined}
+                            style={{ fontSize: '0.68rem' }}
+                          >
+                            {label}
+                          </span>
+                        ) : (
+                          <span className="copy-td-muted">—</span>
+                        );
+                      })() : (
+                        <span className="copy-td-muted">—</span>
+                      )}
+                    </td>
+
                     <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(r.closed_at)}</td>
                   </tr>
                 );

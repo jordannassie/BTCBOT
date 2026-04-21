@@ -30,7 +30,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // Bumped on every fix to this route — visible in response JSON.
-const ROUTE_VERSION = 'v6-bot-counts';
+const ROUTE_VERSION = 'v7-closed-perf';
 
 function makeClient() {
   let url = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim();
@@ -58,11 +58,12 @@ export async function GET() {
       totalWalletsRes,
       enabledBotsRes,
       totalBotsRes,
-      paperBotsRes,    // enabled bots in PAPER mode → "Active Paper Bots"
-      armLiveBotsRes,  // enabled bots with arm_live = true → "ARM LIVE Bots"
-      openStatsRes,    // overall totals (PAPER + LIVE combined)
-      modeStatsRes,    // per-mode split — drives the labelled overview cards
+      paperBotsRes,       // enabled bots in PAPER mode → "Active Paper Bots"
+      armLiveBotsRes,     // enabled bots with arm_live = true → "ARM LIVE Bots"
+      openStatsRes,       // overall totals (PAPER + LIVE combined)
+      modeStatsRes,       // per-mode split — drives the labelled overview cards
       attemptsTodayRes,
+      recentClosedRes,    // CLOSED positions last 24 h — for overview perf card
       settingsRes,
     ] = await Promise.all([
       client.from('tracked_wallets').select('*', { count: 'exact', head: true }).eq('is_active', true),
@@ -83,6 +84,13 @@ export async function GET() {
       client.rpc('copy_open_exposure_by_mode'),
 
       client.from('copy_attempts').select('*', { count: 'exact', head: true }).gte('created_at', todayUTC.toISOString()),
+      // Recent closed positions (last 24 h) — cheap: max 50 rows, pnl only.
+      // Used for the "Closed Today" overview card.
+      client.from('copied_positions')
+        .select('pnl')
+        .eq('status', 'CLOSED')
+        .gte('closed_at', new Date(Date.now() - 86_400_000).toISOString())
+        .limit(50),
       client.from('copy_global_settings')
         .select('live_on, emergency_stop, max_total_live_exposure, default_slippage_cap, default_position_size, default_max_positions')
         .eq('id', 1)
@@ -123,6 +131,13 @@ export async function GET() {
     const liveAvgSize        = liveRow  ? Number(liveRow.avg_size)         : 0;
 
     console.log(`[summary ${ROUTE_VERSION}] total: count=${openPositionCount} exposure=${openExposure} | paper: count=${paperPositionCount} exposure=${paperExposure} | live: count=${livePositionCount} exposure=${liveExposure}`);
+
+    // ── Recent closed positions (last 24 h) ───────────────────────────────────
+    const recentClosedRows   = (recentClosedRes.data ?? []) as { pnl: number }[];
+    const recentClosedCount  = recentClosedRows.length;
+    const recentAvgPnl       = recentClosedCount > 0
+      ? recentClosedRows.reduce((s, r) => s + (Number(r.pnl) || 0), 0) / recentClosedCount
+      : null;
 
     // ── Bot-mode counts ────────────────────────────────────────────────────────
     const paperBotsEnabled  = paperBotsRes.count   ?? 0;
@@ -167,6 +182,10 @@ export async function GET() {
 
         // Attempts
         attemptsTodayCount: attemptsTodayRes.count ?? 0,
+
+        // Recent closed positions (last 24 h) — for overview perf card
+        recentClosedCount,
+        recentAvgPnl,
 
         // Settings
         settings: settingsRes.data ?? null,

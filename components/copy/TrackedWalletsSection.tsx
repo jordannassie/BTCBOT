@@ -20,6 +20,12 @@ type WalletMetrics = {
   category_focus:   string | null;
   last_trade_at:    string | null;
   updated_at:       string | null;
+  // Phase 3 fast-turnover fields (null when DB migration not yet applied)
+  wallet_class:          string | null;
+  median_hold_minutes:   number | null;
+  pct_under_15min:       number | null;
+  pct_under_30min:       number | null;
+  recent_closed_count:   number | null;
 };
 
 type WalletRow = {
@@ -325,6 +331,41 @@ function WalletAddressRow({ address }: { address: string }) {
         )}
       </button>
     </div>
+  );
+}
+
+// ─── Wallet Class Badge (Phase 3) ─────────────────────────────────────────────
+// Displays the worker-assigned wallet_class from wallet_metrics.
+// Returns '—' safely when the field is null (pre-migration or no data).
+//
+// Classes: FAST_COPY | CONVICTION_COPY | MIXED | AVOID | UNSCORABLE
+
+const WALLET_CLASS_STYLES: Record<string, { bg: string; color: string; border: string; label: string }> = {
+  FAST_COPY:       { bg: 'rgba(16,185,129,0.14)',   color: '#34d399', border: 'rgba(16,185,129,0.4)',  label: 'FAST COPY'   },
+  CONVICTION_COPY: { bg: 'rgba(59,130,246,0.14)',   color: '#60a5fa', border: 'rgba(59,130,246,0.4)',  label: 'CONVICTION'  },
+  MIXED:           { bg: 'rgba(234,179,8,0.12)',    color: '#fbbf24', border: 'rgba(234,179,8,0.35)',  label: 'MIXED'       },
+  AVOID:           { bg: 'rgba(239,68,68,0.10)',    color: '#f87171', border: 'rgba(239,68,68,0.30)',  label: 'AVOID'       },
+  UNSCORABLE:      { bg: 'rgba(255,255,255,0.04)',  color: 'rgba(248,250,252,0.3)', border: 'rgba(255,255,255,0.1)', label: 'UNSCORED' },
+};
+
+function WalletClassBadge({ cls }: { cls: string | null | undefined }) {
+  if (!cls) return <span className="copy-td-muted">—</span>;
+  const s = WALLET_CLASS_STYLES[cls];
+  if (!s) {
+    return (
+      <span className="copy-td-muted copy-mono" style={{ fontSize: '0.68rem' }} title={`wallet_class: ${cls}`}>
+        {cls}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="copy-class-badge"
+      style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}` }}
+      title={`wallet_class: ${cls}`}
+    >
+      {s.label}
+    </span>
   );
 }
 
@@ -893,6 +934,10 @@ export default function TrackedWalletsSection() {
                 <th className="copy-th-rank">#</th>
                 <th style={{ minWidth: 200 }}>Wallet</th>
                 <th style={{ minWidth: 68 }} title="Average position hold time — FAST 5M ≤7m · FAST 15M ≤20m · FAST TRADER <60m">Avg Hold</th>
+                <th style={{ minWidth: 96 }} title="Worker-assigned wallet class: FAST_COPY · CONVICTION_COPY · MIXED · AVOID · UNSCORABLE">W. Class</th>
+                <th style={{ minWidth: 72 }} title="Median hold time of closed trades (worker fast-turnover metric)">Med Hold</th>
+                <th style={{ minWidth: 52 }} title="% of closed trades held under 15 minutes">%≤15m</th>
+                <th style={{ minWidth: 52 }} title="Recent closed trade count (fast-turnover window)">Closed</th>
                 <th style={{ minWidth: 50 }}>Active</th>
                 <th style={{ minWidth: 60 }} title="Linked copy bots (enabled / total)">Bots</th>
                 <SortHeader label="Score"      sortKey="copy_score"  active={sortKey} dir={sortDir} onSort={handleSort} />
@@ -997,6 +1042,28 @@ export default function TrackedWalletsSection() {
                     {/* Avg Hold — moved to front for fast-trader visibility */}
                     <td className={`copy-td-num ${holdClass(m?.avg_hold_minutes)}`} style={{ fontWeight: tier ? 600 : undefined }}>
                       {fmtHold(m?.avg_hold_minutes)}
+                    </td>
+
+                    {/* Wallet Class — Phase 3 fast-turnover worker scoring */}
+                    <td className="copy-td-num">
+                      <WalletClassBadge cls={m?.wallet_class} />
+                    </td>
+
+                    {/* Median Hold — Phase 3 */}
+                    <td className={`copy-td-num ${holdClass(m?.median_hold_minutes)}`}>
+                      {fmtHold(m?.median_hold_minutes)}
+                    </td>
+
+                    {/* % ≤15m — Phase 3 */}
+                    <td className="copy-td-num copy-td-muted">
+                      {m?.pct_under_15min != null
+                        ? `${(m.pct_under_15min * 100).toFixed(0)}%`
+                        : '—'}
+                    </td>
+
+                    {/* Recent Closed Count — Phase 3 */}
+                    <td className="copy-td-num copy-td-muted">
+                      {m?.recent_closed_count ?? '—'}
                     </td>
 
                     {/* Active toggle */}

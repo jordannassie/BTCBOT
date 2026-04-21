@@ -36,6 +36,9 @@ type Overview = {
   liveAvgSize: number;          // LIVE mode AVG(size)
   // ───────────────────────────────────────────────────────────────────────────
   attemptsTodayCount: number;   // copy_attempts since midnight UTC today
+  // Phase 3 — recent closed positions (last 24 h)
+  recentClosedCount?: number;   // CLOSED copied_positions in last 24 h
+  recentAvgPnl?: number | null; // average P/L across those closes
   settings: Settings | null;
   fetchedAt?: string;           // ISO timestamp from server
 };
@@ -348,6 +351,32 @@ export default function CopyOverviewCards() {
           <div className="copy-stat-value">{data.attemptsTodayCount}</div>
           <div className="copy-stat-helper">
             Copy decisions since midnight UTC
+          </div>
+        </div>
+
+        {/* ── Closed Today — recent copy closes (last 24 h) ── */}
+        <div className="copy-stat-card">
+          <div className="copy-stat-header">
+            <div className="copy-stat-icon"><IconPosition /></div>
+            <span className="copy-stat-label">Closed Today</span>
+          </div>
+          <div className="copy-stat-value">{data.recentClosedCount ?? 0}</div>
+          <div className="copy-stat-helper">
+            Positions closed in last 24 h
+            {(data.recentClosedCount ?? 0) > 0 && data.recentAvgPnl != null && (
+              <span style={{ display: 'block', marginTop: '0.15rem' }}>
+                Avg P/L:{' '}
+                <span style={{
+                  color: data.recentAvgPnl >= 0 ? '#34d399' : '#f87171',
+                  fontWeight: 600,
+                }}>
+                  {data.recentAvgPnl >= 0 ? '+' : ''}${data.recentAvgPnl.toFixed(2)}
+                </span>
+              </span>
+            )}
+            {(data.recentClosedCount ?? 0) === 0 && (
+              <span style={{ color: 'rgba(248,250,252,0.25)' }}> None yet</span>
+            )}
           </div>
         </div>
 
