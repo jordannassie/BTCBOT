@@ -15,7 +15,6 @@ import { useEffect, useState } from 'react';
 import LiveCard from '@/components/dashboard/LiveCard';
 import CopyPaperBankrollCard from '@/components/copy/CopyPaperBankrollCard';
 import CopyTradingTabs from '@/components/copy/CopyTradingTabs';
-import Btc5mEmaCard from '@/components/dashboard/Btc5mEmaCard';
 
 function IconRefresh() {
   return (
@@ -96,11 +95,6 @@ export default function DashboardPage() {
       <section className="copy-bankroll-row">
         <LiveCard />
         <CopyPaperBankrollCard />
-      </section>
-
-      {/* BTC 5M EMA Worker strategy card */}
-      <section className="copy-strategy-row">
-        <Btc5mEmaCard />
       </section>
 
       {/* Tabbed layout */}
