@@ -188,6 +188,38 @@ function IconEdit()  { return <svg width="13" height="13" viewBox="0 0 24 24" fi
 function IconTrash() { return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>; }
 function IconBulk()  { return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>; }
 
+// ─── Monitor status ────────────────────────────────────────────────────────────
+
+type BotMonitorStatus = 'ACTIVE' | 'EXIT_MONITOR_ONLY' | 'OFF';
+
+function getBotMonitorStatus(bot: CopyBot): BotMonitorStatus {
+  if (!bot.is_enabled) return 'OFF';
+  // opens_only = true → New Entries paused; if copy_closes also on → EXIT MONITOR ONLY
+  if (bot.opens_only && bot.copy_closes) return 'EXIT_MONITOR_ONLY';
+  return 'ACTIVE';
+}
+
+function MonitorStatusBadge({ status, openCount }: { status: BotMonitorStatus; openCount: number }) {
+  return (
+    <div>
+      {status === 'OFF' && (
+        <span className="copy-badge copy-badge-disabled" title="Bot is disabled — no entries or exits">OFF</span>
+      )}
+      {status === 'EXIT_MONITOR_ONLY' && (
+        <span className="copy-badge copy-badge-arm-live" title="New entries paused — exits still monitored">EXIT MONITOR ONLY</span>
+      )}
+      {status === 'ACTIVE' && (
+        <span className="copy-badge copy-badge-enabled" title="Copying new entries and monitoring exits">ACTIVE</span>
+      )}
+      {openCount > 0 && (
+        <div style={{ fontSize: '0.6rem', color: '#fbbf24', marginTop: '0.2rem', fontWeight: 600 }}>
+          {openCount} open pos.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EmptyBots({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="copy-empty">
@@ -784,6 +816,13 @@ export default function CopyBotsSection() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [wallets, setWallets] = useState<TrackedWallet[]>([]);
 
+  // Open position counts per bot (bot ID → count) — used for safety guard
+  const [openPositionCounts, setOpenPositionCounts] = useState<Map<string, number>>(new Map());
+  // Monitor status filter
+  const [monitorFilter, setMonitorFilter] = useState<'all' | 'active' | 'exit_monitor' | 'off'>('all');
+  // Inline monitor error (open-position safety warning, auto-clears)
+  const [monitorError, setMonitorError] = useState<{ id: string; msg: string } | null>(null);
+
   // Single-bot edit
   const [editingBot, setEditingBot] = useState<CopyBot | null>(null);
 
@@ -847,9 +886,10 @@ export default function CopyBotsSection() {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const [botsRes, settingsRes] = await Promise.all([
+      const [botsRes, settingsRes, positionsRes] = await Promise.all([
         fetch('/api/copy/bots', { cache: 'no-store' }),
         fetch('/api/copy/settings', { cache: 'no-store' }),
+        fetch('/api/copy/positions?status=OPEN&limit=500', { cache: 'no-store' }),
       ]);
       const botsPayload     = await botsRes.json();
       const settingsPayload = await settingsRes.json();
@@ -858,6 +898,17 @@ export default function CopyBotsSection() {
       if (settingsPayload.ok && settingsPayload.settings) {
         setGlobalSettings({ live_on: settingsPayload.settings.live_on, emergency_stop: settingsPayload.settings.emergency_stop });
       }
+      // Build per-bot open position count map for safety guard
+      try {
+        const posPayload = await positionsRes.json();
+        if (posPayload.ok) {
+          const countMap = new Map<string, number>();
+          for (const pos of (posPayload.rows ?? []) as { copy_bot_id: string }[]) {
+            countMap.set(pos.copy_bot_id, (countMap.get(pos.copy_bot_id) ?? 0) + 1);
+          }
+          setOpenPositionCounts(countMap);
+        }
+      } catch { /* positions fetch is best-effort */ }
     } catch { setError('Network error loading bots'); }
     finally  { setLoading(false); }
   }, []);
@@ -887,6 +938,20 @@ export default function CopyBotsSection() {
       }
     } finally { setTogglingId(null); }
   }, []);
+
+  // Exit Monitoring toggle — enforces open-position safety rule before allowing disable
+  const handleExitMonitorToggle = useCallback(async (bot: CopyBot) => {
+    const openCount = openPositionCounts.get(bot.id) ?? 0;
+    if (bot.copy_closes && openCount > 0) {
+      setMonitorError({
+        id: bot.id,
+        msg: `This bot has ${openCount} open copied position${openCount !== 1 ? 's' : ''}. Exit monitoring must remain on until those positions close.`,
+      });
+      setTimeout(() => setMonitorError(null), 6_000);
+      return;
+    }
+    await patchBot(bot.id, { copy_closes: !bot.copy_closes });
+  }, [openPositionCounts, patchBot]);
 
   const handleDelete = async (bot: CopyBot) => {
     if (deletingId === bot.id) return;
@@ -974,6 +1039,18 @@ export default function CopyBotsSection() {
     () => [...bots].sort((a, b) => (b.is_enabled ? 1 : 0) - (a.is_enabled ? 1 : 0)),
     [bots]
   );
+
+  // Filter bots by monitor status (client-side, no refetch)
+  const filteredBots = useMemo(() => {
+    if (monitorFilter === 'all') return sortedBots;
+    return sortedBots.filter((bot) => {
+      const s = getBotMonitorStatus(bot);
+      if (monitorFilter === 'active')       return s === 'ACTIVE';
+      if (monitorFilter === 'exit_monitor') return s === 'EXIT_MONITOR_ONLY';
+      if (monitorFilter === 'off')          return s === 'OFF';
+      return true;
+    });
+  }, [sortedBots, monitorFilter]);
 
   // Fast wallet-address → display label lookup used in the bot name cell
   const walletNameMap = useMemo(() => {
@@ -1138,6 +1215,42 @@ export default function CopyBotsSection() {
           </form>
         )}
 
+        {/* ── Monitor status filter ── */}
+        {!loading && bots.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.04)', flexWrap: 'wrap' }}>
+            {(['all', 'active', 'exit_monitor', 'off'] as const).map((f) => {
+              const labels: Record<typeof f, string> = { all: 'All', active: 'Active', exit_monitor: 'Exit Monitor', off: 'Off' };
+              const counts: Record<typeof f, number> = {
+                all:          bots.length,
+                active:       bots.filter((b) => getBotMonitorStatus(b) === 'ACTIVE').length,
+                exit_monitor: bots.filter((b) => getBotMonitorStatus(b) === 'EXIT_MONITOR_ONLY').length,
+                off:          bots.filter((b) => getBotMonitorStatus(b) === 'OFF').length,
+              };
+              return (
+                <button
+                  key={f}
+                  onClick={() => setMonitorFilter(f)}
+                  className={`copy-btn copy-btn-sm ${monitorFilter === f ? 'copy-btn-primary' : 'copy-btn-secondary'}`}
+                  style={{ fontSize: '0.72rem', padding: '0.2rem 0.7rem' }}
+                >
+                  {labels[f]}
+                  {counts[f] > 0 && (
+                    <span style={{ marginLeft: '0.35rem', opacity: 0.65, fontWeight: 400 }}>({counts[f]})</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Monitor error — open position safety warning */}
+        {monitorError && (
+          <div style={{ margin: '0.5rem 1.5rem', padding: '0.65rem 1rem', background: 'rgba(234,179,8,0.07)', border: '1px solid rgba(234,179,8,0.25)', borderRadius: '0.5rem', fontSize: '0.78rem', color: '#fbbf24', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+            <span>⚠ {monitorError.msg}</span>
+            <button onClick={() => setMonitorError(null)} style={{ background: 'none', border: 'none', color: 'rgba(234,179,8,0.5)', cursor: 'pointer', fontSize: '1rem', padding: '0 0.25rem', lineHeight: 1 }}>×</button>
+          </div>
+        )}
+
         {/* ── Table / states ── */}
         {loading ? (
           <div className="copy-loading">Loading bots…</div>
@@ -1147,7 +1260,7 @@ export default function CopyBotsSection() {
           <EmptyBots onAdd={() => setShowForm(true)} />
         ) : (
           <div className="copy-table-wrap">
-            <table className="copy-table" style={{ minWidth: '1150px' }}>
+            <table className="copy-table" style={{ minWidth: '1350px' }}>
               <thead>
                 <tr>
                   <th style={{ width: 36 }}>
@@ -1158,6 +1271,8 @@ export default function CopyBotsSection() {
                   <th>Wallet</th>
                   <th>Mode</th>
                   <th>Enabled</th>
+                  <th title="Bot monitoring status: ACTIVE · EXIT MONITOR ONLY · OFF">Status</th>
+                  <th title="New Entries: copies new opening positions&#10;Exit Monitor: copies exit trades">Entry / Exit</th>
                   <th title="ARM LIVE: secondary safety gate">Arm Live</th>
                   <th title="Derived readiness status">Live Status</th>
                   <th>Copy Mode</th>
@@ -1171,7 +1286,7 @@ export default function CopyBotsSection() {
                 </tr>
               </thead>
               <tbody>
-                {sortedBots.map((bot) => {
+                {filteredBots.map((bot) => {
                   const readiness    = getLiveReadiness(bot, globalSettings);
                   const isDeleting   = deletingId === bot.id;
                   const isSelected   = selectedIds.has(bot.id);
@@ -1204,10 +1319,60 @@ export default function CopyBotsSection() {
                         </td>
                         <td><span className="copy-mono" title={bot.wallet_address}>{truncate(bot.wallet_address)}</span></td>
                         <td><ModeBadge mode={bot.mode} /></td>
+                        {/* Enabled toggle — guarded by open-position check when turning off */}
                         <td>
                           <div className="toggle-switch" style={{ width: 36, height: 20 }}>
-                            <input type="checkbox" checked={bot.is_enabled} onChange={() => patchBot(bot.id, { is_enabled: !bot.is_enabled })} disabled={togglingId === bot.id} id={`bot-en-${bot.id}`} />
+                            <input
+                              type="checkbox"
+                              checked={bot.is_enabled}
+                              onChange={() => {
+                                const openCount = openPositionCounts.get(bot.id) ?? 0;
+                                if (bot.is_enabled && openCount > 0) {
+                                  setMonitorError({ id: bot.id, msg: `This bot has ${openCount} open copied position${openCount !== 1 ? 's' : ''}. Exit monitoring must remain on until those positions close.` });
+                                  setTimeout(() => setMonitorError(null), 6_000);
+                                  return;
+                                }
+                                patchBot(bot.id, { is_enabled: !bot.is_enabled });
+                              }}
+                              disabled={togglingId === bot.id}
+                              id={`bot-en-${bot.id}`}
+                            />
                             <label className="toggle-slider" htmlFor={`bot-en-${bot.id}`} />
+                          </div>
+                        </td>
+                        {/* Monitor Status badge */}
+                        <td>
+                          <MonitorStatusBadge status={getBotMonitorStatus(bot)} openCount={openPositionCounts.get(bot.id) ?? 0} />
+                        </td>
+                        {/* New Entries + Exit Monitoring controls */}
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.65rem', color: 'rgba(248,250,252,0.45)', cursor: 'pointer', userSelect: 'none' }}>
+                              <div className="toggle-switch" style={{ width: 36, height: 20 }}>
+                                <input
+                                  type="checkbox"
+                                  id={`bot-entries-${bot.id}`}
+                                  checked={!bot.opens_only}
+                                  onChange={() => patchBot(bot.id, { opens_only: !bot.opens_only })}
+                                  disabled={togglingId === bot.id || !bot.is_enabled}
+                                />
+                                <label className="toggle-slider" htmlFor={`bot-entries-${bot.id}`} />
+                              </div>
+                              New Entries
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.65rem', color: 'rgba(248,250,252,0.45)', cursor: 'pointer', userSelect: 'none' }}>
+                              <div className="toggle-switch" style={{ width: 36, height: 20 }}>
+                                <input
+                                  type="checkbox"
+                                  id={`bot-exits-${bot.id}`}
+                                  checked={bot.copy_closes}
+                                  onChange={() => handleExitMonitorToggle(bot)}
+                                  disabled={togglingId === bot.id || !bot.is_enabled || (bot.copy_closes && (openPositionCounts.get(bot.id) ?? 0) > 0)}
+                                />
+                                <label className="toggle-slider" htmlFor={`bot-exits-${bot.id}`} />
+                              </div>
+                              Exit Monitor
+                            </label>
                           </div>
                         </td>
                         <td>
@@ -1236,7 +1401,7 @@ export default function CopyBotsSection() {
                       </tr>
                       {rowDeleteErr && (
                         <tr key={`${bot.id}-err`}>
-                          <td colSpan={15} style={{ padding: '0 1.5rem 0.6rem' }}>
+                          <td colSpan={17} style={{ padding: '0 1.5rem 0.6rem' }}>
                             <div className="copy-bot-delete-error">
                               <span>{rowDeleteErr.msg}</span>
                               {rowDeleteErr.isFk && (

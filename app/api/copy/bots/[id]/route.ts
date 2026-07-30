@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 function getServiceClient() {
   let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -108,6 +111,26 @@ export async function PATCH(
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ ok: false, error: 'No valid fields to update' }, { status: 400 });
+    }
+
+    // Safety: prevent disabling exit monitoring or the full bot when open copied positions exist
+    if (updates.copy_closes === false || updates.is_enabled === false) {
+      const { count: openCount, error: posErr } = await client
+        .from('copied_positions')
+        .select('id', { count: 'exact', head: true })
+        .eq('copy_bot_id', id)
+        .eq('status', 'OPEN');
+
+      if (!posErr && openCount && openCount > 0) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `This bot has ${openCount} open copied position${openCount !== 1 ? 's' : ''}. Exit monitoring must remain on until those positions close.`,
+            open_positions: openCount,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     const { data, error } = await client
