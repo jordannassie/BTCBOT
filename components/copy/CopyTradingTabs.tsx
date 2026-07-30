@@ -26,10 +26,11 @@ const CopiedPositionsSection = dynamic(() => import('./CopiedPositionsSection'))
 const MasterStrategySection  = dynamic(() => import('./MasterStrategySection'));
 const GlobalSettingsPanel    = dynamic(() => import('./GlobalSettingsPanel'));
 const TopTradersSection      = dynamic(() => import('./TopTradersSection'));
+const DiscoverTradersSection = dynamic(() => import('./DiscoverTradersSection'));
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'wallets' | 'hot' | 'bots' | 'attempts' | 'positions' | 'settings' | 'traders';
+type TabId = 'overview' | 'wallets' | 'hot' | 'bots' | 'attempts' | 'positions' | 'settings' | 'traders' | 'discover';
 
 const LS_KEY  = 'btcbot-copy-tab';
 const POLL_MS = 15_000;
@@ -59,6 +60,7 @@ const TABS: TabDef[] = [
   { id: 'attempts',  label: 'Attempts',  countKey: 'attemptsTodayCount' },
   { id: 'positions', label: 'Positions', countKey: 'openPositionCount' },
   { id: 'traders',   label: 'Top Traders' },
+  { id: 'discover',  label: 'Discover Traders' },
   { id: 'settings',  label: 'Settings' },
 ];
 
@@ -185,6 +187,8 @@ export default function CopyTradingTabs() {
         {tab === 'positions' && <CopiedPositionsSection scrollable />}
 
         {tab === 'traders' && <TopTradersSection />}
+
+        {tab === 'discover' && <DiscoverTradersSection />}
 
         {tab === 'settings' && (
           <div>
