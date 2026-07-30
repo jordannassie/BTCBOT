@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
 import { BOT_DEFAULTS, BOT_DEFAULTS_LS_KEY } from '@/lib/copy/botDefaults';
 import { SELECTED_BOTS_LS_KEY } from '@/lib/copy/masterStrategy';
 
@@ -1317,7 +1318,18 @@ export default function CopyBotsSection() {
                             )}
                           </div>
                         </td>
-                        <td><span className="copy-mono" title={bot.wallet_address}>{truncate(bot.wallet_address)}</span></td>
+                        <td>
+                          <a
+                            href={getPolymarketProfileUrl(null, bot.wallet_address) ?? '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={bot.wallet_address}
+                            style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+                          >
+                            <span className="copy-mono">{truncate(bot.wallet_address)}</span>
+                            <span style={{ fontSize: '0.6rem', opacity: 0.35 }}>↗</span>
+                          </a>
+                        </td>
                         <td><ModeBadge mode={bot.mode} /></td>
                         {/* Enabled toggle — guarded by open-position check when turning off */}
                         <td>

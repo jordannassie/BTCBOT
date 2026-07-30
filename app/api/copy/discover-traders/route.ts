@@ -38,13 +38,15 @@ function getServiceClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-// ─── Period → Polymarket timeframe mapping ────────────────────────────────────
+// ─── Period → Polymarket timePeriod mapping ───────────────────────────────────
 
 const PERIOD_MAP: Record<string, string> = {
-  daily:   '1d',
-  weekly:  '1w',
-  monthly: '1m',
+  daily:   'DAY',
+  weekly:  'WEEK',
+  monthly: 'MONTH',
 };
+
+const LB_ENDPOINT = 'https://data-api.polymarket.com/v1/leaderboard';
 
 // ─── Leaderboard fetch ────────────────────────────────────────────────────────
 
@@ -63,18 +65,35 @@ function extractNum(e: PolyEntry, ...keys: string[]): number | null {
   return null;
 }
 
-async function fetchLeaderboard(timeframe: string): Promise<
-  { addr: string; name: string | null; pnl: number | null; volume: number | null; lastSeen: string | null }[]
-> {
-  const url = `https://data.polymarket.com/trading-leaderboard?timeframe=${timeframe}&limit=100`;
+type LbEntry = {
+  rank:          number;
+  addr:          string;
+  name:          string | null;
+  pnl:           number | null;
+  volume:        number | null;
+  xUsername:     string | null;
+  verifiedBadge: boolean;
+};
 
-  const res = await fetch(url, {
+async function fetchLeaderboard(timePeriod: string): Promise<LbEntry[]> {
+  const url = new URL(LB_ENDPOINT);
+  url.searchParams.set('category', 'OVERALL');
+  url.searchParams.set('timePeriod', timePeriod);
+  url.searchParams.set('orderBy', 'PNL');
+  url.searchParams.set('limit', '50');
+  url.searchParams.set('offset', '0');
+
+  const res = await fetch(url.toString(), {
     signal:  AbortSignal.timeout(8_000),
     headers: { Accept: 'application/json', 'User-Agent': 'btcbot/1.0' },
     cache:   'no-store',
   });
 
-  if (!res.ok) throw new Error(`Polymarket leaderboard responded with ${res.status}`);
+  if (!res.ok) {
+    throw new Error(
+      `Polymarket leaderboard HTTP ${res.status} — endpoint: ${LB_ENDPOINT}, timePeriod: ${timePeriod}`
+    );
+  }
 
   const json = await res.json();
   const items: PolyEntry[] = Array.isArray(json)
@@ -82,15 +101,22 @@ async function fetchLeaderboard(timeframe: string): Promise<
     : (json.data ?? json.results ?? json.traders ?? []);
 
   return items
-    .map((e) => {
-      const addr = extractStr(e, 'proxyWallet', 'wallet', 'address', 'pseudonymousAddress');
-      if (!addr || !addr.startsWith('0x')) return null;
+    .map((e, idx) => {
+      const addr = extractStr(e, 'proxyWallet');
+      if (!addr) return null;
+      const rawRank = e['rank'];
+      const rank =
+        typeof rawRank === 'number'                               ? rawRank
+        : typeof rawRank === 'string' && !isNaN(Number(rawRank)) ? Number(rawRank)
+        : idx + 1;
       return {
+        rank,
         addr,
-        name:     extractStr(e, 'name', 'username', 'pseudonym'),
-        pnl:      extractNum(e, 'pnl', 'profit_and_loss', 'positiveProfit', 'netProfit'),
-        volume:   extractNum(e, 'volume', 'totalVolume'),
-        lastSeen: extractStr(e, 'lastTradeAt', 'last_trade_at', 'updatedAt'),
+        name:          extractStr(e, 'userName'),
+        pnl:           extractNum(e, 'pnl'),
+        volume:        extractNum(e, 'vol'),
+        xUsername:     extractStr(e, 'xUsername'),
+        verifiedBadge: e['verifiedBadge'] === true,
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
@@ -108,8 +134,8 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const period    = searchParams.get('period') ?? 'monthly';
-  const timeframe = PERIOD_MAP[period] ?? '1m';
+  const period     = searchParams.get('period') ?? 'monthly';
+  const timePeriod = PERIOD_MAP[period] ?? 'MONTH';
 
   try {
     // Fetch tracked wallets for "Already Tracked" cross-reference
@@ -134,27 +160,31 @@ export async function GET(request: Request) {
 
     // Fetch leaderboard from Polymarket
     let leaderboardError: string | null = null;
-    let leaderboardRows: ReturnType<typeof fetchLeaderboard> extends Promise<infer T> ? T : never = [];
+    let leaderboardRows: LbEntry[] = [];
 
     try {
-      leaderboardRows = await fetchLeaderboard(timeframe);
+      leaderboardRows = await fetchLeaderboard(timePeriod);
+      console.log(`DISCOVER_TRADERS_FETCH period=${timePeriod} status=200 count=${leaderboardRows.length}`);
     } catch (err) {
       leaderboardError = err instanceof Error ? err.message : 'Leaderboard unavailable';
+      console.error(`DISCOVER_TRADERS_FETCH period=${timePeriod} error=${leaderboardError}`);
     }
 
     // Build response rows with rank, tracked status, etc.
-    const rows = leaderboardRows.map((entry, idx) => {
+    const rows = leaderboardRows.map((entry) => {
       const tracked_since = trackedMap.get(entry.addr) ?? null;
       return {
-        rank:           idx + 1,
+        rank:           entry.rank,
         wallet_address: entry.addr,
         display_name:   entry.name,
+        username:       entry.xUsername,
+        verified_badge: entry.verifiedBadge,
         period,
         pnl:            entry.pnl,
         volume:         entry.volume,
         is_tracked:     trackedMap.has(entry.addr),
         tracked_since,
-        last_seen:      entry.lastSeen,
+        last_seen:      null,
       };
     });
 

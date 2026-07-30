@@ -7,6 +7,7 @@
 // Fetches Polymarket's public leaderboard and cross-references tracked_wallets.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,6 +18,8 @@ type DiscoverRow = {
   rank:           number;
   wallet_address: string;
   display_name:   string | null;
+  username:       string | null;   // Polymarket xUsername (for @-style profile links)
+  verified_badge: boolean;
   period:         string;
   pnl:            number | null;
   volume:         number | null;
@@ -300,22 +303,37 @@ export default function DiscoverTradersSection() {
                   {/* Row # (position in filtered list) */}
                   <td className="copy-td-rank">{idx + 1}</td>
 
-                  {/* Trader */}
+                  {/* Trader — links to Polymarket profile (username or wallet address) */}
                   <td>
                     {row.display_name ? (
                       <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#f8fafc' }}>
-                        {row.display_name}
+                        <a
+                          href={getPolymarketProfileUrl(row.username, row.wallet_address) ?? '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                        >
+                          {row.display_name}
+                          <span style={{ fontSize: '0.6rem', opacity: 0.4 }}>↗</span>
+                        </a>
                       </div>
                     ) : (
                       <span className="copy-td-muted" style={{ fontSize: '0.75rem' }}>—</span>
                     )}
                   </td>
 
-                  {/* Wallet address */}
+                  {/* Wallet address — links to Polymarket @wallet profile */}
                   <td>
-                    <span className="copy-mono copy-td-muted" title={row.wallet_address}>
-                      {truncate(row.wallet_address)}
-                    </span>
+                    <a
+                      href={getPolymarketProfileUrl(null, row.wallet_address) ?? '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={row.wallet_address}
+                      style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+                    >
+                      <span className="copy-mono copy-td-muted">{truncate(row.wallet_address)}</span>
+                      <span style={{ fontSize: '0.6rem', opacity: 0.35 }}>↗</span>
+                    </a>
                   </td>
 
                   {/* Source period */}

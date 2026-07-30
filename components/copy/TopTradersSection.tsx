@@ -5,6 +5,7 @@
 // Data source: GET /api/copy/top-traders
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -334,14 +335,22 @@ export default function TopTradersSection() {
                   {/* Rank */}
                   <td className="copy-td-rank">{idx + 1}</td>
 
-                  {/* Trader */}
+                  {/* Trader — links to Polymarket @wallet profile */}
                   <td>
                     <div className="copy-td-name" style={{ fontWeight: 600, fontSize: '0.82rem', color: '#f8fafc' }}>
-                      {t.display_name ?? (
-                        <span className="copy-td-muted copy-mono" style={{ fontSize: '0.77rem' }}>
-                          {truncate(t.wallet_address)}
-                        </span>
-                      )}
+                      <a
+                        href={getPolymarketProfileUrl(null, t.wallet_address) ?? '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                      >
+                        {t.display_name ?? (
+                          <span className="copy-td-muted copy-mono" style={{ fontSize: '0.77rem' }}>
+                            {truncate(t.wallet_address)}
+                          </span>
+                        )}
+                        <span style={{ fontSize: '0.6rem', opacity: 0.4 }}>↗</span>
+                      </a>
                     </div>
                     <span className="copy-td-sub copy-mono" title={t.wallet_address}>
                       {truncate(t.wallet_address)}

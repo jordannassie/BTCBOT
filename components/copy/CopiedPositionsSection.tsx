@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
 
 const POLL_MS = 15_000;
 
@@ -398,7 +399,16 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
                       )}
                     </td>
                     <td>
-                      <span className="copy-mono" title={r.wallet_address}>{truncate(r.wallet_address)}</span>
+                      <a
+                        href={getPolymarketProfileUrl(null, r.wallet_address) ?? '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={r.wallet_address}
+                        style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+                      >
+                        <span className="copy-mono">{truncate(r.wallet_address)}</span>
+                        <span style={{ fontSize: '0.6rem', opacity: 0.35 }}>↗</span>
+                      </a>
                     </td>
                     <td>
                       <span className="copy-td-truncate" title={r.market_title ?? r.market_slug ?? undefined}>
