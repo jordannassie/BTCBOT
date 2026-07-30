@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
+import TraderRotationReview from './TraderRotationReview';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -198,6 +199,9 @@ export default function DiscoverTradersSection() {
           </button>
         </div>
       </div>
+
+      {/* ── Trader Rotation Review ── */}
+      <TraderRotationReview />
 
       {/* ── Period selector + filter bar ── */}
       {!loading && (
