@@ -9,6 +9,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
 import TraderRotationReview from './TraderRotationReview';
+import dynamic from 'next/dynamic';
+
+const FreshPaperSeasonModal = dynamic(() => import('./FreshPaperSeasonModal'), { ssr: false });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -86,6 +89,8 @@ const PERIOD_LABELS: Record<string, string> = {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function DiscoverTradersSection() {
+  const [showFreshModal, setShowFreshModal] = useState(false);
+
   // Fetch state
   const [rows, setRows] = useState<DiscoverRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -166,6 +171,9 @@ export default function DiscoverTradersSection() {
   return (
     <div className="copy-section">
 
+      {/* Fresh Paper Season modal (lazy-loaded) */}
+      {showFreshModal && <FreshPaperSeasonModal onClose={() => setShowFreshModal(false)} />}
+
       {/* ── Section header ── */}
       <div className="copy-section-head">
         <div className="copy-section-title-row">
@@ -196,6 +204,14 @@ export default function DiscoverTradersSection() {
             title="Reload from Polymarket leaderboard"
           >
             {refreshing ? '…' : '↻ Refresh'}
+          </button>
+          <button
+            className="copy-btn copy-btn-primary copy-btn-sm"
+            onClick={() => setShowFreshModal(true)}
+            title="Replace all current bots with fresh paper traders from this leaderboard"
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            ⚡ Replace Old Traders
           </button>
         </div>
       </div>
