@@ -341,12 +341,12 @@ export default function LiveCard() {
             src="https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/Guy.png"
             alt="Profile image"
             style={{
-              width: 52,
-              height: 52,
+              width: 'clamp(72px, 10vw, 96px)',
+              height: 'clamp(72px, 10vw, 96px)',
               borderRadius: '50%',
               objectFit: 'cover',
               border: '2px solid rgba(129,140,248,0.3)',
-              boxShadow: '0 0 0 3px rgba(129,140,248,0.07), 0 2px 10px rgba(0,0,0,0.45)',
+              boxShadow: '0 0 0 4px rgba(129,140,248,0.08), 0 3px 14px rgba(0,0,0,0.5)',
               flexShrink: 0,
             }}
           />

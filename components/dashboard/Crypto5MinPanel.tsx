@@ -285,7 +285,15 @@ function ActiveMarketSection({ market }: { market: MarketStatus | null }) {
 
 // ─── COMING SOON card ──────────────────────────────────────────────────────────
 
+const CRYPTO_IMAGES: Record<string, { url: string; alt: string }> = {
+  BTC: { url: 'https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/Crypto/BTCfullsize.webp',  alt: 'Bitcoin logo' },
+  ETH: { url: 'https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/Crypto/ETHfullsize.webp',  alt: 'Ethereum logo' },
+  SOL: { url: 'https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/Crypto/SOL-logo.webp',    alt: 'Solana logo' },
+  XRP: { url: 'https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/Crypto/XRP-logo.webp',    alt: 'XRP logo' },
+};
+
 function ComingSoonCard({ asset }: { asset: string }) {
+  const img = CRYPTO_IMAGES[asset];
   return (
     <div style={{
       flex: '1 1 200px', minWidth: 180,
@@ -294,8 +302,22 @@ function ComingSoonCard({ asset }: { asset: string }) {
       borderRadius: '0.75rem',
       padding: '1rem',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      gap: '0.4rem', minHeight: 140,
+      gap: '0.55rem', minHeight: 140,
     }}>
+      {img && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={img.url}
+          alt={img.alt}
+          style={{
+            width: 72, height: 72,
+            objectFit: 'contain',
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.04)',
+            padding: '0.25rem',
+          }}
+        />
+      )}
       <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'rgba(248,250,252,0.5)', letterSpacing: '0.04em' }}>
         {asset} 5-MIN
       </span>
@@ -402,9 +424,24 @@ function BtcCard({
       borderRadius: '0.75rem',
       padding: '1rem',
     }}>
-      {/* Header row 1: title + EMA signal */}
+      {/* Header row 1: logo + title + EMA signal */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-        <span style={{ fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.04em' }}>BTC 5-MIN</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={CRYPTO_IMAGES.BTC.url}
+            alt={CRYPTO_IMAGES.BTC.alt}
+            style={{
+              width: 56, height: 56,
+              objectFit: 'contain',
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.04)',
+              padding: '0.2rem',
+              flexShrink: 0,
+            }}
+          />
+          <span style={{ fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.04em' }}>BTC 5-MIN</span>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
           <span style={{
             fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em',
