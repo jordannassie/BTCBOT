@@ -3740,3 +3740,12 @@
   color: #fbbf24;
 }
 
+
+/* ── BTC Trades table responsive ───────────────────────── */
+.btc-trades-mobile { display: none; }
+.btc-trades-desktop { display: block; }
+
+@media (max-width: 600px) {
+  .btc-trades-mobile  { display: block; }
+  .btc-trades-desktop { display: none; }
+}

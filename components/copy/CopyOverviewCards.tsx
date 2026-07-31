@@ -156,22 +156,48 @@ function SkeletonCard() {
   );
 }
 
+// ─── BTC stats type (from /api/crypto/bots) ────────────────────────────────────
+
+type BtcOverviewStats = {
+  total_trades:  number;
+  trades_today:  number;
+  open_trades:   number;
+  closed_trades: number;
+  wins:          number;
+  losses:        number;
+  win_rate:      number;
+  all_time_pnl:  number;
+  today_pnl:     number;
+};
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export default function CopyOverviewCards() {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [btcStats, setBtcStats] = useState<BtcOverviewStats | null>(null);
 
   const fetchSummary = useCallback(async () => {
     try {
-      const r = await fetch('/api/copy/summary', { cache: 'no-store' });
-      const payload = await r.json();
+      const [summaryRes, cryptoBotsRes] = await Promise.all([
+        fetch('/api/copy/summary', { cache: 'no-store' }),
+        fetch('/api/crypto/bots',  { cache: 'no-store' }),
+      ]);
+      const payload = await summaryRes.json();
       if (payload.ok) {
         setData(payload as Overview);
         setError(null);
       } else {
         setError(payload.error ?? 'Failed to load summary');
       }
+      // Extract BTC stats from the first bot
+      try {
+        const cryptoJson = await cryptoBotsRes.json() as { ok: boolean; bots?: { stats?: BtcOverviewStats }[] };
+        if (cryptoJson.ok && cryptoJson.bots?.length) {
+          const s = cryptoJson.bots[0].stats;
+          if (s) setBtcStats(s);
+        }
+      } catch { /* non-blocking */ }
     } catch {
       setError('Network error loading summary');
     }
@@ -430,6 +456,39 @@ export default function CopyOverviewCards() {
           <div className="copy-stat-helper">
             <span className="copy-stat-badge copy-stat-badge-paper">BTC 5-Min</span>
             {' '}paper trades opened today
+          </div>
+        </div>
+
+        {/* ── BTC Performance — from /api/crypto/bots stats ── */}
+        <div className="copy-stat-card">
+          <div className="copy-stat-header">
+            <div className="copy-stat-icon"><IconActivity /></div>
+            <span className="copy-stat-label">BTC Performance</span>
+          </div>
+          <div className="copy-stat-value" style={{
+            color: btcStats && btcStats.all_time_pnl !== 0
+              ? (btcStats.all_time_pnl > 0 ? '#34d399' : '#f87171')
+              : 'rgba(248,250,252,0.35)',
+            fontSize: '1.25rem',
+          }}>
+            {btcStats
+              ? `${btcStats.all_time_pnl >= 0 ? '+' : ''}$${btcStats.all_time_pnl.toFixed(2)}`
+              : '—'}
+          </div>
+          <div className="copy-stat-helper">
+            {btcStats ? (<>
+              <span className="copy-stat-badge copy-stat-badge-paper">BTC 5-Min</span>
+              {' '}All-Time P/L
+              <span style={{ display: 'block', marginTop: '0.25rem', lineHeight: 1.6 }}>
+                Today: {btcStats.trades_today} · Total: {btcStats.total_trades}<br />
+                Open: {btcStats.open_trades} · Closed: {btcStats.closed_trades}<br />
+                {btcStats.wins > 0 || btcStats.losses > 0 ? (
+                  <>W/L: {btcStats.wins}/{btcStats.losses} · {(btcStats.win_rate * 100).toFixed(0)}% win rate</>
+                ) : (
+                  <>W/L: 0/0</>
+                )}
+              </span>
+            </>) : 'Loading…'}
           </div>
         </div>
 
