@@ -7,15 +7,17 @@
 //   selected_wallets  — [{ wallet_address, display_name? }] — 1–10 entries
 //   trade_amount      — fixed USD per trade (e.g. 5)
 //
-// Sequential steps (stops and reports on any failure):
-//   1. Validate request
-//   2. Re-run safety checks server-side (live_on=false, no enabled LIVE bot armed, no open LIVE positions)
-//   3. Disable all existing copy bots (is_enabled=false, arm_live=false, opens_only=true)
-//   4. Archive open PAPER positions (status=CANCELLED)
-//   5. Reset paper bankroll to saved default
-//   6. Upsert tracked_wallets for each selected trader
-//   7. Create or update exactly one PAPER bot per selected trader
-//   8. Verify final state
+// Two modes (controlled by request body field `mode`):
+//
+//   mode = 'replace' (default)
+//     Steps 1–8: safety → disable old bots → archive paper positions →
+//                reset bankroll → upsert wallets → create/enable bots → verify
+//     Confirmation phrase: 'START FRESH PAPER'
+//
+//   mode = 'add'
+//     Steps 1–2, then 6–8 only: safety → upsert wallets → create/enable bots → verify
+//     Does NOT disable existing bots, archive positions, or reset bankroll.
+//     Confirmation phrase: 'ADD PAPER TRADERS'
 //
 // Never touches LIVE bots' real positions, wallet signing, or execution code.
 // Never enables ARM LIVE or the global live gate.
@@ -27,10 +29,10 @@ import { createClient } from '@supabase/supabase-js';
 export const dynamic  = 'force-dynamic';
 export const revalidate = 0;
 
-const NO_CACHE      = { 'Cache-Control': 'no-store, max-age=0' };
-const CONFIRMATION  = 'START FRESH PAPER';
-const PAPER_BOT_ID  = 'copy_paper';
-const MAX_TRADERS   = 10;
+const NO_CACHE           = { 'Cache-Control': 'no-store, max-age=0' };
+const CONFIRMATION       = 'START FRESH PAPER';
+const ADD_CONFIRMATION   = 'ADD PAPER TRADERS';
+const PAPER_BOT_ID       = 'copy_paper';
 
 function getServiceClient() {
   let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
@@ -54,7 +56,7 @@ export async function POST(request: Request) {
   }
 
   // ── 1. Parse and validate request ─────────────────────────────────────────
-  let body: { confirmation?: unknown; selected_wallets?: unknown; trade_amount?: unknown };
+  let body: { confirmation?: unknown; selected_wallets?: unknown; trade_amount?: unknown; mode?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -64,9 +66,13 @@ export async function POST(request: Request) {
     );
   }
 
-  if (body.confirmation !== CONFIRMATION) {
+  // mode: 'replace' (default) = full reset workflow; 'add' = add traders only
+  const applyMode: 'replace' | 'add' = body.mode === 'add' ? 'add' : 'replace';
+  const requiredPhrase = applyMode === 'add' ? ADD_CONFIRMATION : CONFIRMATION;
+
+  if (body.confirmation !== requiredPhrase) {
     return NextResponse.json(
-      { ok: false, error: `Confirmation phrase must be exactly "${CONFIRMATION}"` },
+      { ok: false, error: `Confirmation phrase must be exactly "${requiredPhrase}"` },
       { status: 400, headers: NO_CACHE }
     );
   }
@@ -74,12 +80,6 @@ export async function POST(request: Request) {
   if (!Array.isArray(body.selected_wallets) || body.selected_wallets.length === 0) {
     return NextResponse.json(
       { ok: false, error: 'selected_wallets must be a non-empty array' },
-      { status: 400, headers: NO_CACHE }
-    );
-  }
-  if (body.selected_wallets.length > MAX_TRADERS) {
-    return NextResponse.json(
-      { ok: false, error: `Cannot select more than ${MAX_TRADERS} traders` },
       { status: 400, headers: NO_CACHE }
     );
   }
@@ -190,86 +190,91 @@ export async function POST(request: Request) {
       }
     }
 
-    // ── 3. Disable all existing bots ─────────────────────────────────────────
-    result.step = 'disable_old_bots';
+    // ── 3–5: Replace-mode only (disable old bots, archive positions, reset bankroll) ──
+    if (applyMode === 'replace') {
 
-    const allBotIds = allBots.map((b) => b.id);
-    if (allBotIds.length > 0) {
-      const { error: disableErr } = await client
-        .from('copy_bots')
-        .update({
-          is_enabled:  false,
-          arm_live:    false,
-          opens_only:  true,
-          updated_at:  now,
-        })
-        .in('id', allBotIds);
+      // ── 3. Disable all existing bots ───────────────────────────────────────
+      result.step = 'disable_old_bots';
 
-      if (disableErr) {
-        return NextResponse.json(
-          { ok: false, error: disableErr.message, step: 'disable_old_bots', partial: result },
-          { status: 500, headers: NO_CACHE }
-        );
-      }
-      result.bots_disabled = allBotIds.length;
-    }
+      const allBotIds = allBots.map((b) => b.id);
+      if (allBotIds.length > 0) {
+        const { error: disableErr } = await client
+          .from('copy_bots')
+          .update({
+            is_enabled:  false,
+            arm_live:    false,
+            opens_only:  true,
+            updated_at:  now,
+          })
+          .in('id', allBotIds);
 
-    // ── 4. Archive open PAPER positions ──────────────────────────────────────
-    result.step = 'archive_paper_positions';
-
-    const paperBotIds = allBots.filter((b) => b.mode === 'PAPER').map((b) => b.id);
-    if (paperBotIds.length > 0) {
-      const { count: openCount } = await client
-        .from('copied_positions')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'OPEN')
-        .in('copy_bot_id', paperBotIds);
-
-      if (openCount && openCount > 0) {
-        const { error: cancelErr } = await client
-          .from('copied_positions')
-          .update({ status: 'CANCELLED', closed_at: now })
-          .eq('status', 'OPEN')
-          .in('copy_bot_id', paperBotIds);
-
-        if (cancelErr) {
+        if (disableErr) {
           return NextResponse.json(
-            { ok: false, error: cancelErr.message, step: 'archive_paper_positions', partial: result },
+            { ok: false, error: disableErr.message, step: 'disable_old_bots', partial: result },
             { status: 500, headers: NO_CACHE }
           );
         }
-        result.paper_positions_cleared = openCount;
+        result.bots_disabled = allBotIds.length;
       }
-    }
 
-    // ── 5. Reset paper bankroll ───────────────────────────────────────────────
-    result.step = 'reset_paper_bankroll';
+      // ── 4. Archive open PAPER positions ────────────────────────────────────
+      result.step = 'archive_paper_positions';
 
-    const { data: currentSettings } = await client
-      .from('bot_settings')
-      .select('strategy_settings')
-      .eq('bot_id', PAPER_BOT_ID)
-      .maybeSingle();
+      const paperBotIds = allBots.filter((b) => b.mode === 'PAPER').map((b) => b.id);
+      if (paperBotIds.length > 0) {
+        const { count: openCount } = await client
+          .from('copied_positions')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'OPEN')
+          .in('copy_bot_id', paperBotIds);
 
-    const paperDefault: number =
-      (currentSettings?.strategy_settings as { paper_default?: number } | null)?.paper_default ?? 1000;
+        if (openCount && openCount > 0) {
+          const { error: cancelErr } = await client
+            .from('copied_positions')
+            .update({ status: 'CANCELLED', closed_at: now })
+            .eq('status', 'OPEN')
+            .in('copy_bot_id', paperBotIds);
 
-    const { data: bankroll, error: bankrollErr } = await client
-      .from('bot_settings')
-      .upsert(
-        { bot_id: PAPER_BOT_ID, paper_balance_usd: paperDefault, paper_pnl_usd: 0, updated_at: now },
-        { onConflict: 'bot_id' }
-      )
-      .select('paper_balance_usd')
-      .single();
+          if (cancelErr) {
+            return NextResponse.json(
+              { ok: false, error: cancelErr.message, step: 'archive_paper_positions', partial: result },
+              { status: 500, headers: NO_CACHE }
+            );
+          }
+          result.paper_positions_cleared = openCount;
+        }
+      }
 
-    if (bankrollErr) {
-      return NextResponse.json(
-        { ok: false, error: bankrollErr.message, step: 'reset_paper_bankroll', partial: result },
-        { status: 500, headers: NO_CACHE }
-      );
-    }
-    result.paper_bankroll = bankroll?.paper_balance_usd ?? paperDefault;
+      // ── 5. Reset paper bankroll ─────────────────────────────────────────────
+      result.step = 'reset_paper_bankroll';
+
+      const { data: currentSettings } = await client
+        .from('bot_settings')
+        .select('strategy_settings')
+        .eq('bot_id', PAPER_BOT_ID)
+        .maybeSingle();
+
+      const paperDefault: number =
+        (currentSettings?.strategy_settings as { paper_default?: number } | null)?.paper_default ?? 1000;
+
+      const { data: bankroll, error: bankrollErr } = await client
+        .from('bot_settings')
+        .upsert(
+          { bot_id: PAPER_BOT_ID, paper_balance_usd: paperDefault, paper_pnl_usd: 0, updated_at: now },
+          { onConflict: 'bot_id' }
+        )
+        .select('paper_balance_usd')
+        .single();
+
+      if (bankrollErr) {
+        return NextResponse.json(
+          { ok: false, error: bankrollErr.message, step: 'reset_paper_bankroll', partial: result },
+          { status: 500, headers: NO_CACHE }
+        );
+      }
+      result.paper_bankroll = bankroll?.paper_balance_usd ?? paperDefault;
+
+    } // end replace-mode steps
 
     // ── 6. Upsert tracked_wallets for each selected trader ───────────────────
     result.step = 'upsert_wallets';
@@ -414,10 +419,11 @@ export async function POST(request: Request) {
       fresh_bots_live_mode:     finalArr.filter((b) => b.mode === 'LIVE').length,
     };
 
-    result.step     = 'done';
-    result.ok       = true;
-    result.trade_amount = tradeAmount;
-    result.arm_live_bots = 0;
+    result.step            = 'done';
+    result.ok              = true;
+    result.apply_mode      = applyMode;
+    result.trade_amount    = tradeAmount;
+    result.arm_live_bots   = 0;
     result.live_bots_created = 0;
 
     console.log(

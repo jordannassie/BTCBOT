@@ -102,10 +102,12 @@ function StatRow({ label, value, warn }: { label: string; value: string | number
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 interface FreshPaperSeasonModalProps {
-  onClose: () => void;
+  onClose:   () => void;
+  /** When true the modal adds traders without resetting existing bots or positions */
+  addMode?:  boolean;
 }
 
-export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModalProps) {
+export default function FreshPaperSeasonModal({ onClose, addMode = false }: FreshPaperSeasonModalProps) {
   const [step,         setStep]        = useState<Step>('loading');
   const [preview,      setPreview]     = useState<PreviewPayload | null>(null);
   const [loadError,    setLoadError]   = useState<string | null>(null);
@@ -144,14 +146,12 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
 
   // ── Selection helpers ─────────────────────────────────────────────────────
 
-  const MAX = 10;
-
   const toggleSelect = (addr: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(addr)) {
         next.delete(addr);
-      } else if (next.size < MAX) {
+      } else {
         next.add(addr);
       }
       return next;
@@ -165,8 +165,10 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
 
   // ── Apply ─────────────────────────────────────────────────────────────────
 
+  const requiredPhrase = addMode ? 'ADD PAPER TRADERS' : 'START FRESH PAPER';
+
   const handleApply = async () => {
-    if (confirmText !== 'START FRESH PAPER') return;
+    if (confirmText !== requiredPhrase) return;
     if (selected.size === 0) return;
 
     const amount = parseFloat(tradeAmount);
@@ -186,9 +188,10 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          confirmation:      'START FRESH PAPER',
-          selected_wallets:  wallets,
-          trade_amount:      amount,
+          confirmation:     requiredPhrase,
+          selected_wallets: wallets,
+          trade_amount:     amount,
+          mode:             addMode ? 'add' : 'replace',
         }),
         cache: 'no-store',
       });
@@ -231,7 +234,7 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
         {/* ── Header ── */}
         <div className="copy-modal-header">
           <h3 className="copy-modal-title">
-            Replace Old Traders &amp; Start Fresh Paper
+            {addMode ? 'Add More Paper Traders' : 'Replace Old Traders & Start Fresh Paper'}
           </h3>
           {step !== 'applying' && (
             <button className="copy-modal-close" onClick={onClose} type="button" aria-label="Close">×</button>
@@ -321,16 +324,11 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
           {step === 'select' && preview && (
             <div>
               <div className="copy-form-section-head">
-                Select Fresh Traders
+                {addMode ? 'Select Traders to Add' : 'Select Fresh Traders'}
                 <span style={{ fontWeight: 400, color: 'rgba(248,250,252,0.35)', fontSize: '0.7rem', marginLeft: '0.5rem' }}>
-                  {selected.size} / {MAX} selected
+                  {selected.size} selected
                 </span>
               </div>
-              {selected.size >= MAX && (
-                <div style={{ marginBottom: '0.5rem', fontSize: '0.72rem', color: '#fbbf24' }}>
-                  Maximum {MAX} traders selected. Uncheck one to add another.
-                </div>
-              )}
               <div style={{ overflowX: 'auto' }}>
                 <table className="copy-table" style={{ minWidth: 560 }}>
                   <thead>
@@ -344,20 +342,18 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
                   </thead>
                   <tbody>
                     {preview.candidates.map((c) => {
-                      const isChecked  = selected.has(c.wallet_address);
-                      const isDisabled = !isChecked && selected.size >= MAX;
+                      const isChecked = selected.has(c.wallet_address);
                       return (
                         <tr
                           key={c.wallet_address}
-                          style={{ opacity: isDisabled ? 0.4 : 1, cursor: isDisabled ? 'not-allowed' : 'pointer' }}
-                          onClick={() => { if (!isDisabled) toggleSelect(c.wallet_address); }}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => toggleSelect(c.wallet_address)}
                         >
                           <td>
                             <input
                               type="checkbox"
                               className="copy-bulk-check"
                               checked={isChecked}
-                              disabled={isDisabled}
                               onChange={() => toggleSelect(c.wallet_address)}
                               onClick={(e) => e.stopPropagation()}
                             />
@@ -431,16 +427,30 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
             <div>
               <div className="copy-form-section-head">What Will Happen</div>
               <div style={{ marginBottom: '1rem' }}>
-                <StatRow label="Old bots to disable &amp; disarm" value={preview.current_state.total_bots} />
-                <StatRow label="Old paper positions to archive"    value={preview.current_state.open_paper_positions} />
-                <StatRow label="Paper bankroll will reset to"      value={`$${preview.current_state.paper_default.toLocaleString()}`} />
-                <StatRow label="Fresh PAPER bots to create/enable" value={selected.size} />
-                <StatRow label="Fixed trade amount"      value={`$${parseFloat(tradeAmount) || 5}`} />
-                <StatRow label="New Entries"             value="ON (all)" />
-                <StatRow label="Exit Monitoring"         value="ON (all)" />
-                <StatRow label="ARM LIVE"                value="OFF (all)" />
-                <StatRow label="LIVE bots created"       value="0" />
+                {!addMode && (
+                  <>
+                    <StatRow label="Old bots to disable &amp; disarm" value={preview.current_state.total_bots} />
+                    <StatRow label="Old paper positions to archive"    value={preview.current_state.open_paper_positions} />
+                    <StatRow label="Paper bankroll will reset to"      value={`$${preview.current_state.paper_default.toLocaleString()}`} />
+                  </>
+                )}
+                {addMode && (
+                  <StatRow label="Existing paper bots"    value="unchanged (not disabled)" />
+                )}
+                <StatRow label="New PAPER bots to create/enable" value={selected.size} />
+                <StatRow label="Fixed trade amount"       value={`$${parseFloat(tradeAmount) || 5}`} />
+                <StatRow label="New Entries"              value="ON (all new)" />
+                <StatRow label="Exit Monitoring"          value="ON (all new)" />
+                <StatRow label="ARM LIVE"                 value="OFF (all)" />
+                <StatRow label="LIVE bots created"        value="0" />
               </div>
+
+              {/* Informational warning about trader count */}
+              {selected.size > 5 && (
+                <div style={{ marginBottom: '0.75rem', padding: '0.5rem 0.85rem', background: 'rgba(234,179,8,0.05)', border: '1px solid rgba(234,179,8,0.18)', borderRadius: '0.5rem', fontSize: '0.72rem', color: 'rgba(248,250,252,0.55)' }}>
+                  ℹ {selected.size} traders selected · Each bot trades ${parseFloat(tradeAmount) || 5} per position · Paper exposure is governed by the existing paper max-exposure setting.
+                </div>
+              )}
 
               <div className="copy-form-section-head">Selected Traders</div>
               <div style={{ marginBottom: '1rem' }}>
@@ -472,19 +482,19 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
 
               <div className="copy-form-section-head">Confirmation Required</div>
               <div style={{ marginBottom: '0.75rem', fontSize: '0.78rem', color: 'rgba(248,250,252,0.55)' }}>
-                Type <strong style={{ color: '#f8fafc' }}>START FRESH PAPER</strong> to confirm:
+                Type <strong style={{ color: '#f8fafc' }}>{requiredPhrase}</strong> to confirm:
               </div>
               <input
                 className="copy-form-input"
                 type="text"
-                placeholder="START FRESH PAPER"
+                placeholder={requiredPhrase}
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
                 disabled={applying}
                 autoComplete="off"
                 style={{ letterSpacing: '0.05em', fontWeight: 700, marginBottom: '0.25rem' }}
               />
-              {confirmText && confirmText !== 'START FRESH PAPER' && (
+              {confirmText && confirmText !== requiredPhrase && (
                 <div style={{ fontSize: '0.68rem', color: '#f87171', marginBottom: '0.5rem' }}>
                   Phrase must match exactly
                 </div>
@@ -515,7 +525,7 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
               <div style={{ textAlign: 'center', padding: '0.75rem 0 1.25rem' }}>
                 <div style={{ fontSize: '2rem', marginBottom: '0.25rem' }}>🎉</div>
                 <div style={{ fontSize: '1rem', fontWeight: 700, color: '#34d399', marginBottom: '0.25rem' }}>
-                  Fresh Paper Season Started
+                  {applyResult.apply_mode === 'add' ? 'Paper Traders Added' : 'Fresh Paper Season Started'}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.35)' }}>
                   {String(applyResult.started_at ?? new Date().toISOString()).replace('T', ' ').slice(0, 19)} UTC
@@ -524,12 +534,16 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
 
               <div className="copy-form-section-head">Results</div>
               <div style={{ marginBottom: '1rem' }}>
-                <StatRow label="Old bots disabled"      value={Number(applyResult.bots_disabled   ?? 0)} />
-                <StatRow label="Paper positions cleared" value={Number(applyResult.paper_positions_cleared ?? 0)} />
-                <StatRow label="Paper bankroll"         value={`$${Number(applyResult.paper_bankroll ?? 0).toLocaleString()}`} />
-                <StatRow label="Wallets upserted"       value={Number(applyResult.wallets_upserted ?? 0)} />
-                <StatRow label="Fresh PAPER bots created" value={Number(applyResult.bots_created ?? 0)} />
-                <StatRow label="Fresh PAPER bots enabled" value={Number(applyResult.bots_updated ?? 0)} />
+                {applyResult.apply_mode !== 'add' && (
+                  <>
+                    <StatRow label="Old bots disabled"      value={Number(applyResult.bots_disabled   ?? 0)} />
+                    <StatRow label="Paper positions cleared" value={Number(applyResult.paper_positions_cleared ?? 0)} />
+                    <StatRow label="Paper bankroll"         value={`$${Number(applyResult.paper_bankroll ?? 0).toLocaleString()}`} />
+                  </>
+                )}
+                <StatRow label="Wallets upserted"           value={Number(applyResult.wallets_upserted ?? 0)} />
+                <StatRow label="New PAPER bots created"     value={Number(applyResult.bots_created ?? 0)} />
+                <StatRow label="Existing PAPER bots updated" value={Number(applyResult.bots_updated ?? 0)} />
               </div>
 
               {applyResult.final != null && typeof applyResult.final === 'object' && (() => {
@@ -607,10 +621,12 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
               <button
                 className="copy-btn copy-btn-primary"
                 onClick={handleApply}
-                disabled={applying || confirmText !== 'START FRESH PAPER' || selected.size === 0}
-                style={{ background: confirmText === 'START FRESH PAPER' ? undefined : undefined }}
+                disabled={applying || confirmText !== requiredPhrase || selected.size === 0}
               >
-                {applying ? 'Applying…' : `Start Fresh Paper (${selected.size} traders)`}
+                {applying ? 'Applying…' : addMode
+                  ? `Add ${selected.size} Paper Trader${selected.size !== 1 ? 's' : ''}`
+                  : `Start Fresh Paper (${selected.size} traders)`
+                }
               </button>
             </>
           )}

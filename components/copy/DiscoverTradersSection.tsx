@@ -90,6 +90,7 @@ const PERIOD_LABELS: Record<string, string> = {
 
 export default function DiscoverTradersSection() {
   const [showFreshModal, setShowFreshModal] = useState(false);
+  const [freshModalMode, setFreshModalMode] = useState<'replace' | 'add'>('replace');
 
   // Fetch state
   const [rows, setRows] = useState<DiscoverRow[]>([]);
@@ -172,7 +173,12 @@ export default function DiscoverTradersSection() {
     <div className="copy-section">
 
       {/* Fresh Paper Season modal (lazy-loaded) */}
-      {showFreshModal && <FreshPaperSeasonModal onClose={() => setShowFreshModal(false)} />}
+      {showFreshModal && (
+        <FreshPaperSeasonModal
+          addMode={freshModalMode === 'add'}
+          onClose={() => setShowFreshModal(false)}
+        />
+      )}
 
       {/* ── Section header ── */}
       <div className="copy-section-head">
@@ -206,8 +212,16 @@ export default function DiscoverTradersSection() {
             {refreshing ? '…' : '↻ Refresh'}
           </button>
           <button
+            className="copy-btn copy-btn-secondary copy-btn-sm"
+            onClick={() => { setFreshModalMode('add'); setShowFreshModal(true); }}
+            title="Add more paper traders without resetting existing bots or positions"
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            + Add Paper Traders
+          </button>
+          <button
             className="copy-btn copy-btn-primary copy-btn-sm"
-            onClick={() => setShowFreshModal(true)}
+            onClick={() => { setFreshModalMode('replace'); setShowFreshModal(true); }}
             title="Replace all current bots with fresh paper traders from this leaderboard"
             style={{ whiteSpace: 'nowrap' }}
           >
