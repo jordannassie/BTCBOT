@@ -35,18 +35,21 @@ type Candidate = {
 type PreviewPayload = {
   ok:              boolean;
   safety: {
-    live_on:             boolean;
-    emergency_stop:      boolean;
-    arm_live_bots:       number;
-    open_live_positions: number;
-    all_clear:           boolean;
+    live_on:              boolean;
+    emergency_stop:       boolean;
+    arm_live_bots:        number;   // blocking: enabled LIVE bots with arm_live
+    stale_arm_live_bots:  number;   // informational: all stale arm_live flags
+    open_live_positions:  number;
+    all_clear:            boolean;
   };
   safety_blocks:   string[];
+  cleanup_notes:   string[];        // informational items cleaned up by the reset
   current_state: {
     total_wallets:        number;
     total_bots:           number;
     enabled_bots:         number;
-    arm_live_bots:        number;
+    arm_live_bots:        number;   // blocking count
+    stale_arm_live_bots:  number;   // total stale flags
     live_bots:            number;
     open_paper_positions: number;
     open_live_positions:  number;
@@ -261,13 +264,14 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
               {/* Safety checks */}
               <div className="copy-form-section-head">Safety Check</div>
               <div style={{ padding: '0.5rem 0 0.75rem' }}>
-                <Check ok={!preview.safety.live_on}             label={`Global live trading: ${preview.safety.live_on ? 'ON ⚠' : 'OFF ✓'}`} />
-                <Check ok={preview.safety.arm_live_bots === 0}  label={`ARM LIVE bots: ${preview.safety.arm_live_bots}`} />
+                <Check ok={!preview.safety.live_on}            label={`Global live trading: ${preview.safety.live_on ? 'ON ⚠' : 'OFF ✓'}`} />
+                <Check ok={preview.safety.arm_live_bots === 0} label={`Enabled LIVE bots with ARM LIVE: ${preview.safety.arm_live_bots}`} />
                 <Check ok={preview.safety.open_live_positions === 0} label={`Open LIVE positions: ${preview.safety.open_live_positions}`} />
               </div>
 
+              {/* Blocking errors */}
               {preview.safety_blocks.length > 0 && (
-                <div style={{ marginBottom: '1rem', padding: '0.65rem 0.9rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.5rem' }}>
+                <div style={{ marginBottom: '0.75rem', padding: '0.65rem 0.9rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.5rem' }}>
                   {preview.safety_blocks.map((b, i) => (
                     <div key={i} style={{ fontSize: '0.75rem', color: '#f87171', marginBottom: i < preview.safety_blocks.length - 1 ? '0.3rem' : 0 }}>
                       ✗ {b}
@@ -276,18 +280,28 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
                 </div>
               )}
 
+              {/* Informational cleanup notes — not blockers */}
+              {preview.safety.all_clear && (preview.cleanup_notes ?? []).length > 0 && (
+                <div style={{ marginBottom: '0.75rem', padding: '0.5rem 0.85rem', background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: '0.5rem' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#818cf8', marginBottom: '0.2rem', fontWeight: 600 }}>Automatic cleanup before fresh start:</div>
+                  {(preview.cleanup_notes ?? []).map((n, i) => (
+                    <div key={i} style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.55)' }}>• {n}</div>
+                  ))}
+                </div>
+              )}
+
               {/* Current state */}
               <div className="copy-form-section-head">Current State</div>
               <div style={{ marginBottom: '1rem' }}>
-                <StatRow label="Tracked wallets"      value={preview.current_state.total_wallets} />
-                <StatRow label="Total bots"           value={preview.current_state.total_bots} />
-                <StatRow label="Enabled bots"         value={preview.current_state.enabled_bots} />
-                <StatRow label="ARM LIVE bots"        value={preview.current_state.arm_live_bots} warn={preview.current_state.arm_live_bots > 0} />
-                <StatRow label="LIVE-mode bots"       value={preview.current_state.live_bots} />
-                <StatRow label="Open paper positions" value={preview.current_state.open_paper_positions} warn={preview.current_state.open_paper_positions > 0} />
-                <StatRow label="Open LIVE positions"  value={preview.current_state.open_live_positions} warn={preview.current_state.open_live_positions > 0} />
-                <StatRow label="Paper bankroll"       value={`$${preview.current_state.paper_balance.toLocaleString()}`} />
-                <StatRow label="Paper reset default"  value={`$${preview.current_state.paper_default.toLocaleString()}`} />
+                <StatRow label="Tracked wallets"               value={preview.current_state.total_wallets} />
+                <StatRow label="Total bots"                    value={preview.current_state.total_bots} />
+                <StatRow label="Enabled bots"                  value={preview.current_state.enabled_bots} />
+                <StatRow label="Old bots to disarm"            value={preview.current_state.stale_arm_live_bots ?? 0} />
+                <StatRow label="LIVE-mode bots"                value={preview.current_state.live_bots} />
+                <StatRow label="Old paper positions to archive" value={preview.current_state.open_paper_positions} />
+                <StatRow label="Open LIVE positions"           value={preview.current_state.open_live_positions} warn={preview.current_state.open_live_positions > 0} />
+                <StatRow label="Paper bankroll"                value={`$${preview.current_state.paper_balance.toLocaleString()}`} />
+                <StatRow label="Paper reset default"           value={`$${preview.current_state.paper_default.toLocaleString()}`} />
               </div>
 
               {preview.leaderboard_error && (
@@ -417,9 +431,9 @@ export default function FreshPaperSeasonModal({ onClose }: FreshPaperSeasonModal
             <div>
               <div className="copy-form-section-head">What Will Happen</div>
               <div style={{ marginBottom: '1rem' }}>
-                <StatRow label="Old bots to disable"     value={preview.current_state.total_bots} warn={preview.current_state.total_bots > 0} />
-                <StatRow label="Paper positions to clear" value={preview.current_state.open_paper_positions} warn={preview.current_state.open_paper_positions > 0} />
-                <StatRow label="Paper bankroll will reset to" value={`$${preview.current_state.paper_default.toLocaleString()}`} />
+                <StatRow label="Old bots to disable &amp; disarm" value={preview.current_state.total_bots} />
+                <StatRow label="Old paper positions to archive"    value={preview.current_state.open_paper_positions} />
+                <StatRow label="Paper bankroll will reset to"      value={`$${preview.current_state.paper_default.toLocaleString()}`} />
                 <StatRow label="Fresh PAPER bots to create/enable" value={selected.size} />
                 <StatRow label="Fixed trade amount"      value={`$${parseFloat(tradeAmount) || 5}`} />
                 <StatRow label="New Entries"             value="ON (all)" />

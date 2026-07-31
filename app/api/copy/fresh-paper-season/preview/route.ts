@@ -89,7 +89,7 @@ export async function GET() {
     // ── Parallel Supabase reads ───────────────────────────────────────────────
     const [settingsRes, botsRes, trackedRes, bankrollRes] = await Promise.all([
       client.from('copy_global_settings').select('live_on, emergency_stop').eq('id', 1).single(),
-      client.from('copy_bots').select('id, wallet_address, mode, is_enabled, arm_live'),
+      client.from('copy_bots').select('id, wallet_address, mode, is_enabled, arm_live, opens_only, copy_closes'),
       client.from('tracked_wallets').select('wallet_address, tags').eq('is_active', true),
       client.from('bot_settings')
         .select('paper_balance_usd, paper_pnl_usd, strategy_settings')
@@ -97,7 +97,7 @@ export async function GET() {
         .maybeSingle(),
     ]);
 
-    const bots       = (botsRes.data    ?? []) as { id: string; wallet_address: string; mode: string; is_enabled: boolean; arm_live: boolean }[];
+    const bots       = (botsRes.data    ?? []) as { id: string; wallet_address: string; mode: string; is_enabled: boolean; arm_live: boolean; opens_only: boolean; copy_closes: boolean }[];
     const tracked    = (trackedRes.data ?? []) as { wallet_address: string; tags: string[] }[];
     const settings   = settingsRes.data;
     const bankroll   = bankrollRes.data;
@@ -120,18 +120,31 @@ export async function GET() {
     ]);
 
     // ── Safety checks ─────────────────────────────────────────────────────────
-    const armLiveBots = bots.filter((b) => b.arm_live).length;
-    const liveBots    = bots.filter((b) => b.mode === 'LIVE').length;
+    // BLOCKING: only an enabled LIVE bot with arm_live=true is genuinely dangerous.
+    // Disabled or PAPER bots with stale arm_live values are cleaned up by the workflow.
+    const dangerousArmLive = bots.filter((b) => b.arm_live && b.is_enabled && b.mode === 'LIVE').length;
+    // INFORMATIONAL: total stale arm_live flags (will be cleared by the reset)
+    const staleArmLive     = bots.filter((b) => b.arm_live).length;
+    const liveBots         = bots.filter((b) => b.mode === 'LIVE').length;
     const safetyBlocks: string[] = [];
 
     if (settings?.live_on) {
       safetyBlocks.push('Global live trading gate is ON — turn it OFF before starting a fresh paper season');
     }
-    if (armLiveBots > 0) {
-      safetyBlocks.push(`${armLiveBots} bot${armLiveBots !== 1 ? 's have' : ' has'} ARM LIVE enabled — disarm all bots before proceeding`);
+    if (dangerousArmLive > 0) {
+      safetyBlocks.push(`${dangerousArmLive} enabled LIVE bot${dangerousArmLive !== 1 ? 's have' : ' has'} ARM LIVE on — disarm before proceeding`);
     }
     if (openLiveCount > 0) {
       safetyBlocks.push(`${openLiveCount} open LIVE position${openLiveCount !== 1 ? 's exist' : ' exists'} — these must close naturally before a fresh paper start`);
+    }
+
+    // Informational cleanup items (not blockers)
+    const cleanupNotes: string[] = [];
+    if (staleArmLive > 0) {
+      cleanupNotes.push(`${staleArmLive} old bot${staleArmLive !== 1 ? 's' : ''} will be disarmed automatically`);
+    }
+    if (openPaperCount > 0) {
+      cleanupNotes.push(`${openPaperCount} old paper position${openPaperCount !== 1 ? 's' : ''} will be archived before the fresh test starts`);
     }
 
     // ── Paper bankroll info ───────────────────────────────────────────────────
@@ -224,18 +237,21 @@ export async function GET() {
       {
         ok: true,
         safety: {
-          live_on:            settings?.live_on          ?? false,
-          emergency_stop:     settings?.emergency_stop   ?? false,
-          arm_live_bots:      armLiveBots,
-          open_live_positions: openLiveCount,
-          all_clear:          safetyBlocks.length === 0,
+          live_on:              settings?.live_on          ?? false,
+          emergency_stop:       settings?.emergency_stop   ?? false,
+          arm_live_bots:        dangerousArmLive,       // blocking: enabled LIVE bots with arm_live
+          stale_arm_live_bots:  staleArmLive,           // informational: all stale arm_live flags
+          open_live_positions:  openLiveCount,
+          all_clear:            safetyBlocks.length === 0,
         },
         safety_blocks: safetyBlocks,
+        cleanup_notes: cleanupNotes,
         current_state: {
           total_wallets:        trackedAddrs.size,
           total_bots:           bots.length,
           enabled_bots:         bots.filter((b) => b.is_enabled).length,
-          arm_live_bots:        armLiveBots,
+          arm_live_bots:        dangerousArmLive,       // blocking count
+          stale_arm_live_bots:  staleArmLive,           // informational count
           live_bots:            liveBots,
           open_paper_positions: openPaperCount,
           open_live_positions:  openLiveCount,

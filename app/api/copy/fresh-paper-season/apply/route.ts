@@ -9,7 +9,7 @@
 //
 // Sequential steps (stops and reports on any failure):
 //   1. Validate request
-//   2. Re-run safety checks server-side (live_on=false, arm_live=0, no open LIVE positions)
+//   2. Re-run safety checks server-side (live_on=false, no enabled LIVE bot armed, no open LIVE positions)
 //   3. Disable all existing copy bots (is_enabled=false, arm_live=false, opens_only=true)
 //   4. Archive open PAPER positions (status=CANCELLED)
 //   5. Reset paper bankroll to saved default
@@ -137,14 +137,15 @@ export async function POST(request: Request) {
 
     const [settingsRes, botsRes] = await Promise.all([
       client.from('copy_global_settings').select('live_on, emergency_stop').eq('id', 1).single(),
-      client.from('copy_bots').select('id, wallet_address, mode, arm_live'),
+      client.from('copy_bots').select('id, wallet_address, mode, is_enabled, arm_live'),
     ]);
 
     const settings = settingsRes.data;
-    const allBots  = (botsRes.data ?? []) as { id: string; wallet_address: string; mode: string; arm_live: boolean }[];
+    const allBots  = (botsRes.data ?? []) as { id: string; wallet_address: string; mode: string; is_enabled: boolean; arm_live: boolean }[];
 
-    const armLiveCount = allBots.filter((b) => b.arm_live).length;
-    const liveBotIds   = allBots.filter((b) => b.mode === 'LIVE').map((b) => b.id);
+    // Only block on bots that are genuinely live-capable: enabled LIVE bots with arm_live
+    const dangerousArmLive = allBots.filter((b) => b.arm_live && b.is_enabled && b.mode === 'LIVE').length;
+    const liveBotIds       = allBots.filter((b) => b.mode === 'LIVE').map((b) => b.id);
 
     let openLiveCount = 0;
     if (liveBotIds.length > 0) {
@@ -157,9 +158,9 @@ export async function POST(request: Request) {
     }
 
     const safetyBlocks: string[] = [];
-    if (settings?.live_on)     safetyBlocks.push('Global live trading gate is ON');
-    if (armLiveCount > 0)      safetyBlocks.push(`${armLiveCount} bot${armLiveCount !== 1 ? 's have' : ' has'} ARM LIVE enabled`);
-    if (openLiveCount > 0)     safetyBlocks.push(`${openLiveCount} open LIVE position${openLiveCount !== 1 ? 's exist' : ' exists'}`);
+    if (settings?.live_on)         safetyBlocks.push('Global live trading gate is ON');
+    if (dangerousArmLive > 0)      safetyBlocks.push(`${dangerousArmLive} enabled LIVE bot${dangerousArmLive !== 1 ? 's have' : ' has'} ARM LIVE on`);
+    if (openLiveCount > 0)         safetyBlocks.push(`${openLiveCount} open LIVE position${openLiveCount !== 1 ? 's exist' : ' exists'}`);
 
     if (safetyBlocks.length > 0) {
       return NextResponse.json(
