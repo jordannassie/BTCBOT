@@ -17,8 +17,7 @@ import LiveCard from '@/components/dashboard/LiveCard';
 import CopyPaperBankrollCard from '@/components/copy/CopyPaperBankrollCard';
 import CopyTradingTabs from '@/components/copy/CopyTradingTabs';
 
-const CopyPauseControl        = dynamic(() => import('@/components/copy/CopyPauseControl'), { ssr: false });
-const PaperCopyMasterControl  = dynamic(() => import('@/components/copy/PaperCopyMasterControl'), { ssr: false });
+const CopyTradingStatusPanel  = dynamic(() => import('@/components/copy/CopyTradingStatusPanel'), { ssr: false });
 const Crypto5MinPanel         = dynamic(() => import('@/components/dashboard/Crypto5MinPanel'), { ssr: false });
 
 function IconRefresh() {
@@ -102,11 +101,8 @@ export default function DashboardPage() {
         <CopyPaperBankrollCard />
       </section>
 
-      {/* Master copy-trading pause control */}
-      <CopyPauseControl />
-
-      {/* Paper copy-trading master on/off */}
-      <PaperCopyMasterControl />
+      {/* Consolidated copy trading status panel */}
+      <CopyTradingStatusPanel />
 
       {/* Crypto 5-Min strategy panel */}
       <Crypto5MinPanel />
