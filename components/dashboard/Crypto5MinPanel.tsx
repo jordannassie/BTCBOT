@@ -26,6 +26,14 @@ type BotSettings = {
   strategy_settings: Record<string, unknown>;
 };
 
+type LateSettings = {
+  is_enabled:       boolean;
+  mode:             string;
+  arm_live:         boolean;
+  trade_size_usd:   number;
+  paper_balance_usd: number;
+};
+
 type Metrics = {
   open_count:    number;
   open_exposure: number;
@@ -105,18 +113,27 @@ function ComingSoonCard({ asset }: { asset: string }) {
 function BtcCard({
   settings, metrics, saving, saveErr, saveOk,
   onSave, onToggleMode,
+  lateSettings, onToggleLate, lateToggling, lateDone, lateErr,
 }: {
-  settings:   BotSettings | null;
-  metrics:    Metrics | null;
-  saving:     boolean;
-  saveErr:    string | null;
-  saveOk:     boolean;
-  onSave:     (fields: Record<string, unknown>) => void;
-  onToggleMode: (mode: 'PAPER' | 'LIVE', enabled: boolean) => void;
+  settings:       BotSettings | null;
+  metrics:        Metrics | null;
+  saving:         boolean;
+  saveErr:        string | null;
+  saveOk:         boolean;
+  onSave:         (fields: Record<string, unknown>) => void;
+  onToggleMode:   (mode: 'PAPER' | 'LIVE', enabled: boolean) => void;
+  lateSettings:   LateSettings | null;
+  onToggleLate:   (enabled: boolean) => Promise<void>;
+  lateToggling:   boolean;
+  lateDone:       'on' | 'off' | null;
+  lateErr:        string | null;
 }) {
   const ss = settings?.strategy_settings ?? {};
   const sig = signalLabel(ss.signal);
   const sta = statusLabel(settings?.is_enabled ?? false, settings?.mode ?? 'PAPER');
+
+  // Late-entry toggle modal state (owned here so it doesn't pollute the parent)
+  const [lateModal, setLateModal] = useState<'on' | 'off' | null>(null);
 
   // Editable form state (initialized from saved settings or defaults)
   const [tradeSize,     setTradeSize]     = useState(String(settings?.trade_size_usd ?? 1));
@@ -159,7 +176,20 @@ function BtcCard({
   const isPaper = settings?.mode === 'PAPER';
   const isOn   = settings?.is_enabled ?? false;
 
+  // Late-entry toggle helpers
+  const lateOn    = lateSettings?.is_enabled ?? false;
+  const lateSize  = lateSettings?.trade_size_usd ?? 1;
+  const lateColor = lateOn ? '#818cf8' : 'rgba(248,250,252,0.35)';
+  const lateText  = lateOn ? 'PAPER ON' : 'OFF';
+
+  const handleLateConfirm = async () => {
+    const desired = lateModal === 'on';
+    await onToggleLate(desired);
+    setLateModal(null);
+  };
+
   return (
+    <>
     <div style={{
       flex: '2 1 320px', minWidth: 280,
       background: 'rgba(15,17,26,0.6)',
@@ -167,8 +197,8 @@ function BtcCard({
       borderRadius: '0.75rem',
       padding: '1rem',
     }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+      {/* Header row 1: title + EMA signal */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
         <span style={{ fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.04em' }}>BTC 5-MIN</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
           <span style={{
@@ -186,6 +216,56 @@ function BtcCard({
             }}>{sig.text}</span>
           )}
         </div>
+      </div>
+
+      {/* Header row 2: Late-entry toggle strip */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap',
+        padding: '0.45rem 0.6rem',
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderRadius: '0.45rem',
+        marginBottom: '0.65rem',
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.05rem', flex: 1 }}>
+          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'rgba(248,250,252,0.55)', letterSpacing: '0.05em' }}>
+            Paper Trading
+          </span>
+          <span style={{ fontSize: '0.6rem', color: 'rgba(248,250,252,0.28)' }}>
+            Evaluates BTC 5-minute markets during the configured late-entry window. PAPER only.
+          </span>
+        </div>
+
+        {/* Status badge */}
+        <span style={{
+          fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em',
+          color: lateColor, background: `${lateColor}18`,
+          border: `1px solid ${lateColor}40`,
+          borderRadius: '0.3rem', padding: '0.1rem 0.5rem', flexShrink: 0,
+        }}>{lateText}</span>
+
+        {/* Toggle button */}
+        <button
+          className={`copy-btn copy-btn-sm ${lateOn ? 'copy-btn-secondary' : 'copy-btn-primary'}`}
+          style={{ fontSize: '0.68rem', padding: '0.2rem 0.7rem', flexShrink: 0 }}
+          disabled={lateToggling}
+          onClick={() => setLateModal(lateOn ? 'off' : 'on')}
+        >
+          {lateToggling ? '…' : lateOn ? 'Turn Off' : 'Turn On'}
+        </button>
+
+        {/* LIVE NOT AVAILABLE */}
+        <button
+          className="copy-btn copy-btn-sm copy-btn-secondary"
+          style={{ fontSize: '0.62rem', padding: '0.2rem 0.6rem', flexShrink: 0, opacity: 0.35, cursor: 'not-allowed' }}
+          disabled
+          title="LIVE mode is not available from this control"
+        >LIVE NOT AVAILABLE</button>
+
+        {/* Feedback */}
+        {lateDone === 'on'  && <span style={{ fontSize: '0.65rem', color: '#34d399' }}>✓ BTC 5-Min PAPER is ON</span>}
+        {lateDone === 'off' && <span style={{ fontSize: '0.65rem', color: 'rgba(248,250,252,0.4)' }}>✓ BTC 5-Min PAPER is OFF</span>}
+        {lateErr           && <span style={{ fontSize: '0.65rem', color: '#f87171' }}>✗ {lateErr}</span>}
       </div>
 
       {!settings && (
@@ -281,30 +361,112 @@ function BtcCard({
         </div>
       )}
     </div>
+
+    {/* ── Confirmation modal: Turn ON ── */}
+    {lateModal === 'on' && (
+      <div className="copy-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && !lateToggling) setLateModal(null); }}>
+        <div className="copy-modal" role="dialog" aria-modal="true" style={{ maxWidth: 420 }}>
+          <div className="copy-modal-header">
+            <h3 className="copy-modal-title">Enable BTC 5-Min PAPER Trading?</h3>
+            <button className="copy-modal-close" onClick={() => setLateModal(null)} disabled={lateToggling}>×</button>
+          </div>
+          <div className="copy-modal-body">
+            {[
+              ['Strategy',  'BTC 5-Min Late Entry'],
+              ['Mode',      'PAPER'],
+              ['Trade size', `$${lateSize}`],
+              ['LIVE',      'OFF — not available'],
+              ['ARM LIVE',  'OFF — forced'],
+            ].map(([label, value]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', padding: '0.2rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ color: 'rgba(248,250,252,0.45)' }}>{label}</span>
+                <span style={{ fontWeight: 600 }}>{value}</span>
+              </div>
+            ))}
+            <p style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.4)', marginTop: '0.6rem' }}>
+              FastLoop will evaluate BTC 5-minute markets during the configured late-entry window. No trade is placed immediately.
+            </p>
+          </div>
+          <div className="copy-modal-footer">
+            <button className="copy-btn copy-btn-secondary" onClick={() => setLateModal(null)} disabled={lateToggling}>Cancel</button>
+            <button className="copy-btn copy-btn-primary" onClick={handleLateConfirm} disabled={lateToggling}>
+              {lateToggling ? 'Enabling…' : 'TURN ON BTC PAPER'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Confirmation modal: Turn OFF ── */}
+    {lateModal === 'off' && (
+      <div className="copy-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && !lateToggling) setLateModal(null); }}>
+        <div className="copy-modal" role="dialog" aria-modal="true" style={{ maxWidth: 420 }}>
+          <div className="copy-modal-header">
+            <h3 className="copy-modal-title">Turn Off BTC 5-Min PAPER Trading?</h3>
+            <button className="copy-modal-close" onClick={() => setLateModal(null)} disabled={lateToggling}>×</button>
+          </div>
+          <div className="copy-modal-body">
+            <p style={{ fontSize: '0.8rem', color: 'rgba(248,250,252,0.65)', marginBottom: '0.75rem' }}>
+              This stops new BTC 5-minute entries. Existing paper positions will still be allowed to settle.
+            </p>
+            {[
+              ['Copy bots affected',  'None'],
+              ['Open positions',      'Unchanged — allowed to settle'],
+              ['Bankroll',            'Unchanged'],
+              ['ARM LIVE',            'OFF — forced'],
+            ].map(([label, value]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', padding: '0.2rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ color: 'rgba(248,250,252,0.45)' }}>{label}</span>
+                <span style={{ fontWeight: 600 }}>{value}</span>
+              </div>
+            ))}
+          </div>
+          <div className="copy-modal-footer">
+            <button className="copy-btn copy-btn-secondary" onClick={() => setLateModal(null)} disabled={lateToggling}>Cancel</button>
+            <button
+              className="copy-btn copy-btn-primary"
+              onClick={handleLateConfirm}
+              disabled={lateToggling}
+              style={{ background: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.4)', color: '#f87171' }}
+            >
+              {lateToggling ? 'Turning Off…' : 'TURN OFF BTC PAPER'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
 // ─── Main Panel ────────────────────────────────────────────────────────────────
 
 export default function Crypto5MinPanel() {
-  const [settings,  setSettings]  = useState<BotSettings | null>(null);
-  const [metrics,   setMetrics]   = useState<Metrics | null>(null);
-  const [loading,   setLoading]   = useState(true);
-  const [saving,    setSaving]    = useState(false);
-  const [saveErr,   setSaveErr]   = useState<string | null>(null);
-  const [saveOk,    setSaveOk]    = useState(false);
-  const [expanded,  setExpanded]  = useState(true);
+  const [settings,      setSettings]      = useState<BotSettings | null>(null);
+  const [metrics,       setMetrics]       = useState<Metrics | null>(null);
+  const [lateSettings,  setLateSettings]  = useState<LateSettings | null>(null);
+  const [loading,       setLoading]       = useState(true);
+  const [saving,        setSaving]        = useState(false);
+  const [saveErr,       setSaveErr]       = useState<string | null>(null);
+  const [saveOk,        setSaveOk]        = useState(false);
+  const [lateToggling,  setLateToggling]  = useState(false);
+  const [lateDone,      setLateDone]      = useState<'on' | 'off' | null>(null);
+  const [lateErr,       setLateErr]       = useState<string | null>(null);
+  const [expanded,      setExpanded]      = useState(true);
 
   const loadData = useCallback(async () => {
     try {
-      const [settRes, metRes] = await Promise.all([
+      const [settRes, metRes, lateRes] = await Promise.all([
         fetch('/api/bot-settings?bot_id=btc_5m_ema', { cache: 'no-store' }),
         fetch('/api/btc-ema-metrics', { cache: 'no-store' }),
+        fetch('/api/btc-5m-late', { cache: 'no-store' }),
       ]);
       const settJson = await settRes.json() as { ok: boolean; settings?: BotSettings };
       const metJson  = await metRes.json()  as { ok: boolean; open_count?: number; open_exposure?: number; total_pnl?: number };
+      const lateJson = await lateRes.json() as { ok: boolean; settings?: LateSettings };
       if (settJson.ok && settJson.settings) setSettings(settJson.settings);
       if (metJson.ok) setMetrics({ open_count: metJson.open_count ?? 0, open_exposure: metJson.open_exposure ?? 0, total_pnl: metJson.total_pnl ?? 0 });
+      if (lateJson.ok && lateJson.settings) setLateSettings(lateJson.settings);
     } catch {}
     finally { setLoading(false); }
   }, []);
@@ -333,6 +495,27 @@ export default function Crypto5MinPanel() {
 
   const handleToggleMode = async (mode: 'PAPER' | 'LIVE', enabled: boolean) => {
     await handleSave({ mode, is_enabled: enabled });
+  };
+
+  const handleToggleLate = async (enabled: boolean) => {
+    setLateToggling(true); setLateErr(null); setLateDone(null);
+    try {
+      const res = await fetch('/api/btc-5m-late', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_enabled: enabled }),
+        cache: 'no-store',
+      });
+      const payload = await res.json() as { ok: boolean; settings?: LateSettings; error?: string };
+      if (payload.ok && payload.settings) {
+        setLateSettings(payload.settings);
+        setLateDone(enabled ? 'on' : 'off');
+        setTimeout(() => setLateDone(null), 4000);
+      } else {
+        setLateErr(payload.error ?? 'Toggle failed');
+      }
+    } catch { setLateErr('Network error'); }
+    finally { setLateToggling(false); }
   };
 
   const cards: Card[] = ['btc', 'eth', 'sol', 'xrp'];
@@ -373,7 +556,7 @@ export default function Crypto5MinPanel() {
         <div style={{ display: 'flex', gap: '0.75rem', padding: '1rem 1.25rem', flexWrap: 'wrap' }}>
           {cards.map((c) =>
             c === 'btc'
-              ? <BtcCard key="btc" settings={settings} metrics={metrics} saving={saving} saveErr={saveErr} saveOk={saveOk} onSave={handleSave} onToggleMode={handleToggleMode} />
+              ? <BtcCard key="btc" settings={settings} metrics={metrics} saving={saving} saveErr={saveErr} saveOk={saveOk} onSave={handleSave} onToggleMode={handleToggleMode} lateSettings={lateSettings} onToggleLate={handleToggleLate} lateToggling={lateToggling} lateDone={lateDone} lateErr={lateErr} />
               : <ComingSoonCard key={c} asset={c.toUpperCase()} />
           )}
         </div>

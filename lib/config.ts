@@ -54,6 +54,8 @@ export const BOT_IDS = {
   PAPER_SCALPER: 'paper_scalper',
   // Worker strategy — BTC 5-minute EMA crossover
   BTC_5M_EMA: 'btc_5m_ema',
+  // Worker strategy — BTC 5-minute late-entry window (controlled via /api/btc-5m-late)
+  BTC_5M_LATE: 'btc_5m_late',
 } as const;
 
 /** All bot_id values accepted by /api/bot-settings. Derived from BOT_IDS. */
