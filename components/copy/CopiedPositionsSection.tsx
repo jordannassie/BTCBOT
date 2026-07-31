@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
+import TraderCell from '@/components/copy/TraderCell';
 
 const POLL_MS = 15_000;
 
@@ -9,6 +9,7 @@ type CopiedPosition = {
   id: string;
   copy_bot_id: string;
   wallet_address: string;
+  display_name: string | null;
   market_slug: string | null;
   market_title: string | null;
   outcome: string | null;
@@ -47,8 +48,6 @@ function ExitModeBadge({ mode, tpPct, maxMin }: { mode?: ExitMode; tpPct?: numbe
   return null; // mirror_only = no badge, it's the default
 }
 
-const truncate = (addr: string) =>
-  addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
 const fmtDate = (d: string | null | undefined) =>
   d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
@@ -399,16 +398,10 @@ export default function CopiedPositionsSection({ scrollable = false }: { scrolla
                       )}
                     </td>
                     <td>
-                      <a
-                        href={getPolymarketProfileUrl(null, r.wallet_address) ?? '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={r.wallet_address}
-                        style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
-                      >
-                        <span className="copy-mono">{truncate(r.wallet_address)}</span>
-                        <span style={{ fontSize: '0.6rem', opacity: 0.35 }}>↗</span>
-                      </a>
+                      <TraderCell
+                        displayName={r.display_name}
+                        walletAddress={r.wallet_address}
+                      />
                     </td>
                     <td>
                       <span className="copy-td-truncate" title={r.market_title ?? r.market_slug ?? undefined}>

@@ -358,9 +358,9 @@ export async function POST(request: Request) {
         (result.bots_updated as number)++;
       } else {
         // Create a brand new PAPER bot
-        const botName = sw.display_name
-          ? `Paper — ${sw.display_name}`
-          : `Paper — ${truncateAddr(sw.wallet_address)}`;
+        // Use the recognizable display name directly — mode (PAPER) is already
+        // stored in bot.mode and shown separately in the UI.
+        const botName = sw.display_name?.trim() || truncateAddr(sw.wallet_address);
 
         const { data: newBot, error: createErr } = await client
           .from('copy_bots')

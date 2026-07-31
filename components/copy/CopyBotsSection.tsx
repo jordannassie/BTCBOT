@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
+import { shortenWallet } from '@/lib/copy/traderIdentity';
 import { BOT_DEFAULTS, BOT_DEFAULTS_LS_KEY } from '@/lib/copy/botDefaults';
 import { SELECTED_BOTS_LS_KEY } from '@/lib/copy/masterStrategy';
 
@@ -840,6 +841,30 @@ export default function CopyBotsSection() {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ updated: number } | null>(null);
 
+  // Sync trader names
+  const [syncBusy,        setSyncBusy]        = useState(false);
+  const [syncResult,      setSyncResult]      = useState<{ wallets_updated: number; bots_updated: number; preserved: number; unmatched: number } | null>(null);
+  const [syncError,       setSyncError]       = useState<string | null>(null);
+  const [showSyncConfirm, setShowSyncConfirm] = useState(false);
+
+  async function handleSyncNames() {
+    setSyncBusy(true);
+    setSyncResult(null);
+    setSyncError(null);
+    setShowSyncConfirm(false);
+    try {
+      const res = await fetch('/api/copy/sync-trader-names', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store' });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'Sync failed');
+      setSyncResult({ wallets_updated: json.tracked_wallets_updated ?? 0, bots_updated: json.copy_bots_updated ?? 0, preserved: json.custom_names_preserved ?? 0, unmatched: json.unmatched_wallets ?? 0 });
+      await load(); // refresh bots to show updated names
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : 'Sync failed');
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
   // Bulk paper trade size
   const [paperSizeAmount,       setPaperSizeAmount]       = useState('1');
   const [showPaperSizeModal,    setShowPaperSizeModal]    = useState(false);
@@ -1204,6 +1229,9 @@ export default function CopyBotsSection() {
             {!loading && bots.length > 0 && <span className="copy-section-count">{bots.length}</span>}
           </div>
           <div className="copy-section-actions">
+            <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={() => setShowSyncConfirm(true)} disabled={syncBusy} title="Refresh trader names from Polymarket leaderboards">
+              {syncBusy ? 'Syncing…' : '⟳ Sync Names'}
+            </button>
             <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={handleBackfill} disabled={backfilling} title="Create default bots for wallets missing one">
               {backfilling ? 'Backfilling…' : '⊕ Backfill'}
             </button>
@@ -1213,6 +1241,36 @@ export default function CopyBotsSection() {
             </button>
           </div>
         </div>
+
+        {/* ── Sync confirm modal ── */}
+        {showSyncConfirm && (
+          <div className="copy-modal-backdrop" onClick={() => setShowSyncConfirm(false)}>
+            <div className="copy-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+              <h3 className="copy-modal-title">Sync Trader Names</h3>
+              <p style={{ fontSize: '0.82rem', color: 'rgba(248,250,252,0.6)', marginBottom: '1rem', lineHeight: 1.5 }}>
+                Refresh recognizable trader names from the current Polymarket leaderboards?
+                <br /><br />
+                This updates names only. Bot settings and trading states will not change.
+              </p>
+              <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}>
+                <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={() => setShowSyncConfirm(false)}>Cancel</button>
+                <button className="copy-btn copy-btn-primary copy-btn-sm" onClick={handleSyncNames}>Sync Names</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Sync result ── */}
+        {syncResult && (
+          <div className="copy-backfill-result">
+            ✓ Updated {syncResult.wallets_updated} wallet name{syncResult.wallets_updated !== 1 ? 's' : ''} and {syncResult.bots_updated} bot name{syncResult.bots_updated !== 1 ? 's' : ''}.
+            {syncResult.preserved > 0 && ` Preserved ${syncResult.preserved} custom name${syncResult.preserved !== 1 ? 's' : ''}.`}
+            {syncResult.unmatched > 0 && ` ${syncResult.unmatched} wallet${syncResult.unmatched !== 1 ? 's' : ''} not found on current leaderboards.`}
+          </div>
+        )}
+        {syncError && (
+          <div className="copy-backfill-result" style={{ color: '#f87171' }}>✗ Sync failed: {syncError}</div>
+        )}
 
         {/* Backfill result */}
         {backfillResult && (
@@ -1457,7 +1515,14 @@ export default function CopyBotsSection() {
                             {walletNameMap.get(bot.wallet_address) ?? bot.name}
                             <span style={{ fontSize: '0.6rem', opacity: 0.4 }}>↗</span>
                           </a>
-                          <div style={{ marginTop: '0.25rem' }}>
+                          {/* Secondary: shortened wallet address */}
+                          <div
+                            className="copy-td-sub copy-mono"
+                            style={{ fontSize: '0.67rem', color: 'rgba(248,250,252,0.3)', marginTop: '0.1rem' }}
+                          >
+                            {shortenWallet(bot.wallet_address)}
+                          </div>
+                          <div style={{ marginTop: '0.2rem' }}>
                             <ExitModeBadge mode={bot.exit_mode} />
                             {bot.exit_mode !== 'mirror_only' && (
                               <span style={{ fontSize: '0.62rem', color: 'rgba(248,250,252,0.35)', marginLeft: '0.35rem' }}>

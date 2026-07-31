@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
+import TraderCell from '@/components/copy/TraderCell';
 
 const POLL_MS = 15_000;
 
@@ -9,6 +9,7 @@ type CopyAttempt = {
   id: string;
   copy_bot_id: string;
   wallet_address: string;
+  display_name: string | null;
   source_trade_id: string;
   market_slug: string | null;
   market_title: string | null;
@@ -31,8 +32,6 @@ type BotMap = Record<string, { mode: 'PAPER' | 'LIVE'; name: string }>;
 
 type AttemptTab = 'ALL' | 'LIVE' | 'PAPER' | 'COPIED' | 'SKIPPED' | 'FAILED';
 
-const truncate = (addr: string) =>
-  addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
 const truncateTradeId = (id: string | null) =>
   !id ? '—' : id.length > 16 ? `${id.slice(0, 12)}…` : id;
 const fmtDate = (d: string) =>
@@ -287,16 +286,10 @@ export default function CopyAttemptsSection({ scrollable = false }: { scrollable
                       {bot && <span className="copy-td-sub">{bot.name}</span>}
                     </td>
                     <td>
-                      <a
-                        href={getPolymarketProfileUrl(null, r.wallet_address) ?? '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={r.wallet_address}
-                        style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
-                      >
-                        <span className="copy-mono">{truncate(r.wallet_address)}</span>
-                        <span style={{ fontSize: '0.6rem', opacity: 0.35 }}>↗</span>
-                      </a>
+                      <TraderCell
+                        displayName={r.display_name}
+                        walletAddress={r.wallet_address}
+                      />
                     </td>
                     <td>
                       <span className="copy-td-truncate" title={r.market_title ?? r.market_slug ?? undefined}>
