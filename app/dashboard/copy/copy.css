@@ -443,6 +443,133 @@
 .copy-table td:first-child { padding-left: 1.5rem; }
 .copy-table td:last-child  { padding-right: 1.5rem; }
 
+/* ─── Compact Bots table — fits on desktop without sideways scrolling ──────── */
+.copy-bots-table {
+  min-width: 680px;         /* minimum for 8 columns; still allows auto on mobile */
+  table-layout: fixed;
+}
+
+.copy-bots-table th {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.61rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.copy-bots-table th:first-child { padding-left: 1.25rem; }
+.copy-bots-table th:last-child  { padding-right: 1.25rem; }
+
+.copy-bots-table td {
+  padding: 0.6rem 0.6rem;
+  font-size: 0.79rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.copy-bots-table td:first-child { padding-left: 1.25rem; }
+.copy-bots-table td:last-child  { padding-right: 1.25rem; }
+
+/* Column widths for 8-column compact bots table                              */
+.copy-bots-table .col-select   { width: 36px;  }
+.copy-bots-table .col-trader   { width: 22%;   }
+.copy-bots-table .col-wallet   { width: 14%;   }
+.copy-bots-table .col-mode     { width: 8%;    }
+.copy-bots-table .col-status   { width: 16%;   }
+.copy-bots-table .col-size     { width: 10%;   }
+.copy-bots-table .col-arm      { width: 9%;    }
+.copy-bots-table .col-actions  { width: 52px;  }
+
+/* Wallet column: allow ellipsis on long mono strings */
+.copy-bots-table .col-wallet span {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* Copy-wallet button — very small, icon-only */
+.copy-wallet-copy-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 0 0 0.2rem;
+  color: rgba(248, 250, 252, 0.25);
+  font-size: 0.62rem;
+  line-height: 1;
+  vertical-align: middle;
+  transition: color 0.13s;
+  flex-shrink: 0;
+}
+.copy-wallet-copy-btn:hover { color: rgba(248, 250, 252, 0.65); }
+
+/* ─── Tablet: hide Wallet column (wallet still in Trader cell) ─────────────── */
+@media (max-width: 1024px) {
+  .copy-bots-table .col-wallet { display: none; }
+  .copy-bots-table { min-width: 560px; }
+}
+
+/* ─── Mobile: stacked card layout ─────────────────────────────────────────── */
+@media (max-width: 680px) {
+  .copy-table-wrap {
+    overflow-x: visible;
+  }
+
+  .copy-bots-table,
+  .copy-bots-table thead,
+  .copy-bots-table tbody,
+  .copy-bots-table tr,
+  .copy-bots-table th,
+  .copy-bots-table td {
+    display: block;
+  }
+
+  .copy-bots-table thead {
+    display: none; /* hide column headers on mobile */
+  }
+
+  .copy-bots-table tbody tr {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 0.65rem;
+    margin: 0 0.75rem 0.65rem;
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    align-items: center;
+  }
+
+  .copy-bots-table tbody tr:hover td { background: transparent; }
+
+  .copy-bots-table td {
+    padding: 0;
+    border: none;
+    overflow: visible;
+    text-overflow: unset;
+    white-space: normal;
+    flex-shrink: 0;
+  }
+
+  /* Give each field a label via data-label attribute */
+  .copy-bots-table td.col-select  { order: -1; }
+  .copy-bots-table td.col-trader  { order: 0; flex: 1 1 160px; }
+  .copy-bots-table td.col-wallet  { display: none; } /* wallet in trader cell */
+  .copy-bots-table td.col-mode    { order: 2; }
+  .copy-bots-table td.col-status  { order: 3; }
+  .copy-bots-table td.col-size    { order: 4; }
+  .copy-bots-table td.col-arm     { order: 5; }
+  .copy-bots-table td.col-actions { order: 6; margin-left: auto; }
+
+  /* Error row */
+  .copy-bots-table td[colspan] {
+    flex: 1 1 100%;
+    order: 99;
+    padding: 0.5rem 0;
+  }
+}
+
 .copy-table tbody tr:last-child td {
   border-bottom: none;
 }

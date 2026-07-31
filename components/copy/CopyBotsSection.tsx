@@ -87,8 +87,7 @@ const BULK_FIELDS: FieldDef[] = [
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const truncate  = (addr: string) => addr.length > 14 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
-const fmtDate   = (d: string)    => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-const fmtLimit  = (n: number)    => n === 0 ? <span title="Unlimited" style={{ opacity: 0.5 }}>∞</span> : n;
+// fmtDate / fmtLimit retained in edit modal — removed from compact table
 
 // Deterministic random name — same algorithm as TrackedWalletsSection so
 // the same address always produces the same name across both pages.
@@ -148,16 +147,7 @@ function defaultForm(): EditForm {
 
 // ─── Sub-components (badges, icons, empty state) ──────────────────────────────
 
-function ReadinessBadge({ readiness }: { readiness: LiveReadiness }) {
-  const map: Record<LiveReadiness, { cls: string; dot: string; label: string; title: string }> = {
-    PAPER_ONLY:   { cls: 'copy-readiness-paper',   dot: 'copy-readiness-dot-paper',   label: 'Paper Only',   title: 'Bot is in PAPER mode — no real orders.' },
-    LIVE_BLOCKED: { cls: 'copy-readiness-blocked',  dot: 'copy-readiness-dot-blocked', label: 'Live Blocked', title: 'LIVE mode but one or more gates are off.' },
-    LIVE_READY:   { cls: 'copy-readiness-ready',    dot: 'copy-readiness-dot-ready',   label: 'Live Ready',   title: 'All gates open — bot CAN place live orders.' },
-    LIVE_STOPPED: { cls: 'copy-readiness-stopped',  dot: 'copy-readiness-dot-stopped', label: 'Live Stopped', title: 'Emergency stop is ACTIVE.' },
-  };
-  const { cls, dot, label, title } = map[readiness];
-  return <span className={`copy-readiness ${cls}`} title={title}><span className={`copy-readiness-dot ${dot}`} />{label}</span>;
-}
+// ReadinessBadge removed from compact table — still computed for summary stats above table
 
 function ModeBadge({ mode }: { mode: 'PAPER' | 'LIVE' }) {
   return mode === 'LIVE'
@@ -165,11 +155,7 @@ function ModeBadge({ mode }: { mode: 'PAPER' | 'LIVE' }) {
     : <span className="copy-badge copy-badge-paper">PAPER</span>;
 }
 
-function ArmLiveBadge({ armed, mode }: { armed: boolean; mode: 'PAPER' | 'LIVE' }) {
-  if (mode === 'PAPER') return <span className="copy-badge copy-badge-disabled" title="ARM LIVE has no effect in PAPER mode">—</span>;
-  if (armed) return <span className="copy-badge copy-badge-arm-live" title="ARM LIVE is on">Armed</span>;
-  return <span className="copy-badge copy-badge-disabled" title="ARM LIVE is off">Safe</span>;
-}
+// ArmLiveBadge removed from compact table — ARM LIVE shown as toggle-only
 
 // ── Exit-mode helpers ─────────────────────────────────────────────────────────
 
@@ -1513,32 +1499,25 @@ export default function CopyBotsSection() {
           <EmptyBots onAdd={() => setShowForm(true)} />
         ) : (
           <div className="copy-table-wrap">
-            <table className="copy-table" style={{ minWidth: '1350px' }}>
+            {/* 8 columns — fits desktop without horizontal scrolling */}
+            <table className="copy-table copy-bots-table">
               <thead>
                 <tr>
-                  <th style={{ width: 36 }}>
+                  <th className="col-select">
                     <input type="checkbox" className="copy-bulk-check" checked={allSelected} onChange={toggleSelectAll}
                       ref={(el) => { if (el) el.indeterminate = someSelected; }} title={allSelected ? 'Deselect all' : 'Select all'} />
                   </th>
-                  <th>Bot</th>
-                  <th>Wallet</th>
-                  <th>Mode</th>
-                  <th title="BOT STATUS — Active copies new entries and monitors exits. Inactive stops all activity. Reads is_enabled.">BOT STATUS</th>
-                  <th title="ARM LIVE: secondary safety gate">Arm Live</th>
-                  <th title="Derived readiness status">Live Status</th>
-                  <th>Copy Mode</th>
-                  <th>Sizing</th>
-                  <th>Max $</th>
-                  <th title="0 = unlimited">Max Pos</th>
-                  <th title="0 = unlimited">/Hr</th>
-                  <th>Slip.</th>
-                  <th>Updated</th>
-                  <th>Actions</th>
+                  <th className="col-trader">Trader</th>
+                  <th className="col-wallet" title="Shortened wallet address — hover or copy for full">Wallet</th>
+                  <th className="col-mode">Mode</th>
+                  <th className="col-status" title="Active: copies new entries and monitors exits. Inactive: bot stopped.">Status</th>
+                  <th className="col-size" title="Max trade size per copy">Size</th>
+                  <th className="col-arm" title="ARM LIVE: secondary safety gate">ARM LIVE</th>
+                  <th className="col-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredBots.map((bot) => {
-                  const readiness    = getLiveReadiness(bot, globalSettings);
                   const isDeleting   = deletingId === bot.id;
                   const isSelected   = selectedIds.has(bot.id);
                   const rowDeleteErr = deleteError?.id === bot.id ? deleteError : null;
@@ -1550,71 +1529,74 @@ export default function CopyBotsSection() {
                         className={isSelected ? 'copy-row-selected' : ''}
                         style={isDeleting ? { opacity: 0.4 } : undefined}
                       >
-                        {/* Row checkbox */}
-                        <td>
+                        {/* Select */}
+                        <td className="col-select">
                           <input type="checkbox" className="copy-bulk-check" checked={isSelected} onChange={() => toggleSelect(bot.id)} />
                         </td>
-                        <td>
+
+                        {/* Trader — name + profile link + shortened wallet + exit badge */}
+                        <td className="col-trader">
                           <a
                             href={getPolymarketProfileUrl(null, bot.wallet_address) ?? '#'}
                             target="_blank"
                             rel="noopener noreferrer"
                             title="View on Polymarket"
                             className="copy-td-name"
-                            style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                            style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: '0.22rem', maxWidth: '100%', overflow: 'hidden' }}
                           >
-                            {walletNameMap.get(bot.wallet_address) ?? bot.name}
-                            <span style={{ fontSize: '0.6rem', opacity: 0.4 }}>↗</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {walletNameMap.get(bot.wallet_address) ?? bot.name}
+                            </span>
+                            <span style={{ fontSize: '0.58rem', opacity: 0.35, flexShrink: 0 }}>↗</span>
                           </a>
-                          {/* Secondary: shortened wallet address */}
-                          <div
-                            className="copy-td-sub copy-mono"
-                            style={{ fontSize: '0.67rem', color: 'rgba(248,250,252,0.3)', marginTop: '0.1rem' }}
-                          >
-                            {shortenWallet(bot.wallet_address)}
-                          </div>
-                          <div style={{ marginTop: '0.2rem' }}>
+                          {/* Secondary: shortened wallet + exit badge */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.12rem', flexWrap: 'wrap' }}>
+                            <span className="copy-mono" style={{ fontSize: '0.63rem', color: 'rgba(248,250,252,0.28)' }}>
+                              {shortenWallet(bot.wallet_address)}
+                            </span>
                             <ExitModeBadge mode={bot.exit_mode} />
-                            {bot.exit_mode !== 'mirror_only' && (
-                              <span style={{ fontSize: '0.62rem', color: 'rgba(248,250,252,0.35)', marginLeft: '0.35rem' }}>
-                                {bot.exit_mode === 'auto_profit' && `${bot.take_profit_pct ?? 8}%`}
-                                {bot.exit_mode === 'auto_profit_max_hold' && `${bot.take_profit_pct ?? 8}% · ${bot.max_hold_minutes ?? 10}m`}
+                          </div>
+                        </td>
+
+                        {/* Wallet — shortened with copy button; full address in title tooltip */}
+                        <td className="col-wallet">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
+                            <span
+                              className="copy-mono"
+                              title={bot.wallet_address}
+                              style={{ fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 'calc(100% - 20px)' }}
+                            >
+                              {shortenWallet(bot.wallet_address)}
+                            </span>
+                            <button
+                              className="copy-wallet-copy-btn"
+                              title={`Copy: ${bot.wallet_address}`}
+                              onClick={() => navigator.clipboard.writeText(bot.wallet_address)}
+                            >
+                              ⧉
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Mode */}
+                        <td className="col-mode"><ModeBadge mode={bot.mode} /></td>
+
+                        {/* Status — compact horizontal badge + toggle */}
+                        <td className="col-status">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            {bot.is_enabled ? (
+                              <span className="copy-badge copy-badge-enabled" style={{ fontSize: '0.62rem' }}>ACTIVE</span>
+                            ) : (
+                              <span className="copy-badge copy-badge-disabled" style={{ fontSize: '0.62rem' }}>INACTIVE</span>
+                            )}
+                            {(openPositionCounts.get(bot.id) ?? 0) > 0 && (
+                              <span style={{ fontSize: '0.56rem', color: '#fbbf24', fontWeight: 600 }}>
+                                {openPositionCounts.get(bot.id)}p
                               </span>
                             )}
-                          </div>
-                        </td>
-                        <td>
-                          <a
-                            href={getPolymarketProfileUrl(null, bot.wallet_address) ?? '#'}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={bot.wallet_address}
-                            style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
-                          >
-                            <span className="copy-mono">{truncate(bot.wallet_address)}</span>
-                            <span style={{ fontSize: '0.6rem', opacity: 0.35 }}>↗</span>
-                          </a>
-                        </td>
-                        <td><ModeBadge mode={bot.mode} /></td>
-                        {/* BOT STATUS — single Active / Inactive toggle (replaces old Enabled + Status + Entry/Exit) */}
-                        <td>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', alignItems: 'flex-start' }}>
-                            {/* Status badge */}
-                            {bot.is_enabled ? (
-                              <span className="copy-badge copy-badge-enabled" style={{ fontSize: '0.65rem' }}>ACTIVE</span>
-                            ) : (
-                              <span className="copy-badge copy-badge-disabled" style={{ fontSize: '0.65rem' }}>INACTIVE</span>
-                            )}
-                            {/* Open positions indicator */}
-                            {(openPositionCounts.get(bot.id) ?? 0) > 0 && (
-                              <div style={{ fontSize: '0.58rem', color: '#fbbf24', fontWeight: 600 }}>
-                                {openPositionCounts.get(bot.id)} open pos.
-                              </div>
-                            )}
-                            {/* Toggle button */}
                             <button
                               className={`copy-btn copy-btn-sm ${bot.is_enabled ? 'copy-btn-secondary' : 'copy-btn-primary'}`}
-                              style={{ fontSize: '0.65rem', padding: '0.15rem 0.6rem', marginTop: '0.1rem' }}
+                              style={{ fontSize: '0.62rem', padding: '0.12rem 0.5rem' }}
                               disabled={togglingId === bot.id}
                               onClick={() => setConfirmBotStatus({ bot, desired: bot.is_enabled ? 'inactive' : 'active' })}
                             >
@@ -1622,33 +1604,38 @@ export default function CopyBotsSection() {
                             </button>
                           </div>
                         </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            <div className="toggle-switch" style={{ width: 36, height: 20 }}>
-                              <input type="checkbox" checked={bot.arm_live} onChange={() => patchBot(bot.id, { arm_live: !bot.arm_live })} disabled={togglingId === bot.id} id={`bot-arm-${bot.id}`} />
-                              <label className="toggle-slider" htmlFor={`bot-arm-${bot.id}`} />
-                            </div>
-                            <ArmLiveBadge armed={bot.arm_live} mode={bot.mode} />
+
+                        {/* Trade Size */}
+                        <td className="col-size copy-td-num" title="Max trade size — edit via ✏ to change">
+                          ${bot.max_trade_size}
+                        </td>
+
+                        {/* ARM LIVE — toggle only, no badge text */}
+                        <td className="col-arm">
+                          <div className="toggle-switch" style={{ width: 32, height: 18 }}>
+                            <input
+                              type="checkbox"
+                              checked={bot.arm_live}
+                              onChange={() => patchBot(bot.id, { arm_live: !bot.arm_live })}
+                              disabled={togglingId === bot.id || bot.mode === 'PAPER'}
+                              id={`bot-arm-${bot.id}`}
+                              title={bot.mode === 'PAPER' ? 'ARM LIVE disabled for PAPER bots' : bot.arm_live ? 'Armed — click to disarm' : 'Disarmed — click to arm'}
+                            />
+                            <label className="toggle-slider" htmlFor={`bot-arm-${bot.id}`} />
                           </div>
                         </td>
-                        <td><ReadinessBadge readiness={readiness} /></td>
-                        <td><span className="copy-badge copy-badge-blue" style={{ textTransform: 'capitalize' }}>{bot.copy_mode}</span></td>
-                        <td className="copy-td-num">{bot.sizing_value}</td>
-                        <td className="copy-td-num">${bot.max_trade_size}</td>
-                        <td className="copy-td-num">{fmtLimit(bot.max_open_positions)}</td>
-                        <td className="copy-td-num">{fmtLimit(bot.max_trades_per_hour)}</td>
-                        <td className="copy-td-num">{(bot.max_slippage * 100).toFixed(1)}%</td>
-                        <td className="copy-td-muted" style={{ fontSize: '0.72rem' }}>{fmtDate(bot.updated_at)}</td>
-                        <td>
+
+                        {/* Actions */}
+                        <td className="col-actions">
                           <div className="copy-bot-actions">
-                            <button className="copy-bot-action-btn copy-bot-action-edit" onClick={() => setEditingBot(bot)} title="Edit" disabled={isDeleting}><IconEdit /></button>
-                            <button className="copy-bot-action-btn copy-bot-action-delete" onClick={() => handleDelete(bot)} title="Delete" disabled={isDeleting || togglingId === bot.id}><IconTrash /></button>
+                            <button className="copy-bot-action-btn copy-bot-action-edit" onClick={() => setEditingBot(bot)} title="Edit settings" disabled={isDeleting}><IconEdit /></button>
+                            <button className="copy-bot-action-btn copy-bot-action-delete" onClick={() => handleDelete(bot)} title="Delete bot" disabled={isDeleting || togglingId === bot.id}><IconTrash /></button>
                           </div>
                         </td>
                       </tr>
                       {rowDeleteErr && (
                         <tr key={`${bot.id}-err`}>
-                          <td colSpan={15} style={{ padding: '0 1.5rem 0.6rem' }}>
+                          <td colSpan={8} style={{ padding: '0 1.25rem 0.6rem' }}>
                             <div className="copy-bot-delete-error">
                               <span>{rowDeleteErr.msg}</span>
                               {rowDeleteErr.isFk && (
