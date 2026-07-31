@@ -68,12 +68,29 @@ export default function DashboardPage() {
   return (
     <div className="dashboard-container copy-page">
       <div className="copy-page-header">
-        {/* ── Left: title + subtitle ── */}
-        <div className="copy-page-header-left">
-          <h1 className="copy-page-title">Copy Trading</h1>
-          <p className="copy-page-subtitle">
-            Monitor wallets, manage copy bots, and control live execution safely
-          </p>
+        {/* ── Left: profile image + title + subtitle ── */}
+        <div className="copy-page-header-left" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {/* Profile image */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/Guy.png"
+            alt="Profile image"
+            style={{
+              width: 'clamp(60px, 8vw, 88px)',
+              height: 'clamp(60px, 8vw, 88px)',
+              borderRadius: '50%',
+              objectFit: 'cover',
+              border: '2px solid rgba(129,140,248,0.35)',
+              boxShadow: '0 0 0 4px rgba(129,140,248,0.08), 0 4px 16px rgba(0,0,0,0.4)',
+              flexShrink: 0,
+            }}
+          />
+          <div>
+            <h1 className="copy-page-title">Copy Trading</h1>
+            <p className="copy-page-subtitle">
+              Monitor wallets, manage copy bots, and control live execution safely
+            </p>
+          </div>
         </div>
 
         {/* ── Right: last-updated timestamp + manual Refresh button ── */}
