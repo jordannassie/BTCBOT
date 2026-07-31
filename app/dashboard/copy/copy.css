@@ -1495,10 +1495,22 @@
   min-height: 0;
 }
 
-/* Overview tab layout */
+/* Overview tab layout (legacy — kept for any direct usages) */
 .copy-tabs-overview {
   display: flex;
   flex-direction: column;
+}
+
+/* ── Always-visible Overview section (rendered above management tab bar) ── */
+.copy-always-overview {
+  padding-bottom: 0.25rem;
+}
+
+/* Separate the always-visible overview from the management tab bar */
+.copy-always-overview + .copy-tabs-bar {
+  margin-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 0.5rem;
 }
 
 /* ─── Internal-scroll table (Attempts + Positions tabs) ──────────────────────── */

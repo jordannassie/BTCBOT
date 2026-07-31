@@ -14,33 +14,37 @@ type Settings = {
 };
 
 type Overview = {
-  walletCount: number;          // alias for walletsActive (legacy compat)
-  walletsActive: number;        // tracked_wallets WHERE is_active = true
-  walletsTotal: number;         // tracked_wallets all rows
-  activeBotCount: number;       // copy_bots WHERE is_enabled = true
-  botsTotal: number;            // copy_bots all rows
-  paperBotsEnabled: number;     // enabled bots in PAPER mode
-  armLiveBotsCount: number;     // enabled bots with arm_live = true
-  liveActiveNow: number;        // ARM LIVE bots that can fire (live_on gate must be open)
+  walletCount: number;              // alias for walletsActive (legacy compat)
+  walletsActive: number;            // tracked_wallets WHERE is_active = true
+  walletsTotal: number;             // tracked_wallets all rows
+  activeBotCount: number;           // copy_bots WHERE is_enabled = true (Active Trading Bots)
+  botsTotal: number;                // copy_bots all rows
+  paperBotsEnabled: number;         // enabled bots in PAPER mode
+  armLiveBotsCount: number;         // enabled bots with arm_live = true
+  liveActiveNow: number;            // ARM LIVE bots that can fire (live_on gate must be open)
+  activeCryptoBotCount?: number;    // bot_settings WHERE is_enabled = true AND bot_id IN ('btc_5m_late')
   // ── Overall totals (PAPER + LIVE combined) ──────────────────────────────────
-  openPositionCount: number;    // copy_open_position_stats RPC: COUNT all OPEN
-  openExposure: number;         // copy_open_position_stats RPC: SUM(size) all OPEN
-  avgOpenSize: number;          // copy_open_position_stats RPC: AVG(size) all OPEN
-  largestOpenPosition: number;  // copy_open_position_stats RPC: MAX(size) all OPEN
-  // ── Per-mode splits (copy_open_exposure_by_mode RPC) ───────────────────────
-  paperPositionCount: number;   // PAPER mode OPEN count
-  paperExposure: number;        // PAPER mode SUM(size)
-  paperAvgSize: number;         // PAPER mode AVG(size)
-  livePositionCount: number;    // LIVE mode OPEN count
-  liveExposure: number;         // LIVE mode SUM(size)
-  liveAvgSize: number;          // LIVE mode AVG(size)
+  openPositionCount: number;        // copy_open_position_stats RPC: COUNT all OPEN
+  openExposure: number;             // copy_open_position_stats RPC: SUM(size) all OPEN
+  avgOpenSize: number;              // copy_open_position_stats RPC: AVG(size) all OPEN
+  largestOpenPosition: number;      // copy_open_position_stats RPC: MAX(size) all OPEN
+  // ── Per-mode splits (copy_open_exposure_by_mode RPC) — copy trading only ───
+  paperPositionCount: number;       // PAPER mode OPEN count (copied_positions)
+  paperExposure: number;            // PAPER mode SUM(size) (copied_positions)
+  paperAvgSize: number;             // PAPER mode AVG(size) (copied_positions)
+  livePositionCount: number;        // LIVE mode OPEN count
+  liveExposure: number;             // LIVE mode SUM(size)
+  liveAvgSize: number;              // LIVE mode AVG(size)
+  // ── Crypto paper exposure (paper_positions WHERE bot_id = 'btc_5m_late') ───
+  cryptoPaperPositionCount?: number; // open paper_positions for btc_5m_late
+  cryptoPaperExposure?: number;      // SUM(trade_size_usd) for those positions
   // ───────────────────────────────────────────────────────────────────────────
-  attemptsTodayCount: number;   // copy_attempts since midnight UTC today
+  attemptsTodayCount: number;       // copy_attempts since midnight UTC today
   // Phase 3 — recent closed positions (last 24 h)
-  recentClosedCount?: number;   // CLOSED copied_positions in last 24 h
-  recentAvgPnl?: number | null; // average P/L across those closes
+  recentClosedCount?: number;       // CLOSED copied_positions in last 24 h
+  recentAvgPnl?: number | null;     // average P/L across those closes
   settings: Settings | null;
-  fetchedAt?: string;           // ISO timestamp from server
+  fetchedAt?: string;               // ISO timestamp from server
 };
 
 const POLL_MS = 15_000; // refresh every 15 seconds
@@ -220,12 +224,15 @@ export default function CopyOverviewCards() {
   const liveOn        = data.settings?.live_on ?? false;
   const emergencyStop = data.settings?.emergency_stop ?? false;
 
-  const walletsActive  = data.walletsActive ?? data.walletCount;
-  const walletsTotal   = data.walletsTotal ?? walletsActive;
-  const botsEnabled    = data.activeBotCount;
-  const botsTotal      = data.botsTotal ?? botsEnabled;
-  const armLiveBots    = data.armLiveBotsCount ?? 0;
-  const liveActiveNow  = data.liveActiveNow ?? 0;
+  const walletsActive    = data.walletsActive ?? data.walletCount;
+  const walletsTotal     = data.walletsTotal ?? walletsActive;
+  const botsEnabled      = data.activeBotCount;               // copy-trader bots enabled
+  const botsTotal        = data.botsTotal ?? botsEnabled;
+  const armLiveBots      = data.armLiveBotsCount ?? 0;
+  const liveActiveNow    = data.liveActiveNow ?? 0;
+  const cryptoBotsActive = data.activeCryptoBotCount ?? 0;    // btc_5m_late etc.
+  const cryptoPaperCount = data.cryptoPaperPositionCount ?? 0;
+  const cryptoPaperExp   = data.cryptoPaperExposure ?? 0;
 
   return (
     <>
@@ -248,11 +255,11 @@ export default function CopyOverviewCards() {
           </div>
         </div>
 
-        {/* ── Copy Bots — show enabled / total when they differ ── */}
+        {/* ── Active Trading Bots — copy-trader bots (copy_bots.is_enabled = true) ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
             <div className="copy-stat-icon"><IconBot /></div>
-            <span className="copy-stat-label">Copy Bots</span>
+            <span className="copy-stat-label">Active Trading Bots</span>
           </div>
           <div className="copy-stat-value">
             {botsEnabled}
@@ -263,9 +270,12 @@ export default function CopyOverviewCards() {
             )}
           </div>
           <div className="copy-stat-helper">
-            {botsTotal > botsEnabled
-              ? `${botsEnabled} enabled · ${botsTotal} total`
-              : 'All bots are enabled'}
+            Enabled copy-trader bots
+            {botsTotal > botsEnabled && (
+              <span style={{ color: 'rgba(248,250,252,0.35)', marginLeft: '0.3rem' }}>
+                · {botsTotal} total
+              </span>
+            )}
             {armLiveBots > 0 && (
               <span style={{ display: 'block', marginTop: '0.2rem' }}>
                 <span className="copy-stat-badge copy-stat-badge-live">ARM LIVE</span>
@@ -275,17 +285,34 @@ export default function CopyOverviewCards() {
           </div>
         </div>
 
-        {/* ── Paper Open Exposure ──────────────────────────────────────────────────
+        {/* ── Active Crypto Bots — bot_settings.is_enabled for supported strategy IDs ── */}
+        <div className="copy-stat-card">
+          <div className="copy-stat-header">
+            <div className="copy-stat-icon"><IconBot /></div>
+            <span className="copy-stat-label">Active Crypto Bots</span>
+          </div>
+          <div className="copy-stat-value" style={{ color: cryptoBotsActive > 0 ? '#f8fafc' : 'rgba(248,250,252,0.35)' }}>
+            {cryptoBotsActive}
+          </div>
+          <div className="copy-stat-helper">
+            Enabled crypto strategy bots
+            <span style={{ display: 'block', marginTop: '0.15rem', fontSize: '0.7rem', color: 'rgba(248,250,252,0.3)' }}>
+              btc_5m_late {cryptoBotsActive > 0 ? '· ACTIVE' : '· OFF'}
+            </span>
+          </div>
+        </div>
+
+        {/* ── Copy Paper Exposure ──────────────────────────────────────────────────
              Source: copy_open_exposure_by_mode() RPC, PAPER mode row only.
-             Matches the Paper Bankroll card exactly — same RPC, same filter. ── */}
+             Reflects copied_positions only — NOT paper_positions (BTC strategy). ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
             <div className="copy-stat-icon"><IconPosition /></div>
-            <span className="copy-stat-label">Paper Open Exposure</span>
+            <span className="copy-stat-label">Copy Paper Exposure</span>
           </div>
           <div className="copy-stat-value">{fmtUsd(data.paperExposure ?? 0)}</div>
           <div className="copy-stat-helper">
-            <span className="copy-stat-badge copy-stat-badge-paper">PAPER</span>
+            <span className="copy-stat-badge copy-stat-badge-paper">COPY</span>
             {' '}·{' '}
             <span className="copy-stat-badge copy-stat-badge-open">OPEN</span>
             {' '}· {data.paperPositionCount ?? 0} position{(data.paperPositionCount ?? 0) !== 1 ? 's' : ''}
@@ -294,6 +321,25 @@ export default function CopyOverviewCards() {
                 Avg {fmtUsd(data.paperAvgSize)}
               </span>
             )}
+          </div>
+        </div>
+
+        {/* ── Crypto Paper Exposure ─────────────────────────────────────────────────
+             Source: paper_positions WHERE bot_id = 'btc_5m_late' AND status = 'OPEN'
+             Separate from copy paper exposure. ── */}
+        <div className="copy-stat-card">
+          <div className="copy-stat-header">
+            <div className="copy-stat-icon"><IconPosition /></div>
+            <span className="copy-stat-label">Crypto Paper Exposure</span>
+          </div>
+          <div className="copy-stat-value" style={{ color: cryptoPaperExp > 0 ? '#f8fafc' : 'rgba(248,250,252,0.35)' }}>
+            {fmtUsd(cryptoPaperExp)}
+          </div>
+          <div className="copy-stat-helper">
+            <span className="copy-stat-badge copy-stat-badge-paper">BTC 5-Min</span>
+            {' '}·{' '}
+            <span className="copy-stat-badge copy-stat-badge-open">OPEN</span>
+            {' '}· {cryptoPaperCount} position{cryptoPaperCount !== 1 ? 's' : ''}
           </div>
         </div>
 

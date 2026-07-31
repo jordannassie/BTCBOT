@@ -2,16 +2,14 @@
 
 // Converts the Copy Trading page from a long scroll to a tabbed dashboard.
 // The bankroll cards (LiveCard + CopyPaperBankrollCard) live above this
-// component, server-rendered. This component owns everything below them.
+// component. This component renders:
+//   1. CopyOverviewCards — always visible (not a tab, permanently shown)
+//   2. Management tab bar: Crypto Bots · Bots · Wallets · HOT · Attempts · Positions · ...
+//   3. Active tab content panel below the tab bar
 //
-// Tabs: Overview · Wallets · Bots · Attempts · Positions · Settings
-// (Master Strategy is now in Settings → Advanced, not a top-level tab)
-//
-// UX:
-//   - Active tab persisted to localStorage (key: 'btcbot-copy-tab')
-//   - Tab counts fetched from /api/copy/summary, polled every 15 s
-//   - Counts also refresh on window focus (visibilitychange)
-//   - Attempts and Positions tabs get scrollable tables (sticky headers)
+// Default tab: crypto-bots
+// Tab state: URL ?section=<id> + localStorage fallback
+// (Master Strategy is in Settings → Advanced, not a top-level tab)
 
 import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
@@ -31,10 +29,13 @@ const DiscoverTradersSection = dynamic(() => import('./DiscoverTradersSection'))
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'wallets' | 'hot' | 'bots' | 'crypto-bots' | 'attempts' | 'positions' | 'traders' | 'discover' | 'settings';
+// 'overview' is no longer a tab — it is always rendered above the tab bar.
+type TabId = 'crypto-bots' | 'bots' | 'wallets' | 'hot' | 'attempts' | 'positions' | 'traders' | 'discover' | 'settings';
 
-const LS_KEY  = 'btcbot-copy-tab';
-const POLL_MS = 15_000;
+const LS_KEY    = 'btcbot-copy-tab';
+const POLL_MS   = 15_000;
+const URL_PARAM = 'section';
+const DEFAULT_TAB: TabId = 'crypto-bots';
 
 interface TabDef {
   id: TabId;
@@ -48,17 +49,12 @@ interface TabDef {
   countKeyTotal?: string;
 }
 
-// Tab badge logic:
-//   Wallets   → walletsActive    (active / total if they differ)
-//   Bots      → activeBotCount   (enabled / total if they differ)
-//   Attempts  → attemptsTodayCount (today's decisions)
-//   Positions → openPositionCount  (OPEN only)
+// Tab bar order: Crypto Bots first (default), then copy trading management
 const TABS: TabDef[] = [
-  { id: 'overview',    label: 'Overview' },
+  { id: 'crypto-bots', label: 'Crypto Bots',  countKey: 'activeCryptoBotCount' },
+  { id: 'bots',        label: 'Bots',         countKey: 'activeBotCount', countKeyTotal: 'botsTotal' },
   { id: 'wallets',     label: 'Wallets',      countKey: 'walletsActive', countKeyTotal: 'walletsTotal' },
   { id: 'hot',         label: 'HOT' },
-  { id: 'bots',        label: 'Bots',         countKey: 'activeBotCount', countKeyTotal: 'botsTotal' },
-  { id: 'crypto-bots', label: 'Crypto Bots',  countKey: 'activeCryptoBotCount' },
   { id: 'attempts',    label: 'Attempts',     countKey: 'attemptsTodayCount' },
   { id: 'positions',   label: 'Positions',    countKey: 'openPositionCount' },
   { id: 'traders',     label: 'Top Traders' },
@@ -69,16 +65,32 @@ const TABS: TabDef[] = [
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CopyTradingTabs() {
-  const [tab, setTab] = useState<TabId>('overview');
+  const [tab, setTab] = useState<TabId>(DEFAULT_TAB);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [mounted, setMounted] = useState(false);
 
-  // Restore saved tab from localStorage after mount (SSR-safe)
+  // Restore tab from URL ?section= param, then localStorage, then default.
+  // 'overview' is no longer a valid tab — skip it and use the default.
   useEffect(() => {
     setMounted(true);
     try {
-      const saved = localStorage.getItem(LS_KEY) as TabId | null;
-      if (saved && TABS.some((t) => t.id === saved)) setTab(saved);
+      // 1. URL takes priority (enables direct links / browser back-forward)
+      const params  = new URLSearchParams(window.location.search);
+      const section = params.get(URL_PARAM) as TabId | null;
+      if (section && TABS.some((t) => t.id === section)) {
+        setTab(section);
+        return;
+      }
+      // 2. LocalStorage fallback (preserves session across soft navigations)
+      // Cast through unknown first to handle legacy 'overview' value stored
+      // before the tab was removed — TABS.some() will reject it.
+      const saved = localStorage.getItem(LS_KEY) as unknown as TabId | null;
+      if (saved && TABS.some((t) => t.id === saved)) {
+        setTab(saved);
+        return;
+      }
+      // 3. Default
+      setTab(DEFAULT_TAB);
     } catch {}
   }, []);
 
@@ -119,7 +131,13 @@ export default function CopyTradingTabs() {
 
   const switchTab = (id: TabId) => {
     setTab(id);
-    try { localStorage.setItem(LS_KEY, id); } catch {}
+    try {
+      localStorage.setItem(LS_KEY, id);
+      // Update URL without triggering a page reload — enables back/forward and direct links
+      const url = new URL(window.location.href);
+      url.searchParams.set(URL_PARAM, id);
+      window.history.replaceState(null, '', url.toString());
+    } catch {}
     document.getElementById('copy-tabs-bar')?.scrollIntoView({ block: 'nearest' });
   };
 
@@ -129,8 +147,13 @@ export default function CopyTradingTabs() {
 
   return (
     <div className="copy-tabs-root">
-      {/* ── Tab bar ── */}
-      <div id="copy-tabs-bar" className="copy-tabs-bar" role="tablist" aria-label="Copy Trading sections">
+      {/* ── Overview — always visible, not a tab ── */}
+      <div className="copy-always-overview">
+        <CopyOverviewCards />
+      </div>
+
+      {/* ── Management tab bar ── */}
+      <div id="copy-tabs-bar" className="copy-tabs-bar" role="tablist" aria-label="Copy Trading management sections">
         {TABS.map((t) => {
           const primary   = t.countKey      ? (counts[t.countKey]      ?? 0) : 0;
           const secondary = t.countKeyTotal ? (counts[t.countKeyTotal] ?? 0) : 0;
@@ -172,23 +195,17 @@ export default function CopyTradingTabs() {
         aria-labelledby={`copy-tab-${tab}`}
         className="copy-tabs-panel"
       >
-        {tab === 'overview' && (
-          <div className="copy-tabs-overview">
-            <CopyOverviewCards />
-          </div>
-        )}
-
-        {tab === 'wallets' && <TrackedWalletsSection />}
-
-        {tab === 'hot' && <HotImportSection />}
-
-        {tab === 'bots' && <CopyBotsSection />}
-
         {tab === 'crypto-bots' && (
           <div>
             <Crypto5MinPanel />
           </div>
         )}
+
+        {tab === 'bots' && <CopyBotsSection />}
+
+        {tab === 'wallets' && <TrackedWalletsSection />}
+
+        {tab === 'hot' && <HotImportSection />}
 
         {tab === 'attempts' && <CopyAttemptsSection scrollable />}
 

@@ -30,7 +30,10 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // Bumped on every fix to this route — visible in response JSON.
-const ROUTE_VERSION = 'v7-closed-perf';
+const ROUTE_VERSION = 'v8-crypto-exposure';
+
+// Crypto strategy bot IDs tracked by this dashboard
+const CRYPTO_BOT_IDS = ['btc_5m_late'] as const;
 
 function makeClient() {
   let url = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim();
@@ -58,7 +61,7 @@ export async function GET() {
       totalWalletsRes,
       enabledBotsRes,
       totalBotsRes,
-      paperBotsRes,       // enabled bots in PAPER mode → "Active Paper Bots"
+      paperBotsRes,       // enabled bots in PAPER mode → "Active Trading Bots (paper)"
       armLiveBotsRes,     // enabled bots with arm_live = true → "ARM LIVE Bots"
       openStatsRes,       // overall totals (PAPER + LIVE combined)
       modeStatsRes,       // per-mode split — drives the labelled overview cards
@@ -66,6 +69,7 @@ export async function GET() {
       recentClosedRes,    // CLOSED positions last 24 h — for overview perf card
       settingsRes,
       cryptoBotsRes,      // enabled crypto strategy bots (btc_5m_late etc.)
+      cryptoPaperPosRes,  // open paper_positions for btc_5m_late — crypto paper exposure
     ] = await Promise.all([
       client.from('tracked_wallets').select('*', { count: 'exact', head: true }).eq('is_active', true),
       client.from('tracked_wallets').select('*', { count: 'exact', head: true }),
@@ -99,7 +103,12 @@ export async function GET() {
       // Crypto strategy bots — separate count for tab badge
       client.from('bot_settings').select('*', { count: 'exact', head: true })
         .eq('is_enabled', true)
-        .in('bot_id', ['btc_5m_late']),
+        .in('bot_id', CRYPTO_BOT_IDS as unknown as string[]),
+      // Crypto paper positions (btc_5m_late strategy) — for Crypto Paper Exposure card
+      client.from('paper_positions')
+        .select('trade_size_usd')
+        .eq('bot_id', 'btc_5m_late')
+        .eq('status', 'OPEN'),
     ]);
 
     // ── Surface overall totals ─────────────────────────────────────────────────
@@ -144,6 +153,14 @@ export async function GET() {
       ? recentClosedRows.reduce((s, r) => s + (Number(r.pnl) || 0), 0) / recentClosedCount
       : null;
 
+    // ── Crypto paper exposure (btc_5m_late open paper_positions) ──────────────
+    const cryptoPaperRows = (cryptoPaperPosRes.data ?? []) as { trade_size_usd?: unknown }[];
+    const cryptoPaperPositionCount = cryptoPaperRows.length;
+    const cryptoPaperExposure = cryptoPaperRows.reduce((sum, r) => {
+      const v = Number(r.trade_size_usd ?? 0);
+      return sum + (isNaN(v) ? 0 : v);
+    }, 0);
+
     // ── Bot-mode counts ────────────────────────────────────────────────────────
     const paperBotsEnabled  = paperBotsRes.count   ?? 0;
     const armLiveBotsCount  = armLiveBotsRes.count ?? 0;
@@ -173,6 +190,10 @@ export async function GET() {
 
         // Crypto strategy bots (btc_5m_late etc.) — separate count for Crypto Bots tab badge
         activeCryptoBotCount: cryptoBotsRes.count ?? 0,
+
+        // Crypto paper exposure — open paper_positions for btc_5m_late
+        cryptoPaperPositionCount,
+        cryptoPaperExposure,
 
         // OPEN positions — overall totals (PAPER + LIVE combined)
         openPositionCount,

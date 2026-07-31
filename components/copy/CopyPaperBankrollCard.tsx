@@ -53,6 +53,10 @@ export default function CopyPaperBankrollCard() {
   const [exposureLoading, setExposureLoading] = useState(true);
   // Count of enabled bots in PAPER mode — from /api/copy/summary (same poll).
   const [paperBotsEnabled, setPaperBotsEnabled] = useState<number | null>(null);
+  // Count of enabled copy-trader bots (all modes) — activeBotCount from summary
+  const [activeTradingBots, setActiveTradingBots] = useState<number | null>(null);
+  // Count of enabled crypto strategy bots — activeCryptoBotCount from summary
+  const [activeCryptoBots, setActiveCryptoBots] = useState<number | null>(null);
 
   // Input for new default amount
   const [inputValue, setInputValue] = useState('');
@@ -88,7 +92,9 @@ export default function CopyPaperBankrollCard() {
           const remaining = cap > 0 ? Math.max(0, cap - exposure) : null;
           return { count, exposure, avg, cap, remaining };
         });
-        setPaperBotsEnabled(Number(p.paperBotsEnabled ?? 0));
+        setPaperBotsEnabled(Number(p.paperBotsEnabled    ?? 0));
+        setActiveTradingBots(Number(p.activeBotCount       ?? 0));
+        setActiveCryptoBots(Number(p.activeCryptoBotCount  ?? 0));
       }
     } catch { /* network error — leave previous state as-is */ }
   }, []);
@@ -365,7 +371,7 @@ export default function CopyPaperBankrollCard() {
       <div className="copy-paper-card-header">
         <div>
           <div className="copy-paper-card-label">PAPER BANKROLL</div>
-          <div className="copy-paper-card-sublabel">Safe testing capital for copy bots</div>
+          <div className="copy-paper-card-sublabel">Safe testing capital for trading and crypto bots</div>
         </div>
         <span className="copy-badge copy-badge-paper" style={{ alignSelf: 'flex-start' }}>PAPER</span>
       </div>
@@ -436,22 +442,38 @@ export default function CopyPaperBankrollCard() {
           )}
         </div>
 
-        {/* Active Paper Bots status line */}
+        {/* Active Trading Bots + Active Crypto Bots — two separate status lines */}
         <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           marginTop: '0.45rem',
           paddingTop: '0.4rem',
           borderTop: '1px solid rgba(255,255,255,0.05)',
           fontSize: '0.72rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.25rem',
         }}>
-          <span style={{ color: 'rgba(248,250,252,0.35)' }}>Active Paper Bots</span>
-          <span style={{
-            fontWeight: 700,
-            color: paperBotsEnabled !== null && paperBotsEnabled > 0 ? '#34d399' : 'rgba(248,250,252,0.45)',
-            fontVariantNumeric: 'tabular-nums',
-          }}>
-            {paperBotsEnabled !== null ? paperBotsEnabled : '—'}
-          </span>
+          {/* Active Trading Bots (copy_bots.is_enabled = true) */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: 'rgba(248,250,252,0.35)' }}>Active Trading Bots</span>
+            <span style={{
+              fontWeight: 700,
+              color: activeTradingBots !== null && activeTradingBots > 0 ? '#34d399' : 'rgba(248,250,252,0.45)',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {activeTradingBots !== null ? activeTradingBots : '—'}
+            </span>
+          </div>
+          {/* Active Crypto Bots (bot_settings.is_enabled for btc_5m_late) */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: 'rgba(248,250,252,0.35)' }}>Active Crypto Bots</span>
+            <span style={{
+              fontWeight: 700,
+              color: activeCryptoBots !== null && activeCryptoBots > 0 ? '#60a5fa' : 'rgba(248,250,252,0.45)',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {activeCryptoBots !== null ? activeCryptoBots : '—'}
+            </span>
+          </div>
         </div>
 
         {/* Cap + remaining rows */}
