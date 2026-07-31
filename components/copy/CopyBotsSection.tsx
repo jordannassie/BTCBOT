@@ -1253,8 +1253,8 @@ export default function CopyBotsSection() {
             {!loading && bots.length > 0 && <span className="copy-section-count">{bots.length}</span>}
           </div>
           <div className="copy-section-actions">
-            <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={() => setShowSyncConfirm(true)} disabled={syncBusy} title="Rename all bots to verified Polymarket usernames">
-              {syncBusy ? 'Syncing…' : '⟳ Sync All Trader Names'}
+            <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={() => setShowSyncConfirm(true)} disabled={syncBusy} title="Replace bot names with verified Polymarket usernames">
+              {syncBusy ? 'Refreshing…' : '⟳ Refresh Actual Usernames'}
             </button>
             <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={handleBackfill} disabled={backfilling} title="Create default bots for wallets missing one">
               {backfilling ? 'Backfilling…' : '⊕ Backfill'}
@@ -1270,19 +1270,19 @@ export default function CopyBotsSection() {
         {showSyncConfirm && (
           <div className="copy-modal-backdrop" onClick={() => setShowSyncConfirm(false)}>
             <div className="copy-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
-              <h3 className="copy-modal-title">Sync All Trader Names</h3>
+              <h3 className="copy-modal-title">Refresh Actual Usernames</h3>
               <p style={{ fontSize: '0.82rem', color: 'rgba(248,250,252,0.6)', marginBottom: '1rem', lineHeight: 1.5 }}>
-                Refresh all existing bot names using verified Polymarket usernames?
+                Replace bot labels with the verified Polymarket usernames connected to each wallet?
                 <br /><br />
-                Checks Daily, Weekly, Monthly, and All-Time leaderboards to find the
-                most accurate display name for each tracked wallet.
+                Checks Daily, Weekly, Monthly, and All-Time leaderboards. Verified usernames
+                override any existing name — whether blank, auto-generated, or a previous custom label.
                 <br /><br />
                 <strong style={{ color: '#f8fafc' }}>This changes names only.</strong>{' '}
-                Trading settings and bot states will not change.
+                Trading states and settings will not change.
               </p>
               <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}>
                 <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={() => setShowSyncConfirm(false)}>Cancel</button>
-                <button className="copy-btn copy-btn-primary copy-btn-sm" onClick={handleSyncNames}>Sync All Trader Names</button>
+                <button className="copy-btn copy-btn-primary copy-btn-sm" onClick={handleSyncNames}>Refresh Actual Usernames</button>
               </div>
             </div>
           </div>
@@ -1293,11 +1293,10 @@ export default function CopyBotsSection() {
           <>
             <div className="copy-backfill-result" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.4rem' }}>
               <span>
-                ✓ Checked {syncResult.total_bots_checked} bot{syncResult.total_bots_checked !== 1 ? 's' : ''} · {syncResult.verified_names_found} verified name{syncResult.verified_names_found !== 1 ? 's' : ''} found ·{' '}
-                Updated {syncResult.bot_names_updated} bot{syncResult.bot_names_updated !== 1 ? 's' : ''} + {syncResult.wallet_names_updated} wallet{syncResult.wallet_names_updated !== 1 ? 's' : ''}.
-                {syncResult.custom_names_preserved > 0 && ` Preserved ${syncResult.custom_names_preserved} custom.`}
+                ✓ Checked {syncResult.total_bots_checked} bot{syncResult.total_bots_checked !== 1 ? 's' : ''} · {syncResult.verified_names_found} verified username{syncResult.verified_names_found !== 1 ? 's' : ''} found ·{' '}
+                Corrected {syncResult.bot_names_updated} bot{syncResult.bot_names_updated !== 1 ? 's' : ''} + {syncResult.wallet_names_updated} wallet{syncResult.wallet_names_updated !== 1 ? 's' : ''}.
                 {syncResult.unmatched_wallets > 0 && ` ${syncResult.unmatched_wallets} unmatched.`}
-                {syncResult.conflicting_wallets > 0 && ` ${syncResult.conflicting_wallets} conflict${syncResult.conflicting_wallets !== 1 ? 's' : ''}.`}
+                {syncResult.conflicting_wallets > 0 && ` ${syncResult.conflicting_wallets} conflict${syncResult.conflicting_wallets !== 1 ? 's' : ''} (applied highest-confidence name).`}
                 {syncResult.duplicate_wallet_records_found > 0 && ` ⚠ ${syncResult.duplicate_wallet_records_found} duplicate wallet record${syncResult.duplicate_wallet_records_found !== 1 ? 's' : ''}.`}
               </span>
               {syncResult.manual_review.length > 0 && (

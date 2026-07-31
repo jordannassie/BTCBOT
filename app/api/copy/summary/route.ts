@@ -65,6 +65,7 @@ export async function GET() {
       attemptsTodayRes,
       recentClosedRes,    // CLOSED positions last 24 h — for overview perf card
       settingsRes,
+      cryptoBotsRes,      // enabled crypto strategy bots (btc_5m_late etc.)
     ] = await Promise.all([
       client.from('tracked_wallets').select('*', { count: 'exact', head: true }).eq('is_active', true),
       client.from('tracked_wallets').select('*', { count: 'exact', head: true }),
@@ -95,6 +96,10 @@ export async function GET() {
         .select('live_on, emergency_stop, max_total_live_exposure, default_slippage_cap, default_position_size, default_max_positions')
         .eq('id', 1)
         .maybeSingle(),
+      // Crypto strategy bots — separate count for tab badge
+      client.from('bot_settings').select('*', { count: 'exact', head: true })
+        .eq('is_enabled', true)
+        .in('bot_id', ['btc_5m_late']),
     ]);
 
     // ── Surface overall totals ─────────────────────────────────────────────────
@@ -158,13 +163,16 @@ export async function GET() {
         walletsTotal:  totalWalletsRes.count  ?? 0,
         walletCount:   activeWalletsRes.count ?? 0,  // legacy alias
 
-        // Bots — overall
+        // Copy-trader bots
         activeBotCount: enabledBotsRes.count ?? 0,
         botsTotal:      totalBotsRes.count   ?? 0,
         // Bots — mode-specific counts for bankroll card status lines
         paperBotsEnabled,   // enabled bots in PAPER mode
         armLiveBotsCount,   // enabled bots with arm_live = true
         liveActiveNow,      // armLiveBotsCount when live_on is true, else 0
+
+        // Crypto strategy bots (btc_5m_late etc.) — separate count for Crypto Bots tab badge
+        activeCryptoBotCount: cryptoBotsRes.count ?? 0,
 
         // OPEN positions — overall totals (PAPER + LIVE combined)
         openPositionCount,

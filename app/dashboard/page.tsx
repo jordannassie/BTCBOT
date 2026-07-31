@@ -18,7 +18,6 @@ import CopyPaperBankrollCard from '@/components/copy/CopyPaperBankrollCard';
 import CopyTradingTabs from '@/components/copy/CopyTradingTabs';
 
 const CopyTradingStatusPanel  = dynamic(() => import('@/components/copy/CopyTradingStatusPanel'), { ssr: false });
-const Crypto5MinPanel         = dynamic(() => import('@/components/dashboard/Crypto5MinPanel'), { ssr: false });
 
 function IconRefresh() {
   return (
@@ -104,10 +103,7 @@ export default function DashboardPage() {
       {/* Consolidated copy trading status panel */}
       <CopyTradingStatusPanel />
 
-      {/* Crypto 5-Min strategy panel */}
-      <Crypto5MinPanel />
-
-      {/* Tabbed layout */}
+      {/* Tabbed layout — includes Crypto Bots tab */}
       <CopyTradingTabs />
     </div>
   );

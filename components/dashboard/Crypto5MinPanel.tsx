@@ -108,6 +108,44 @@ function statusLabel(enabled: boolean, mode: string): { text: string; color: str
   return                 { text: 'PAPER', color: '#818cf8' };
 }
 
+/**
+ * Derives the primary BTC BOT status from btc_5m_late settings + market state.
+ * The enabled state is read directly from bot_settings.is_enabled — never inferred.
+ */
+function lateBotStatusLabel(
+  isEnabled: boolean | undefined,
+  marketStatus: MarketStatus | null,
+): { badge: string; badgeColor: string; text: string; textColor: string } {
+  if (!isEnabled) {
+    return {
+      badge: 'OFF', badgeColor: 'rgba(248,250,252,0.35)',
+      text: 'BTC PAPER BOT STOPPED', textColor: 'rgba(248,250,252,0.38)',
+    };
+  }
+
+  // Open paper position
+  if (marketStatus?.current_position) {
+    return {
+      badge: 'ON', badgeColor: '#34d399',
+      text: 'ON — PAPER POSITION OPEN', textColor: '#34d399',
+    };
+  }
+
+  // Active entry window: within 0-60 s of market close
+  const secs = marketStatus?.seconds_remaining;
+  if (typeof secs === 'number' && secs >= 0 && secs <= 60) {
+    return {
+      badge: 'ON', badgeColor: '#fbbf24',
+      text: 'ON — EVALUATING', textColor: '#fbbf24',
+    };
+  }
+
+  return {
+    badge: 'ON', badgeColor: '#818cf8',
+    text: 'ON — WAITING FOR ENTRY WINDOW', textColor: 'rgba(248,250,252,0.6)',
+  };
+}
+
 // ─── Stat row ──────────────────────────────────────────────────────────────────
 
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
@@ -426,7 +464,10 @@ function BtcCard({
 }) {
   const ss = settings?.strategy_settings ?? {};
   const sig = signalLabel(ss.signal);
+  // sta uses EMA bot settings for EMA-specific controls (mode, arm_live)
   const sta = statusLabel(settings?.is_enabled ?? false, settings?.mode ?? 'PAPER');
+  // Primary BTC BOT badge/status reads from btc_5m_late (lateSettings)
+  const lateSta = lateBotStatusLabel(lateSettings?.is_enabled, marketStatus);
 
   // Late-entry toggle modal state (owned here so it doesn't pollute the parent)
   const [lateModal, setLateModal] = useState<'on' | 'off' | null>(null);
@@ -521,12 +562,13 @@ function BtcCard({
           <span style={{ fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.04em' }}>BTC 5-MIN</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          {/* Primary badge reads btc_5m_late.is_enabled — never inferred from market or EMA state */}
           <span style={{
             fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em',
-            color: sta.color, background: `${sta.color}18`,
-            border: `1px solid ${sta.color}40`,
+            color: lateSta.badgeColor, background: `${lateSta.badgeColor}18`,
+            border: `1px solid ${lateSta.badgeColor}40`,
             borderRadius: '0.3rem', padding: '0.1rem 0.5rem',
-          }}>{sta.text}</span>
+          }}>{lateSta.badge}</span>
           {sig.text !== '—' && (
             <span style={{
               fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em',
@@ -538,7 +580,7 @@ function BtcCard({
         </div>
       </div>
 
-      {/* Header row 2: Late-entry toggle strip */}
+      {/* Header row 2: BTC BOT primary ON/OFF toggle */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap',
         padding: '0.45rem 0.6rem',
@@ -549,29 +591,22 @@ function BtcCard({
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.05rem', flex: 1 }}>
           <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'rgba(248,250,252,0.55)', letterSpacing: '0.05em' }}>
-            Paper Trading
+            BTC BOT
           </span>
-          <span style={{ fontSize: '0.6rem', color: 'rgba(248,250,252,0.28)' }}>
-            Evaluates BTC 5-minute markets during the configured late-entry window. PAPER only.
+          {/* Status text — reads directly from btc_5m_late.is_enabled */}
+          <span style={{ fontSize: '0.6rem', color: lateSta.textColor, fontWeight: 600 }}>
+            {lateSta.text}
           </span>
         </div>
 
-        {/* Status badge */}
-        <span style={{
-          fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em',
-          color: lateColor, background: `${lateColor}18`,
-          border: `1px solid ${lateColor}40`,
-          borderRadius: '0.3rem', padding: '0.1rem 0.5rem', flexShrink: 0,
-        }}>{lateText}</span>
-
-        {/* Toggle button */}
+        {/* Primary toggle button — changes only btc_5m_late.is_enabled */}
         <button
           className={`copy-btn copy-btn-sm ${lateOn ? 'copy-btn-secondary' : 'copy-btn-primary'}`}
           style={{ fontSize: '0.68rem', padding: '0.2rem 0.7rem', flexShrink: 0 }}
           disabled={lateToggling}
           onClick={() => setLateModal(lateOn ? 'off' : 'on')}
         >
-          {lateToggling ? '…' : lateOn ? 'Turn Off' : 'Turn On'}
+          {lateToggling ? '…' : lateOn ? 'Turn OFF' : 'Turn ON'}
         </button>
 
         {/* LIVE NOT AVAILABLE */}
@@ -601,8 +636,8 @@ function BtcCard({
         )}
 
         {/* Feedback */}
-        {lateDone === 'on'  && <span style={{ fontSize: '0.65rem', color: '#34d399' }}>✓ BTC 5-Min PAPER is ON</span>}
-        {lateDone === 'off' && <span style={{ fontSize: '0.65rem', color: 'rgba(248,250,252,0.4)' }}>✓ BTC 5-Min PAPER is OFF</span>}
+        {lateDone === 'on'  && <span style={{ fontSize: '0.65rem', color: '#34d399' }}>✓ BTC 5-Min bot turned ON</span>}
+        {lateDone === 'off' && <span style={{ fontSize: '0.65rem', color: 'rgba(248,250,252,0.4)' }}>✓ BTC 5-Min bot turned OFF</span>}
         {lateErr           && <span style={{ fontSize: '0.65rem', color: '#f87171' }}>✗ {lateErr}</span>}
         {testModeDone      && <span style={{ fontSize: '0.65rem', color: '#fbbf24' }}>✓ Test mode ON — waiting for next market</span>}
         {testModeErr       && <span style={{ fontSize: '0.65rem', color: '#f87171' }}>✗ {testModeErr}</span>}
@@ -865,8 +900,8 @@ export default function Crypto5MinPanel() {
 
   useEffect(() => {
     loadData();
-    // 12s so time-remaining stays fresh and rotation is caught quickly
-    const interval = setInterval(loadData, 12_000);
+    // 5s poll so btc_5m_late.is_enabled is always fresh (never stale OFF after worker enables)
+    const interval = setInterval(loadData, 5_000);
     return () => clearInterval(interval);
   }, [loadData]);
 

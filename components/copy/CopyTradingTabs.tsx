@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 
 import CopyOverviewCards from './CopyOverviewCards';
+const Crypto5MinPanel        = dynamic(() => import('@/components/dashboard/Crypto5MinPanel'), { ssr: false });
 
 const TrackedWalletsSection  = dynamic(() => import('./TrackedWalletsSection'));
 const HotImportSection       = dynamic(() => import('./HotImportSection'));
@@ -30,7 +31,7 @@ const DiscoverTradersSection = dynamic(() => import('./DiscoverTradersSection'))
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'wallets' | 'hot' | 'bots' | 'attempts' | 'positions' | 'settings' | 'traders' | 'discover';
+type TabId = 'overview' | 'wallets' | 'hot' | 'bots' | 'crypto-bots' | 'attempts' | 'positions' | 'traders' | 'discover' | 'settings';
 
 const LS_KEY  = 'btcbot-copy-tab';
 const POLL_MS = 15_000;
@@ -53,15 +54,16 @@ interface TabDef {
 //   Attempts  → attemptsTodayCount (today's decisions)
 //   Positions → openPositionCount  (OPEN only)
 const TABS: TabDef[] = [
-  { id: 'overview',  label: 'Overview' },
-  { id: 'wallets',   label: 'Wallets',   countKey: 'walletsActive', countKeyTotal: 'walletsTotal' },
-  { id: 'hot',       label: 'HOT' },
-  { id: 'bots',      label: 'Bots',      countKey: 'activeBotCount', countKeyTotal: 'botsTotal' },
-  { id: 'attempts',  label: 'Attempts',  countKey: 'attemptsTodayCount' },
-  { id: 'positions', label: 'Positions', countKey: 'openPositionCount' },
-  { id: 'traders',   label: 'Top Traders' },
-  { id: 'discover',  label: 'Discover Traders' },
-  { id: 'settings',  label: 'Settings' },
+  { id: 'overview',    label: 'Overview' },
+  { id: 'wallets',     label: 'Wallets',      countKey: 'walletsActive', countKeyTotal: 'walletsTotal' },
+  { id: 'hot',         label: 'HOT' },
+  { id: 'bots',        label: 'Bots',         countKey: 'activeBotCount', countKeyTotal: 'botsTotal' },
+  { id: 'crypto-bots', label: 'Crypto Bots',  countKey: 'activeCryptoBotCount' },
+  { id: 'attempts',    label: 'Attempts',     countKey: 'attemptsTodayCount' },
+  { id: 'positions',   label: 'Positions',    countKey: 'openPositionCount' },
+  { id: 'traders',     label: 'Top Traders' },
+  { id: 'discover',    label: 'Discover Traders' },
+  { id: 'settings',    label: 'Settings' },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -181,6 +183,12 @@ export default function CopyTradingTabs() {
         {tab === 'hot' && <HotImportSection />}
 
         {tab === 'bots' && <CopyBotsSection />}
+
+        {tab === 'crypto-bots' && (
+          <div>
+            <Crypto5MinPanel />
+          </div>
+        )}
 
         {tab === 'attempts' && <CopyAttemptsSection scrollable />}
 
