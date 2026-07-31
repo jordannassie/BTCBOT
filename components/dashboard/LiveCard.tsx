@@ -331,9 +331,25 @@ export default function LiveCard() {
     <div className={`profile-card live-card live-card-featured${isEnabled ? ' live-card--live-on' : ''}`}>
       <div className="live-card-header">
         <span className="live-card-label">LIVE BANKROLL</span>
-        <div className="pnl-indicator">
-          <span className={`live-dot ${isEnabled ? 'active' : ''}`} />
-          <span>LIVE</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <div className="pnl-indicator">
+            <span className={`live-dot ${isEnabled ? 'active' : ''}`} />
+            <span>LIVE</span>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/Guy.png"
+            alt="Profile image"
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: '50%',
+              objectFit: 'cover',
+              border: '2px solid rgba(129,140,248,0.3)',
+              boxShadow: '0 0 0 3px rgba(129,140,248,0.07), 0 2px 10px rgba(0,0,0,0.45)',
+              flexShrink: 0,
+            }}
+          />
         </div>
       </div>
 
