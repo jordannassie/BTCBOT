@@ -1,21 +1,28 @@
 // GET /api/crypto/bots
 //
-// Returns a summary of all tracked crypto strategy bots — only btc_5m_late.
+// Single source of truth for all btc_5m_late statistics.
 //
-// paper_positions confirmed column names:
-//   start_ts        — trade opening timestamp
-//   size_usd        — trade size in USD
-//   pnl_usd         — realized P/L (null when OPEN)
-//   status          — 'OPEN' | 'CLOSED'
-//   slug            — market slug
-//   side            — stored as 'yes' (UP) or 'no' (DOWN) — translated here
-//   entry_price     — entry price (may also be entry_yes)
-//   closed_at       — close timestamp
+// CONFIRMED paper_positions columns (verified by live trade data):
+//   bot_id       — string
+//   status       — 'OPEN' | 'CLOSED'
+//   size_usd     — number  (trade size in USD)
+//   pnl_usd      — number  (realized P/L, null when OPEN)
+//   market_slug  — string  (e.g. 'btc-updown-5m-1785521100')
+//   side         — string  ('yes' = UP, 'no' = DOWN)
+//   entry_price  — number  (entry price)
+//
+// INTENTIONALLY EXCLUDED (not confirmed to exist):
+//   id, start_ts, slug, closed_at, updated_at, entry_yes
+//
+// Chronological ordering: via market_slug suffix (Unix timestamp embedded).
+// Starting balance: strategy_settings.btc_paper_start ?? 100
+//   (NOT paper_balance_usd which FastLoop mutates as trades settle)
 //
 // Side translation: 'yes' → 'UP', 'no' → 'DOWN'
 // Result: OPEN → 'OPEN' | pnl_usd > 0 → 'WIN' | pnl_usd < 0 → 'LOSS' | = 0 → 'PUSH'
 //
-// READ-ONLY reporting — never writes, never touches copy positions or live trading.
+// READ-ONLY — never writes, never touches copy positions or live trading.
+// Never aggregates btc_5m_ema — only btc_5m_late.
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -26,8 +33,12 @@ export const revalidate = 0;
 const NO_CACHE = { 'Cache-Control': 'no-store, max-age=0' };
 
 const BOT_NAMES: Record<string, string> = { btc_5m_late: 'BTC 5-Min' };
-const SUPPORTED_BOT_IDS = ['btc_5m_late'];  // Only btc_5m_late — never aggregate btc_5m_ema
+// Only btc_5m_late — never aggregate btc_5m_ema
+const SUPPORTED_BOT_IDS = ['btc_5m_late'];
 const RECENT_LIMIT = 20;
+// Stable BTC paper starting balance — matches original paper_balance_usd default.
+// Do NOT use paper_balance_usd from bot_settings (FastLoop mutates it as P/L flows).
+const BTC_PAPER_START_DEFAULT = 100;
 
 function getClient() {
   let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
@@ -54,20 +65,30 @@ function deriveResult(status: string | null, pnl: number | null): string {
   return 'PUSH';
 }
 
-interface PaperPosRow {
-  bot_id:       string | null;
-  status:       string | null;
-  start_ts:     string | null;
-  size_usd:     number | null;
-  pnl_usd:      number | null;
-  slug?:        string | null;
-  market_slug?: string | null;
+// Extract Unix timestamp from market_slug suffix (e.g. 'btc-updown-5m-1785521100')
+function slugToMs(slug: string | null | undefined): number {
+  if (!slug) return 0;
+  const parts = slug.split('-');
+  const last = parts[parts.length - 1];
+  const ts = Number(last);
+  return Number.isFinite(ts) && ts > 1_000_000_000 ? ts * 1000 : 0;
+}
+
+// ── Row types ────────────────────────────────────────────────────────────────
+
+/** Stats row: only confirmed-safe columns */
+interface StatRow {
+  bot_id:      string | null;
+  status:      string | null;
+  size_usd:    number | null;
+  pnl_usd:     number | null;
+  market_slug: string | null;
+}
+
+/** Detail row: confirmed columns + display fields */
+interface DetailRow extends StatRow {
   side?:        string | null;
   entry_price?: number | null;
-  entry_yes?:   number | null;
-  closed_at?:   string | null;
-  updated_at?:  string | null;
-  id?:          string | null;
 }
 
 export async function GET() {
@@ -79,14 +100,14 @@ export async function GET() {
     );
   }
 
-  const midnightUTC = new Date();
-  midnightUTC.setUTCHours(0, 0, 0, 0);
-  const midnightMs = midnightUTC.getTime();
+  const now = new Date();
+  now.setUTCHours(0, 0, 0, 0);
+  const midnightMs = now.getTime();
   const fetchedAt  = new Date().toISOString();
 
   try {
-    const [settingsRes, emaSettingsRes, allPosRes, recentRes] = await Promise.all([
-      // btc_5m_late settings — the only active BTC strategy
+    const [settingsRes, emaSettingsRes, statsRes, detailRes] = await Promise.all([
+      // btc_5m_late bot settings (trade_size_usd, is_enabled, strategy_settings)
       client
         .from('bot_settings')
         .select('bot_id, is_enabled, mode, arm_live, trade_size_usd, paper_balance_usd, strategy_settings, updated_at')
@@ -99,68 +120,87 @@ export async function GET() {
         .eq('bot_id', 'btc_5m_ema')
         .limit(1),
 
-      // All btc_5m_late positions for stats + equity curve
+      // STATS query: ONLY confirmed columns.
+      // No id, start_ts, slug, closed_at — using only what is verified to exist.
+      // Order by market_slug ASC (suffix is Unix timestamp → chronological).
       client
         .from('paper_positions')
-        .select('id, bot_id, status, start_ts, size_usd, pnl_usd, slug, market_slug, side, closed_at')
+        .select('bot_id, status, size_usd, pnl_usd, market_slug')
         .in('bot_id', SUPPORTED_BOT_IDS)
-        .order('start_ts', { ascending: false }),
+        .order('market_slug', { ascending: true }),
 
-      // Most recent RECENT_LIMIT rows for detail display
+      // DETAIL query: stats columns + display-only confirmed columns.
+      // side and entry_price confirmed present from live trade data.
+      // Limited to RECENT_LIMIT for display — stats come from statsRes above.
       client
         .from('paper_positions')
-        .select('id, bot_id, status, start_ts, size_usd, pnl_usd, slug, market_slug, side, entry_price, entry_yes, closed_at, updated_at')
+        .select('bot_id, status, size_usd, pnl_usd, market_slug, side, entry_price')
         .in('bot_id', SUPPORTED_BOT_IDS)
-        .order('start_ts', { ascending: false })
+        .order('market_slug', { ascending: false })
         .limit(RECENT_LIMIT),
     ]);
 
     type SettingsRow = {
-      bot_id:           string;
-      is_enabled:       boolean;
-      mode:             string;
-      arm_live:         boolean;
-      trade_size_usd:   number;
+      bot_id:            string;
+      is_enabled:        boolean;
+      mode:              string;
+      arm_live:          boolean;
+      trade_size_usd:    number;
       paper_balance_usd: number;
       strategy_settings: Record<string, unknown> | null;
-      updated_at:       string;
+      updated_at:        string;
     };
 
     const settingsRows = (settingsRes.data ?? []) as SettingsRow[];
-    const allPosRows   = (allPosRes.data  ?? []) as PaperPosRow[];
-    const recentRows   = (recentRes.data  ?? []) as PaperPosRow[];
-
-    // Legacy EMA diagnostic: is btc_5m_ema still enabled?
-    const emaRows = (emaSettingsRes.data ?? []) as { is_enabled: boolean }[];
+    const emaRows      = (emaSettingsRes.data ?? []) as { is_enabled: boolean }[];
     const legacyEmaEnabled = emaRows.length > 0 ? Boolean(emaRows[0].is_enabled) : false;
 
+    // Log query errors for diagnostics (non-fatal — return zeros rather than 500)
+    if (statsRes.error) {
+      console.error('[crypto/bots] statsRes error:', statsRes.error.message);
+    }
+    if (detailRes.error) {
+      console.error('[crypto/bots] detailRes error:', detailRes.error.message);
+    }
+
+    const statRows   = (statsRes.data  ?? []) as StatRow[];
+    const detailRows = (detailRes.data ?? []) as DetailRow[];
+
     const bots = SUPPORTED_BOT_IDS.map((botId) => {
-      const settings  = settingsRows.find((r) => r.bot_id === botId);
-      const posForBot = allPosRows.filter((r) => r.bot_id === botId);
+      const settings = settingsRows.find((r) => r.bot_id === botId);
 
-      // Starting balance from bot_settings.paper_balance_usd (default 100)
-      const startingBalance = Number(settings?.paper_balance_usd ?? 100) || 100;
+      // ── Starting balance ───────────────────────────────────────────────────
+      // Use strategy_settings.btc_paper_start if saved, else BTC_PAPER_START_DEFAULT.
+      // Never use paper_balance_usd (FastLoop mutates it as P/L flows).
+      const startingBalance: number =
+        Number(
+          (settings?.strategy_settings as Record<string, unknown> | null)
+            ?.btc_paper_start ?? BTC_PAPER_START_DEFAULT
+        ) || BTC_PAPER_START_DEFAULT;
 
-      // ── Aggregate stats ───────────────────────────────────────────────────────
+      // ── Aggregate stats (from safe stats query) ────────────────────────────
+      const forBot = statRows.filter((r) => r.bot_id === botId);
+
       let openCount      = 0;
       let closedCount    = 0;
       let wins           = 0;
       let losses         = 0;
       let pushes         = 0;
       let totalAmtTraded = 0;
-      let realizedPnl    = 0;   // SUM(pnl_usd) for CLOSED only
-      let openExposure   = 0;   // SUM(size_usd) for OPEN only
+      let realizedPnl    = 0;
+      let openExposure   = 0;
       let todayCount     = 0;
       let todayPnl       = 0;
 
-      for (const r of posForBot) {
+      for (const r of forBot) {
         const status  = (r.status ?? '').toUpperCase();
         const sizeUsd = Number(r.size_usd ?? 0) || 0;
         const pnlUsd  = Number(r.pnl_usd  ?? 0) || 0;
-        const startMs = r.start_ts ? new Date(r.start_ts).getTime() : 0;
+        // Derive "today" from market_slug embedded Unix timestamp
+        const marketMs = slugToMs(r.market_slug);
 
         totalAmtTraded += sizeUsd;
-        if (startMs >= midnightMs) todayCount++;
+        if (marketMs > 0 && marketMs >= midnightMs) todayCount++;
 
         if (status === 'OPEN') {
           openCount++;
@@ -173,86 +213,87 @@ export async function GET() {
           else if (pnlUsd < 0) losses++;
           else                  pushes++;
 
-          const settledMs = r.closed_at
-            ? new Date(r.closed_at).getTime()
-            : startMs;
-          if (settledMs >= midnightMs) todayPnl += pnlUsd;
+          if (marketMs > 0 && marketMs >= midnightMs) todayPnl += pnlUsd;
         }
       }
 
-      const winLossDenom    = wins + losses;
-      const winRate         = winLossDenom > 0 ? parseFloat((wins / winLossDenom).toFixed(4)) : 0;
-      const totalTrades     = posForBot.length;
-      const availableBalance = startingBalance + realizedPnl - openExposure;
-      const accountEquity   = startingBalance + realizedPnl;
+      const winLossDenom  = wins + losses;
+      const winRate       = winLossDenom > 0 ? parseFloat((wins / winLossDenom).toFixed(4)) : 0;
+      const totalTrades   = forBot.length;
+      const accountEquity = startingBalance + realizedPnl;
+      const availBalance  = accountEquity - openExposure;
 
-      // ── Equity curve: CLOSED positions sorted ASC for chart ──────────────────
-      const closedSorted = posForBot
-        .filter((r) => {
-          const st = (r.status ?? '').toUpperCase();
-          return st === 'CLOSED' || st === 'SETTLED';
-        })
-        .sort((a, b) => {
-          const aMs = new Date(a.closed_at ?? a.start_ts ?? '').getTime() || 0;
-          const bMs = new Date(b.closed_at ?? b.start_ts ?? '').getTime() || 0;
-          return aMs - bMs;
-        });
+      // ── Equity curve (from stats rows sorted ASC by market_slug) ──────────
+      // statRows are already sorted ASC (market_slug contains Unix ts → chronological)
+      const closedSorted = forBot.filter((r) => {
+        const st = (r.status ?? '').toUpperCase();
+        return st === 'CLOSED' || st === 'SETTLED';
+      });
+      // Already in ASC order from the query
 
       let running = startingBalance;
       const equityCurve = closedSorted.map((r) => {
-        const pnl = Number(r.pnl_usd ?? 0) || 0;
-        running += pnl;
+        const pnl       = Number(r.pnl_usd ?? 0) || 0;
+        running        += pnl;
+        const marketMs2 = slugToMs(r.market_slug);
         return {
-          position_id: r.id,
-          market_slug: r.slug ?? r.market_slug ?? null,
-          closed_at:   r.closed_at ?? r.start_ts ?? null,
+          market_slug: r.market_slug ?? null,
+          closed_at:   marketMs2 > 0 ? new Date(marketMs2).toISOString() : null,
           trade_pnl:   parseFloat(pnl.toFixed(4)),
           equity:      parseFloat(running.toFixed(4)),
-          side:        translateSide(r.side),
+          side:        null,   // side not in stats query
           result:      deriveResult(r.status, r.pnl_usd),
         };
       });
 
-      // ── Latest trade ──────────────────────────────────────────────────────────
-      const latestRaw = posForBot[0] ?? null;  // already sorted DESC
-      const latestTrade = latestRaw
-        ? {
-            start_ts:  latestRaw.start_ts,
-            slug:      latestRaw.slug ?? latestRaw.market_slug,
-            side:      translateSide(latestRaw.side),
-            size_usd:  latestRaw.size_usd,
-            status:    (latestRaw.status ?? '').toUpperCase(),
-            pnl_usd:   latestRaw.pnl_usd,
-            result:    deriveResult(latestRaw.status, latestRaw.pnl_usd),
-          }
-        : null;
+      // ── Recent trades (from detail query, DESC order) ─────────────────────
+      const detailForBot = detailRows.filter((r) => r.bot_id === botId);
 
-      // ── Recent trades (20) with running equity ────────────────────────────────
-      // Compute running equity for each row in the recent display set
-      // We rebuild the running equity per-trade from the full sorted list
-      const recentForBot = (recentRes.data ?? []).filter((r: PaperPosRow) => r.bot_id === botId) as PaperPosRow[];
-
-      const equityMap = new Map<string, number>();
+      // Build equity map for detail rows using the equity curve data
+      // (match by market_slug since we have no row IDs)
+      const equityBySlug = new Map<string, number>();
       equityCurve.forEach((pt) => {
-        if (pt.position_id) equityMap.set(String(pt.position_id), pt.equity);
+        if (pt.market_slug) equityBySlug.set(pt.market_slug, pt.equity);
       });
 
-      const recentTrades = recentForBot.map((r) => {
-        const equityAfter = r.id ? equityMap.get(String(r.id)) : undefined;
+      const recentTrades = detailForBot.map((r) => {
+        const status      = (r.status ?? '').toUpperCase();
+        const pnl         = r.pnl_usd ?? null;
+        const marketMs3   = slugToMs(r.market_slug);
+        const slugForMap  = r.market_slug ?? '';
+        const equityAfter = status !== 'OPEN' && slugForMap
+          ? equityBySlug.get(slugForMap) ?? null
+          : null;
+
         return {
-          id:           r.id,
-          status:       (r.status ?? '').toUpperCase(),
-          start_ts:     r.start_ts,
-          closed_at:    r.closed_at ?? r.updated_at,
-          slug:         r.slug ?? r.market_slug,
-          side:         translateSide(r.side),
-          size_usd:     r.size_usd,
-          entry_price:  r.entry_price ?? r.entry_yes,
-          pnl_usd:      r.pnl_usd,
-          result:       deriveResult(r.status, r.pnl_usd),
-          equity_after: equityAfter != null ? parseFloat(equityAfter.toFixed(4)) : null,
+          status,
+          start_ts:    marketMs3 > 0 ? new Date(marketMs3).toISOString() : null,
+          slug:        r.market_slug,
+          side:        translateSide(r.side),
+          size_usd:    r.size_usd,
+          entry_price: r.entry_price,
+          pnl_usd:     pnl,
+          result:      deriveResult(r.status, pnl),
+          equity_after: equityAfter,
         };
       });
+
+      // ── Latest trade (first detail row = most recent DESC) ────────────────
+      const latestRaw = detailForBot[0] ?? null;
+      const latestTrade = latestRaw
+        ? {
+            start_ts:    slugToMs(latestRaw.market_slug) > 0
+              ? new Date(slugToMs(latestRaw.market_slug)).toISOString()
+              : null,
+            slug:        latestRaw.market_slug,
+            side:        translateSide(latestRaw.side),
+            size_usd:    latestRaw.size_usd,
+            entry_price: latestRaw.entry_price,
+            status:      (latestRaw.status ?? '').toUpperCase(),
+            pnl_usd:     latestRaw.pnl_usd,
+            result:      deriveResult(latestRaw.status, latestRaw.pnl_usd),
+          }
+        : null;
 
       return {
         bot_id:            botId,
@@ -260,17 +301,17 @@ export async function GET() {
         is_enabled:        settings?.is_enabled     ?? false,
         mode:              settings?.mode           ?? 'PAPER',
         arm_live:          settings?.arm_live       ?? false,
-        trade_size_usd:    settings?.trade_size_usd ?? 0,  // actual stored setting
+        trade_size_usd:    settings?.trade_size_usd ?? 0,
         strategy_settings: settings?.strategy_settings ?? {},
 
-        // ── Balance summary ──────────────────────────────────────────────────────
+        // ── Balance summary ────────────────────────────────────────────────
         starting_balance:  parseFloat(startingBalance.toFixed(2)),
         realized_pnl:      parseFloat(realizedPnl.toFixed(4)),
         open_exposure:     parseFloat(openExposure.toFixed(4)),
-        available_balance: parseFloat(availableBalance.toFixed(4)),
+        available_balance: parseFloat(availBalance.toFixed(4)),
         account_equity:    parseFloat(accountEquity.toFixed(4)),
 
-        // ── Stats ────────────────────────────────────────────────────────────────
+        // ── Stats (primary nested object) ──────────────────────────────────
         stats: {
           total_trades:        totalTrades,
           trades_today:        todayCount,
@@ -289,15 +330,15 @@ export async function GET() {
         open_positions:    openCount,
         open_exposure_usd: parseFloat(openExposure.toFixed(4)),
 
-        // ── Chart + trades ───────────────────────────────────────────────────────
+        // ── Chart + trades ─────────────────────────────────────────────────
         equity_curve:  equityCurve,
         latest_trade:  latestTrade,
         recent_trades: recentTrades,
 
-        // ── Legacy diagnostic ────────────────────────────────────────────────────
+        // ── Legacy diagnostic ──────────────────────────────────────────────
         legacy_ema_enabled: legacyEmaEnabled,
 
-        // ── Flat legacy fields for badge/overview compat ─────────────────────────
+        // ── Flat legacy fields for badge/overview compat ───────────────────
         total_trades:      totalTrades,
         total_closed:      closedCount,
         all_time_wins:     wins,

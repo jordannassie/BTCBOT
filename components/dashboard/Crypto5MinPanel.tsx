@@ -514,6 +514,7 @@ function BtcCard({
   marketStatus,
   onActivateTestMode, testModeActivating, testModeDone, testModeErr,
   lateStat,
+  onSaveLateSize, saveLateSize, saveLateSizeOk, saveLateSizeErr,
 }: {
   settings:       BotSettings | null;
   metrics:        Metrics | null;
@@ -532,8 +533,12 @@ function BtcCard({
   testModeActivating:   boolean;
   testModeDone:         boolean;
   testModeErr:          string | null;
-  lateStat:       LateStat | null;
-  lastFetchedAt?: Date | null;
+  lateStat:           LateStat | null;
+  lastFetchedAt?:     Date | null;
+  onSaveLateSize:     (size: number) => Promise<void>;
+  saveLateSize:       boolean;
+  saveLateSizeOk:     boolean;
+  saveLateSizeErr:    string | null;
 }) {
   const ss = settings?.strategy_settings ?? {};
   const sig = signalLabel(ss.signal);
@@ -545,8 +550,12 @@ function BtcCard({
   // Late-entry toggle modal state (owned here so it doesn't pollute the parent)
   const [lateModal, setLateModal] = useState<'on' | 'off' | null>(null);
 
-  // Editable form state (initialized from saved settings or defaults)
-  const [tradeSize,     setTradeSize]     = useState(String(settings?.trade_size_usd ?? 1));
+  // Editable form state.
+  // Trade size MUST initialize from lateSettings (btc_5m_late) not settings (btc_5m_ema).
+  // lateSettings may not be available on first render, so we use lateStat as fallback.
+  const [tradeSize,     setTradeSize]     = useState(String(
+    lateSettings?.trade_size_usd ?? lateStat?.trade_size_usd ?? 0.10
+  ));
   const [evalAt,        setEvalAt]        = useState(String((ss.entry_start_seconds as number) ?? 60));
   const [prefStart,     setPrefStart]     = useState(String((ss.preferred_entry_start as number) ?? 45));
   const [prefStop,      setPrefStop]      = useState(String((ss.preferred_entry_stop as number) ?? 30));
@@ -554,10 +563,9 @@ function BtcCard({
   const [minDist,       setMinDist]       = useState(String((ss.min_btc_distance as number) ?? 15));
   const [maxPrice,      setMaxPrice]      = useState(String((ss.max_contract_price as number) ?? 0.80));
 
-  // Sync form when settings load
+  // Sync EMA strategy settings when EMA settings load
   useEffect(() => {
     if (!settings) return;
-    setTradeSize(String(settings.trade_size_usd ?? 1));
     const s = settings.strategy_settings ?? {};
     setEvalAt(String((s.entry_start_seconds as number) ?? 60));
     setPrefStart(String((s.preferred_entry_start as number) ?? 45));
@@ -567,9 +575,15 @@ function BtcCard({
     setMaxPrice(String((s.max_contract_price as number) ?? 0.80));
   }, [settings]);
 
+  // Sync trade size from btc_5m_late settings (higher priority than EMA settings)
+  useEffect(() => {
+    const lateSize = lateSettings?.trade_size_usd ?? lateStat?.trade_size_usd;
+    if (lateSize != null) setTradeSize(String(lateSize));
+  }, [lateSettings, lateStat]);
+
   const handleSave = () => {
+    // EMA strategy settings only — trade_size_usd is saved separately via btc_5m_late
     onSave({
-      trade_size_usd: parseFloat(tradeSize) || 1,
       strategy_settings: {
         entry_start_seconds:   parseFloat(evalAt) || 60,
         preferred_entry_start: parseFloat(prefStart) || 45,
@@ -848,10 +862,37 @@ function BtcCard({
               </div>
             </div>
 
-            {/* Settings form */}
+            {/* BTC 5-Min Trade Size — reads/saves btc_5m_late (NOT btc_5m_ema) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', marginBottom: '0.25rem' }}>
+              <label style={{ fontSize: '0.62rem', color: 'rgba(248,250,252,0.35)' }}>
+                BTC 5-Min trade size ($) — btc_5m_late
+              </label>
+              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                <input
+                  className="copy-form-input"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={tradeSize}
+                  onChange={(e) => setTradeSize(e.target.value)}
+                  style={{ padding: '0.18rem 0.35rem', fontSize: '0.75rem', flex: 1 }}
+                />
+                <button
+                  className="copy-btn copy-btn-primary"
+                  style={{ fontSize: '0.68rem', padding: '0.18rem 0.5rem', whiteSpace: 'nowrap' }}
+                  onClick={() => onSaveLateSize(parseFloat(tradeSize) || 0.10)}
+                  disabled={saveLateSize}
+                >
+                  {saveLateSize ? 'Saving…' : 'Save Size'}
+                </button>
+              </div>
+              {saveLateSizeErr && <div style={{ fontSize: '0.65rem', color: '#f87171' }}>✗ {saveLateSizeErr}</div>}
+              {saveLateSizeOk  && <div style={{ fontSize: '0.65rem', color: '#34d399' }}>✓ BTC trade size saved</div>}
+            </div>
+
+            {/* EMA strategy-specific settings */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
               {[
-                { label: 'Fixed trade size ($)', value: tradeSize, set: setTradeSize, step: '0.01', min: '0.01' },
                 { label: 'Start eval (sec remaining)', value: evalAt, set: setEvalAt, step: '1', min: '1' },
                 { label: 'Pref entry start (sec)', value: prefStart, set: setPrefStart, step: '1', min: '1' },
                 { label: 'Pref entry stop (sec)', value: prefStop, set: setPrefStop, step: '1', min: '1' },
@@ -881,10 +922,10 @@ function BtcCard({
               onClick={handleSave}
               disabled={saving}
             >
-              {saving ? 'Saving…' : 'Save Settings'}
+              {saving ? 'Saving…' : 'Save EMA Settings'}
             </button>
             {saveErr && <div style={{ fontSize: '0.65rem', color: '#f87171', marginTop: '0.25rem' }}>✗ {saveErr}</div>}
-            {saveOk  && <div style={{ fontSize: '0.65rem', color: '#34d399', marginTop: '0.25rem' }}>✓ Saved</div>}
+            {saveOk  && <div style={{ fontSize: '0.65rem', color: '#34d399', marginTop: '0.25rem' }}>✓ EMA Settings saved</div>}
             <div style={{ fontSize: '0.6rem', color: 'rgba(248,250,252,0.2)', marginTop: '0.3rem' }}>
               Mode: {settings.mode} · Strategy: BTC 5M EMA
             </div>
@@ -1234,6 +1275,10 @@ export default function Crypto5MinPanel() {
   const [testModeActivating, setTestModeActivating] = useState(false);
   const [testModeDone,       setTestModeDone]       = useState(false);
   const [testModeErr,        setTestModeErr]        = useState<string | null>(null);
+  // btc_5m_late trade size save state (separate from EMA settings save)
+  const [saveLateSize,    setSaveLateSize]    = useState(false);
+  const [saveLateSizeOk,  setSaveLateSizeOk]  = useState(false);
+  const [saveLateSizeErr, setSaveLateSizeErr] = useState<string | null>(null);
   const [expanded,      setExpanded]      = useState(true);
 
   const loadData = useCallback(async () => {
@@ -1311,6 +1356,29 @@ export default function Crypto5MinPanel() {
     finally { setLateToggling(false); }
   };
 
+  // Save btc_5m_late trade size only — never touches EMA settings or bot states.
+  const handleSaveLateSize = async (size: number) => {
+    setSaveLateSize(true); setSaveLateSizeErr(null); setSaveLateSizeOk(false);
+    try {
+      const res = await fetch('/api/btc-5m-late', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trade_size_usd: size }),
+        cache: 'no-store',
+      });
+      const payload = await res.json() as { ok: boolean; settings?: LateSettings; error?: string };
+      if (payload.ok && payload.settings) {
+        setLateSettings(payload.settings);
+        setSaveLateSizeOk(true);
+        setTimeout(() => setSaveLateSizeOk(false), 3000);
+        await loadData(); // refresh all stats from API
+      } else {
+        setSaveLateSizeErr(payload.error ?? 'Save failed');
+      }
+    } catch { setSaveLateSizeErr('Network error'); }
+    finally { setSaveLateSize(false); }
+  };
+
   // Activate test mode: is_enabled=true, mode=PAPER, arm_live=false, trade_size_usd=0.10,
   // strategy_settings.test_mode=true. Never submits a live order.
   const handleActivateTestMode = async () => {
@@ -1373,7 +1441,7 @@ export default function Crypto5MinPanel() {
         <div style={{ display: 'flex', gap: '0.75rem', padding: '1rem 1.25rem', flexWrap: 'wrap' }}>
           {cards.map((c) =>
             c === 'btc'
-              ? <BtcCard key="btc" settings={settings} metrics={metrics} saving={saving} saveErr={saveErr} saveOk={saveOk} onSave={handleSave} onToggleMode={handleToggleMode} lateSettings={lateSettings} onToggleLate={handleToggleLate} lateToggling={lateToggling} lateDone={lateDone} lateErr={lateErr} marketStatus={marketStatus} onActivateTestMode={handleActivateTestMode} testModeActivating={testModeActivating} testModeDone={testModeDone} testModeErr={testModeErr} lateStat={lateStat} lastFetchedAt={lastFetchedAt} />
+              ? <BtcCard key="btc" settings={settings} metrics={metrics} saving={saving} saveErr={saveErr} saveOk={saveOk} onSave={handleSave} onToggleMode={handleToggleMode} lateSettings={lateSettings} onToggleLate={handleToggleLate} lateToggling={lateToggling} lateDone={lateDone} lateErr={lateErr} marketStatus={marketStatus} onActivateTestMode={handleActivateTestMode} testModeActivating={testModeActivating} testModeDone={testModeDone} testModeErr={testModeErr} lateStat={lateStat} lastFetchedAt={lastFetchedAt} onSaveLateSize={handleSaveLateSize} saveLateSize={saveLateSize} saveLateSizeOk={saveLateSizeOk} saveLateSizeErr={saveLateSizeErr} />
               : <ComingSoonCard key={c} asset={c.toUpperCase()} />
           )}
         </div>
