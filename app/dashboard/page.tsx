@@ -12,9 +12,13 @@
 //     polling components (CopyTradingTabs, CopyOverviewCards) re-fetch at once.
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import LiveCard from '@/components/dashboard/LiveCard';
 import CopyPaperBankrollCard from '@/components/copy/CopyPaperBankrollCard';
 import CopyTradingTabs from '@/components/copy/CopyTradingTabs';
+
+const CopyPauseControl = dynamic(() => import('@/components/copy/CopyPauseControl'), { ssr: false });
+const Crypto5MinPanel  = dynamic(() => import('@/components/dashboard/Crypto5MinPanel'), { ssr: false });
 
 function IconRefresh() {
   return (
@@ -96,6 +100,12 @@ export default function DashboardPage() {
         <LiveCard />
         <CopyPaperBankrollCard />
       </section>
+
+      {/* Master copy-trading pause control */}
+      <CopyPauseControl />
+
+      {/* Crypto 5-Min strategy panel */}
+      <Crypto5MinPanel />
 
       {/* Tabbed layout */}
       <CopyTradingTabs />
