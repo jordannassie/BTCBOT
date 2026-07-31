@@ -3,15 +3,18 @@
 // Narrowly-scoped toggle for the BTC 5-minute late-entry strategy.
 //
 // bot_id is hardcoded to 'btc_5m_late'.
-// The client may only supply is_enabled.
 // mode is always forced to 'PAPER'.
 // arm_live is always forced to false.
 //
 // GET — returns the current row (or safe defaults if the row doesn't exist yet).
 //
-// POST { is_enabled: boolean }
+// POST { is_enabled: boolean, test_mode?: boolean, trade_size_usd?: number }
+//   • is_enabled (required): enable or disable the strategy.
+//   • test_mode  (optional): when true, merges { test_mode: true, paper_test_mode: true }
+//     into strategy_settings JSONB and forces trade_size_usd = 0.10.
+//   • trade_size_usd (optional): override trade size; ignored if test_mode=true (forced to 0.10).
 //   • If the row exists: updates is_enabled, mode=PAPER, arm_live=false.
-//     All other columns (trade_size_usd, paper_balance_usd, strategy_settings …) preserved.
+//     All other columns preserved (unless test_mode overrides).
 //   • If the row does not exist: upserts with safe defaults.
 //
 // NEVER touches copy_bots, copied_positions, LIVE settings, or ARM LIVE.
@@ -55,7 +58,7 @@ export async function GET() {
   try {
     const { data, error } = await client
       .from('bot_settings')
-      .select('bot_id, is_enabled, mode, arm_live, trade_size_usd, paper_balance_usd')
+      .select('bot_id, is_enabled, mode, arm_live, trade_size_usd, paper_balance_usd, strategy_settings')
       .eq('bot_id', BOT_ID)
       .maybeSingle();
 
@@ -87,7 +90,7 @@ export async function POST(request: Request) {
   try { body = await request.json(); }
   catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400, headers: NO_CACHE }); }
 
-  // Only is_enabled is accepted from the client
+  // is_enabled is required
   const rawEnabled = body.is_enabled;
   if (rawEnabled !== true && rawEnabled !== false) {
     return NextResponse.json(
@@ -96,6 +99,15 @@ export async function POST(request: Request) {
     );
   }
   const isEnabled = rawEnabled as boolean;
+
+  // test_mode — optional boolean; forces trade_size_usd=0.10 when true
+  const testMode = body.test_mode === true;
+
+  // trade_size_usd — optional override; ignored in test_mode (always 0.10)
+  const rawSize = body.trade_size_usd;
+  const tradeSizeOverride = testMode
+    ? 0.10
+    : (typeof rawSize === 'number' && rawSize > 0 ? rawSize : null);
 
   const now = new Date().toISOString();
 
@@ -107,29 +119,50 @@ export async function POST(request: Request) {
       .eq('bot_id', BOT_ID)
       .maybeSingle();
 
-    // Upsert: always force mode=PAPER, arm_live=false; only is_enabled from client
-    const upsertPayload = {
+    // Merge test_mode into existing strategy_settings JSONB when requested
+    let strategySettings: Record<string, unknown> = {};
+    if (existing && existing.strategy_settings && typeof existing.strategy_settings === 'object') {
+      strategySettings = { ...(existing.strategy_settings as Record<string, unknown>) };
+    }
+    if (testMode) {
+      // Both keys so the worker reads correctly regardless of which key it checks
+      strategySettings = { ...strategySettings, test_mode: true, paper_test_mode: true };
+    }
+
+    // Upsert: always force mode=PAPER, arm_live=false; only accepted fields from client
+    const upsertPayload: Record<string, unknown> = {
       ...(existing ?? SAFE_DEFAULTS),  // preserve everything else
-      bot_id:     BOT_ID,              // locked
-      mode:       'PAPER',             // forced
-      arm_live:   false,               // forced
-      is_enabled: isEnabled,           // client-supplied
-      updated_at: now,
+      bot_id:            BOT_ID,        // locked
+      mode:              'PAPER',       // forced
+      arm_live:          false,         // forced
+      is_enabled:        isEnabled,     // client-supplied
+      strategy_settings: strategySettings,
+      updated_at:        now,
     };
+    if (tradeSizeOverride !== null) {
+      upsertPayload.trade_size_usd = tradeSizeOverride;
+    }
 
     const { data, error } = await client
       .from('bot_settings')
       .upsert(upsertPayload, { onConflict: 'bot_id' })
-      .select('bot_id, is_enabled, mode, arm_live, trade_size_usd, paper_balance_usd')
+      .select('bot_id, is_enabled, mode, arm_live, trade_size_usd, paper_balance_usd, strategy_settings')
       .single();
 
     if (error) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 500, headers: NO_CACHE });
     }
 
-    console.info(`BTC_5M_LATE_TOGGLE is_enabled=${isEnabled} mode=PAPER arm_live=false ts=${now}`);
+    console.info(
+      `BTC_5M_LATE_TOGGLE is_enabled=${isEnabled} mode=PAPER arm_live=false ` +
+      `test_mode=${testMode} trade_size_usd=${tradeSizeOverride ?? 'unchanged'} ts=${now}`
+    );
 
-    return NextResponse.json({ ok: true, settings: data }, { headers: NO_CACHE });
+    return NextResponse.json({
+      ok: true,
+      settings: data,
+      test_mode_activated: testMode,
+    }, { headers: NO_CACHE });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500, headers: NO_CACHE });

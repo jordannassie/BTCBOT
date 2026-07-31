@@ -32,6 +32,7 @@ type LateSettings = {
   arm_live:         boolean;
   trade_size_usd:   number;
   paper_balance_usd: number;
+  strategy_settings?: Record<string, unknown>;
 };
 
 type MarketStatus = {
@@ -403,6 +404,7 @@ function BtcCard({
   onSave, onToggleMode,
   lateSettings, onToggleLate, lateToggling, lateDone, lateErr,
   marketStatus,
+  onActivateTestMode, testModeActivating, testModeDone, testModeErr,
 }: {
   settings:       BotSettings | null;
   metrics:        Metrics | null;
@@ -417,6 +419,10 @@ function BtcCard({
   lateDone:       'on' | 'off' | null;
   lateErr:        string | null;
   marketStatus:   MarketStatus | null;
+  onActivateTestMode:   () => Promise<void>;
+  testModeActivating:   boolean;
+  testModeDone:         boolean;
+  testModeErr:          string | null;
 }) {
   const ss = settings?.strategy_settings ?? {};
   const sig = signalLabel(ss.signal);
@@ -471,6 +477,15 @@ function BtcCard({
   const lateSize  = lateSettings?.trade_size_usd ?? 1;
   const lateColor = lateOn ? '#818cf8' : 'rgba(248,250,252,0.35)';
   const lateText  = lateOn ? 'PAPER ON' : 'OFF';
+
+  // Test mode active detection: strategy_settings.test_mode=true AND trade_size_usd=0.10
+  const testModeActive = Boolean(
+    (lateSettings?.strategy_settings as Record<string, unknown> | undefined)?.test_mode
+    || (lateSettings?.strategy_settings as Record<string, unknown> | undefined)?.paper_test_mode
+  ) && (lateSettings?.trade_size_usd ?? 0) === 0.10;
+
+  // Test mode modal
+  const [testModeModal, setTestModeModal] = useState(false);
 
   const handleLateConfirm = async () => {
     const desired = lateModal === 'on';
@@ -567,10 +582,30 @@ function BtcCard({
           title="LIVE mode is not available from this control"
         >LIVE NOT AVAILABLE</button>
 
+        {/* TEST MODE button */}
+        {testModeActive ? (
+          <span style={{
+            fontSize: '0.63rem', fontWeight: 700, letterSpacing: '0.07em',
+            color: '#fbbf24', background: 'rgba(251,191,36,0.12)',
+            border: '1px solid rgba(251,191,36,0.35)',
+            borderRadius: '0.3rem', padding: '0.1rem 0.55rem', flexShrink: 0,
+          }}>TEST MODE ACTIVE · $0.10</span>
+        ) : (
+          <button
+            className="copy-btn copy-btn-sm"
+            style={{ fontSize: '0.62rem', padding: '0.2rem 0.65rem', flexShrink: 0, background: 'rgba(251,191,36,0.15)', borderColor: 'rgba(251,191,36,0.4)', color: '#fbbf24' }}
+            disabled={testModeActivating}
+            onClick={() => setTestModeModal(true)}
+            title="Enable test mode: $0.10 paper trade on next valid market"
+          >{testModeActivating ? 'Activating…' : 'ACTIVATE TEST MODE'}</button>
+        )}
+
         {/* Feedback */}
         {lateDone === 'on'  && <span style={{ fontSize: '0.65rem', color: '#34d399' }}>✓ BTC 5-Min PAPER is ON</span>}
         {lateDone === 'off' && <span style={{ fontSize: '0.65rem', color: 'rgba(248,250,252,0.4)' }}>✓ BTC 5-Min PAPER is OFF</span>}
         {lateErr           && <span style={{ fontSize: '0.65rem', color: '#f87171' }}>✗ {lateErr}</span>}
+        {testModeDone      && <span style={{ fontSize: '0.65rem', color: '#fbbf24' }}>✓ Test mode ON — waiting for next market</span>}
+        {testModeErr       && <span style={{ fontSize: '0.65rem', color: '#f87171' }}>✗ {testModeErr}</span>}
       </div>
 
       {!settings && (
@@ -741,6 +776,50 @@ function BtcCard({
         </div>
       </div>
     )}
+    {/* ── Test mode activation modal ── */}
+    {testModeModal && (
+      <div className="copy-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && !testModeActivating) setTestModeModal(false); }}>
+        <div className="copy-modal" role="dialog" aria-modal="true" style={{ maxWidth: 440 }}>
+          <div className="copy-modal-header">
+            <h3 className="copy-modal-title" style={{ color: '#fbbf24' }}>Activate BTC 5-Min Paper Test Mode</h3>
+            <button className="copy-modal-close" onClick={() => setTestModeModal(false)} disabled={testModeActivating}>×</button>
+          </div>
+          <div className="copy-modal-body">
+            <p style={{ fontSize: '0.8rem', color: 'rgba(248,250,252,0.65)', marginBottom: '0.75rem' }}>
+              Places one $0.10 paper trade on the next valid BTC 5-minute market — no distance, momentum, or ask-ceiling requirements.
+              LIVE trading remains impossible.
+            </p>
+            {[
+              ['Mode',          'PAPER — forced'],
+              ['ARM LIVE',      'OFF — forced'],
+              ['Trade size',    '$0.10 (fixed)'],
+              ['Entry window',  '45 – 20 seconds remaining'],
+              ['Direction',     'BTC price vs Price to Beat'],
+              ['Max per market','1 trade'],
+              ['Settlement',    'Normal WIN/LOSS/P&L'],
+              ['Copy bots',     'Unaffected'],
+              ['LIVE trading',  'Impossible — mode gate enforced'],
+            ].map(([label, value]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', padding: '0.2rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ color: 'rgba(248,250,252,0.45)' }}>{label}</span>
+                <span style={{ fontWeight: 600 }}>{value}</span>
+              </div>
+            ))}
+          </div>
+          <div className="copy-modal-footer">
+            <button className="copy-btn copy-btn-secondary" onClick={() => setTestModeModal(false)} disabled={testModeActivating}>Cancel</button>
+            <button
+              className="copy-btn copy-btn-primary"
+              disabled={testModeActivating}
+              style={{ background: 'rgba(251,191,36,0.15)', borderColor: 'rgba(251,191,36,0.4)', color: '#fbbf24' }}
+              onClick={async () => { setTestModeModal(false); await onActivateTestMode(); }}
+            >
+              {testModeActivating ? 'Activating…' : 'ACTIVATE TEST MODE'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 }
@@ -756,9 +835,12 @@ export default function Crypto5MinPanel() {
   const [saving,        setSaving]        = useState(false);
   const [saveErr,       setSaveErr]       = useState<string | null>(null);
   const [saveOk,        setSaveOk]        = useState(false);
-  const [lateToggling,  setLateToggling]  = useState(false);
-  const [lateDone,      setLateDone]      = useState<'on' | 'off' | null>(null);
-  const [lateErr,       setLateErr]       = useState<string | null>(null);
+  const [lateToggling,      setLateToggling]      = useState(false);
+  const [lateDone,          setLateDone]          = useState<'on' | 'off' | null>(null);
+  const [lateErr,           setLateErr]           = useState<string | null>(null);
+  const [testModeActivating, setTestModeActivating] = useState(false);
+  const [testModeDone,       setTestModeDone]       = useState(false);
+  const [testModeErr,        setTestModeErr]        = useState<string | null>(null);
   const [expanded,      setExpanded]      = useState(true);
 
   const loadData = useCallback(async () => {
@@ -829,6 +911,30 @@ export default function Crypto5MinPanel() {
     finally { setLateToggling(false); }
   };
 
+  // Activate test mode: is_enabled=true, mode=PAPER, arm_live=false, trade_size_usd=0.10,
+  // strategy_settings.test_mode=true. Never submits a live order.
+  const handleActivateTestMode = async () => {
+    setTestModeActivating(true); setTestModeErr(null); setTestModeDone(false);
+    try {
+      const res = await fetch('/api/btc-5m-late', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_enabled: true, test_mode: true, trade_size_usd: 0.10 }),
+        cache: 'no-store',
+      });
+      const payload = await res.json() as { ok: boolean; settings?: LateSettings; test_mode_activated?: boolean; error?: string };
+      if (payload.ok && payload.settings) {
+        setLateSettings(payload.settings);
+        setTestModeDone(true);
+        setTimeout(() => setTestModeDone(false), 6000);
+        await loadData(); // refresh snapshot
+      } else {
+        setTestModeErr(payload.error ?? 'Activation failed');
+      }
+    } catch { setTestModeErr('Network error'); }
+    finally { setTestModeActivating(false); }
+  };
+
   const cards: Card[] = ['btc', 'eth', 'sol', 'xrp'];
 
   return (
@@ -867,7 +973,7 @@ export default function Crypto5MinPanel() {
         <div style={{ display: 'flex', gap: '0.75rem', padding: '1rem 1.25rem', flexWrap: 'wrap' }}>
           {cards.map((c) =>
             c === 'btc'
-              ? <BtcCard key="btc" settings={settings} metrics={metrics} saving={saving} saveErr={saveErr} saveOk={saveOk} onSave={handleSave} onToggleMode={handleToggleMode} lateSettings={lateSettings} onToggleLate={handleToggleLate} lateToggling={lateToggling} lateDone={lateDone} lateErr={lateErr} marketStatus={marketStatus} />
+              ? <BtcCard key="btc" settings={settings} metrics={metrics} saving={saving} saveErr={saveErr} saveOk={saveOk} onSave={handleSave} onToggleMode={handleToggleMode} lateSettings={lateSettings} onToggleLate={handleToggleLate} lateToggling={lateToggling} lateDone={lateDone} lateErr={lateErr} marketStatus={marketStatus} onActivateTestMode={handleActivateTestMode} testModeActivating={testModeActivating} testModeDone={testModeDone} testModeErr={testModeErr} />
               : <ComingSoonCard key={c} asset={c.toUpperCase()} />
           )}
         </div>
