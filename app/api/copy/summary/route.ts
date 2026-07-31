@@ -107,8 +107,9 @@ export async function GET() {
         .eq('is_enabled', true)
         .in('bot_id', CRYPTO_BOT_IDS as unknown as string[]),
       // Crypto paper positions (btc_5m_late strategy) — for Crypto Paper Exposure card
+      // Correct column: size_usd (NOT trade_size_usd)
       client.from('paper_positions')
-        .select('trade_size_usd')
+        .select('size_usd')
         .eq('bot_id', 'btc_5m_late')
         .eq('status', 'OPEN'),
       // Copy Trades Today — copied_positions opened since midnight UTC
@@ -116,10 +117,11 @@ export async function GET() {
         .select('*', { count: 'exact', head: true })
         .gte('opened_at', todayUTC.toISOString()),
       // Crypto Trades Today — paper_positions for btc_5m_late opened since midnight UTC
+      // Correct timestamp column: start_ts (NOT opened_at)
       client.from('paper_positions')
         .select('*', { count: 'exact', head: true })
         .eq('bot_id', 'btc_5m_late')
-        .gte('opened_at', todayUTC.toISOString()),
+        .gte('start_ts', todayUTC.toISOString()),
     ]);
 
     // ── Surface overall totals ─────────────────────────────────────────────────
@@ -165,10 +167,11 @@ export async function GET() {
       : null;
 
     // ── Crypto paper exposure (btc_5m_late open paper_positions) ──────────────
-    const cryptoPaperRows = (cryptoPaperPosRes.data ?? []) as { trade_size_usd?: unknown }[];
+    // Correct column: size_usd (paper_positions uses size_usd, not trade_size_usd)
+    const cryptoPaperRows = (cryptoPaperPosRes.data ?? []) as { size_usd?: unknown }[];
     const cryptoPaperPositionCount = cryptoPaperRows.length;
     const cryptoPaperExposure = cryptoPaperRows.reduce((sum, r) => {
-      const v = Number(r.trade_size_usd ?? 0);
+      const v = Number(r.size_usd ?? 0);
       return sum + (isNaN(v) ? 0 : v);
     }, 0);
 

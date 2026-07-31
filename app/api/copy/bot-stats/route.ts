@@ -74,11 +74,10 @@ interface CopyPosRow {
 interface CryptoPosRow {
   bot_id:    string | null;
   status:    string | null;
-  opened_at: string | null;  // may be null if column is named differently
-  created_at?: string | null; // fallback
+  start_ts:  string | null;  // paper_positions uses start_ts for opening time
   closed_at: string | null;
-  pnl:       number | string | null;
-  outcome:   string | null;
+  pnl_usd:   number | string | null;  // paper_positions uses pnl_usd (NOT pnl)
+  size_usd:  number | string | null;  // paper_positions uses size_usd (NOT trade_size_usd)
 }
 
 export interface CopyBotStat {
@@ -130,9 +129,10 @@ export async function GET() {
         .limit(MAX_COPY_ROWS),
 
       // All paper_positions for supported crypto bots
+      // Correct column names: start_ts, size_usd, pnl_usd (NOT opened_at, trade_size_usd, pnl)
       client
         .from('paper_positions')
-        .select('bot_id, status, opened_at, created_at, closed_at, pnl, outcome')
+        .select('bot_id, status, start_ts, closed_at, pnl_usd, size_usd')
         .in('bot_id', CRYPTO_BOT_IDS as unknown as string[]),
     ]);
 
@@ -194,11 +194,10 @@ export async function GET() {
 
       const stat    = cryptoBotStats[botId];
       const status  = (row.status ?? '').toUpperCase();
-      const pnl     = Number(row.pnl ?? 0);
-      const outcome = (row.outcome ?? '').toUpperCase();
-
-      // Prefer opened_at; fall back to created_at
-      const openTs = row.opened_at ?? row.created_at ?? null;
+      // paper_positions uses start_ts for opening time (NOT opened_at/created_at)
+      const openTs = row.start_ts ?? null;
+      // paper_positions uses pnl_usd (NOT pnl)
+      const pnlUsd = Number(row.pnl_usd ?? 0);
 
       stat.total++;
 
@@ -213,17 +212,17 @@ export async function GET() {
       } else if (status === 'CLOSED' || status === 'SETTLED') {
         stat.closed++;
 
-        // Use outcome column when present; fall back to pnl sign
-        const isWin  = outcome === 'WIN'  || (outcome === '' && pnl > 0);
-        const isLoss = outcome === 'LOSS' || (outcome === '' && pnl < 0);
+        // Derive win/loss from pnl_usd sign (no separate outcome column in paper_positions)
+        const isWin  = pnlUsd > 0;
+        const isLoss = pnlUsd < 0;
         if (isWin)       stat.wins++;
         else if (isLoss) stat.losses++;
 
         // Today P/L: positions closed today
         if (row.closed_at && new Date(row.closed_at).getTime() >= midnightUTC.getTime()) {
-          stat.today_pnl = parseFloat((stat.today_pnl + pnl).toFixed(4));
+          stat.today_pnl = parseFloat((stat.today_pnl + pnlUsd).toFixed(4));
         }
-        stat.all_time_pnl = parseFloat((stat.all_time_pnl + pnl).toFixed(4));
+        stat.all_time_pnl = parseFloat((stat.all_time_pnl + pnlUsd).toFixed(4));
       }
     }
 

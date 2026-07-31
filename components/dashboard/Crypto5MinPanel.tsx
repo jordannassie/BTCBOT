@@ -79,6 +79,55 @@ type Metrics = {
   total_pnl:     number;
 };
 
+// ─── Crypto/bots API types (btc_5m_late from paper_positions) ─────────────────
+
+type RecentTrade = {
+  id?:          string | null;
+  status?:      string | null;
+  start_ts?:    string | null;
+  closed_at?:   string | null;
+  slug?:        string | null;
+  side?:        string | null;
+  size_usd?:    number | null;
+  entry_price?: number | null;
+  pnl_usd?:     number | null;
+};
+
+type BotStatSummary = {
+  today:               number;
+  total:               number;
+  open:                number;
+  closed:              number;
+  wins:                number;
+  losses:              number;
+  pushes:              number;
+  win_rate:            number;
+  total_amount_traded: number;
+  today_pnl:           number;
+  all_time_pnl:        number;
+};
+
+type LateStat = {
+  trade_size_usd:      number;
+  open_positions:      number;
+  open_exposure_usd:   number;
+  latest_trade_time?:  string | null;
+  latest_trade_side?:  string | null;
+  latest_trade_status?: string | null;
+  latest_trade_pnl?:   number | null;
+  stats:               BotStatSummary;
+  recent_trades:       RecentTrade[];
+  // Legacy flat fields for badge compatibility
+  total_trades:        number;
+  total_closed:        number;
+  all_time_wins:       number;
+  all_time_losses:     number;
+  win_rate:            number;
+  all_time_pnl:        number;
+  today_trade_count:   number;
+  today_pnl:           number;
+};
+
 type Card = 'btc' | 'eth' | 'sol' | 'xrp';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -462,7 +511,7 @@ function BtcCard({
   testModeActivating:   boolean;
   testModeDone:         boolean;
   testModeErr:          string | null;
-  lateStat:       { total_trades: number; total_closed: number; open_positions: number; all_time_wins: number; all_time_losses: number; win_rate: number; all_time_pnl: number; today_trade_count: number; today_wins: number; today_losses: number; today_pnl: number; } | null;
+  lateStat:       LateStat | null;
 }) {
   const ss = settings?.strategy_settings ?? {};
   const sig = signalLabel(ss.signal);
@@ -649,6 +698,37 @@ function BtcCard({
         <div style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.3)', padding: '0.5rem 0' }}>Waiting for market data…</div>
       )}
 
+      {/* ── Bot Summary Banner ─────────────────────────────────────────────── */}
+      {lateStat && (() => {
+        const s = lateStat.stats;
+        const pnlColor = s.all_time_pnl >= 0 ? '#34d399' : '#f87171';
+        return (
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1rem',
+            alignItems: 'center',
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: '0.45rem',
+            padding: '0.45rem 0.7rem',
+            marginBottom: '0.65rem',
+            fontSize: '0.7rem',
+          }}>
+            <span style={{ fontWeight: 700, color: 'rgba(248,250,252,0.85)', letterSpacing: '0.04em' }}>
+              BTC 5-Min — {lateSettings?.is_enabled ? 'ACTIVE' : 'INACTIVE'}
+            </span>
+            <span style={{ color: 'rgba(248,250,252,0.5)' }}>
+              {s.total} Total&nbsp;·&nbsp;{s.open} Open&nbsp;·&nbsp;{s.closed} Closed
+            </span>
+            <span style={{ fontWeight: 700, color: pnlColor }}>
+              All-Time P/L: {s.all_time_pnl >= 0 ? '+' : ''}${s.all_time_pnl.toFixed(2)}
+            </span>
+            <span style={{ color: 'rgba(248,250,252,0.4)', fontSize: '0.65rem' }}>
+              Size (stored): ${lateStat.trade_size_usd.toFixed(2)}
+            </span>
+          </div>
+        );
+      })()}
+
       {settings && (
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           {/* ── Left: live stats ── */}
@@ -667,31 +747,49 @@ function BtcCard({
             <Stat label="Signal"          value={typeof ss.signal === 'string' ? ss.signal : '—'} color={sig.color} />
             <Stat label="Last decision"   value="—" />
             {/* Per-bot stats from paper_positions (btc_5m_late) via /api/crypto/bots */}
-            {lateStat ? (<>
-              <Stat label="Trades Today"  value={String(lateStat.today_trade_count)} />
-              <Stat label="Total Trades"  value={String(lateStat.total_trades)} />
-              <Stat label="Open"          value={String(lateStat.open_positions)} />
-              <Stat label="Closed"        value={String(lateStat.total_closed)} />
-              <Stat label="Wins"          value={String(lateStat.all_time_wins)} color={lateStat.all_time_wins > 0 ? '#34d399' : undefined} />
-              <Stat label="Losses"        value={String(lateStat.all_time_losses)} color={lateStat.all_time_losses > 0 ? '#f87171' : undefined} />
-              <Stat label="Win Rate"      value={lateStat.all_time_wins + lateStat.all_time_losses > 0 ? `${(lateStat.win_rate * 100).toFixed(0)}%` : '—'} />
-              <Stat label="Today P/L"     value={`${lateStat.today_pnl >= 0 ? '+' : ''}$${lateStat.today_pnl.toFixed(2)}`} color={lateStat.today_pnl > 0 ? '#34d399' : lateStat.today_pnl < 0 ? '#f87171' : undefined} />
-              <Stat label="All-Time P/L"  value={`${lateStat.all_time_pnl >= 0 ? '+' : ''}$${lateStat.all_time_pnl.toFixed(2)}`} color={lateStat.all_time_pnl > 0 ? '#34d399' : lateStat.all_time_pnl < 0 ? '#f87171' : undefined} />
-            </>) : (<>
-              <Stat label="Trades Today"  value="0" />
-              <Stat label="Total Trades"  value="0" />
-              <Stat label="Open"          value="0" />
-              <Stat label="Closed"        value="0" />
-              <Stat label="Wins"          value="0" />
-              <Stat label="Losses"        value="0" />
-              <Stat label="Win Rate"      value="—" />
-              <Stat label="Today P/L"     value="$0.00" />
-              <Stat label="All-Time P/L"  value="$0.00" />
-            </>)}
+            {(() => {
+              const s = lateStat?.stats;
+              const today        = s?.today        ?? 0;
+              const total        = s?.total        ?? 0;
+              const open         = s?.open         ?? 0;
+              const closed       = s?.closed       ?? 0;
+              const wins         = s?.wins         ?? 0;
+              const losses       = s?.losses       ?? 0;
+              const pushes       = s?.pushes       ?? 0;
+              const winRate      = s?.win_rate     ?? 0;
+              const amtTraded    = s?.total_amount_traded ?? 0;
+              const todayPnl     = s?.today_pnl    ?? 0;
+              const allTimePnl   = s?.all_time_pnl ?? 0;
+              const fmtPnl = (v: number) => `${v >= 0 ? '+' : ''}$${Math.abs(v).toFixed(2)}`;
+              const pnlColor = (v: number) => v > 0 ? '#34d399' : v < 0 ? '#f87171' : undefined;
+              return (<>
+                <Stat label="Trades Today"        value={String(today)} />
+                <Stat label="Total Trades"        value={String(total)} />
+                <Stat label="Open"                value={String(open)} />
+                <Stat label="Closed"              value={String(closed)} />
+                <Stat label="Wins"                value={String(wins)} color={wins > 0 ? '#34d399' : undefined} />
+                <Stat label="Losses"              value={String(losses)} color={losses > 0 ? '#f87171' : undefined} />
+                {pushes > 0 && <Stat label="Pushes" value={String(pushes)} />}
+                <Stat label="Win Rate"            value={wins + losses > 0 ? `${(winRate * 100).toFixed(0)}%` : '0%'} />
+                <Stat label="Total Amt Traded"    value={`$${amtTraded.toFixed(2)}`} />
+                <Stat label="Today P/L"           value={fmtPnl(todayPnl)} color={pnlColor(todayPnl)} />
+                <Stat label="All-Time P/L"        value={fmtPnl(allTimePnl)} color={pnlColor(allTimePnl)} />
+              </>);
+            })()}
             {metrics && (
               <Stat label="Open exposure" value={fmtUsd(metrics.open_exposure)} />
             )}
             <Stat label="Open positions"  value={String(ss.open_position_count ?? 0)} />
+            {/* Latest trade summary */}
+            {lateStat?.latest_trade_time && (<>
+              <div style={{ margin: '0.45rem 0 0.2rem', borderTop: '1px solid rgba(255,255,255,0.07)' }} />
+              <Stat label="Latest Trade"  value={new Date(lateStat.latest_trade_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} />
+              {lateStat.latest_trade_side  && <Stat label="  Side"   value={lateStat.latest_trade_side.toUpperCase()}  color={lateStat.latest_trade_side.toUpperCase() === 'UP' ? '#34d399' : '#f87171'} />}
+              {lateStat.latest_trade_status && <Stat label="  Status" value={lateStat.latest_trade_status.toUpperCase()} />}
+              {lateStat.latest_trade_status !== 'OPEN' && lateStat.latest_trade_pnl != null && (
+                <Stat label="  Result" value={`${lateStat.latest_trade_pnl >= 0 ? '+' : ''}$${lateStat.latest_trade_pnl.toFixed(4)}`} color={lateStat.latest_trade_pnl > 0 ? '#34d399' : lateStat.latest_trade_pnl < 0 ? '#f87171' : undefined} />
+              )}
+            </>)}
           </div>
 
           {/* ── Right: controls ── */}
@@ -755,6 +853,84 @@ function BtcCard({
             <div style={{ fontSize: '0.6rem', color: 'rgba(248,250,252,0.2)', marginTop: '0.3rem' }}>
               Mode: {settings.mode} · Strategy: BTC 5M EMA
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── BTC 5-Min trade size display (reads bot_settings.trade_size_usd for btc_5m_late) ── */}
+      {lateStat && (
+        <div style={{
+          marginTop: '0.65rem',
+          padding: '0.5rem 0.7rem',
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.07)',
+          borderRadius: '0.4rem',
+          fontSize: '0.7rem',
+        }}>
+          <span style={{ color: 'rgba(248,250,252,0.45)', marginRight: '0.5rem' }}>BTC 5-Min stored trade size (bot_settings):</span>
+          <span style={{ fontWeight: 700, color: '#fbbf24' }}>${lateStat.trade_size_usd.toFixed(2)}</span>
+          <span style={{ color: 'rgba(248,250,252,0.25)', marginLeft: '0.6rem', fontSize: '0.63rem' }}>
+            (actual per-trade size may differ — check FastLoop logs)
+          </span>
+        </div>
+      )}
+
+      {/* ── Recent BTC Trades ─────────────────────────────────────────────── */}
+      {lateStat && lateStat.recent_trades.length > 0 && (
+        <div style={{ marginTop: '0.75rem' }}>
+          <div style={{
+            fontSize: '0.67rem', fontWeight: 700, letterSpacing: '0.06em',
+            color: 'rgba(248,250,252,0.4)', textTransform: 'uppercase',
+            marginBottom: '0.4rem',
+          }}>Recent BTC Trades</div>
+          <div style={{ overflowX: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.67rem' }}>
+              <thead>
+                <tr>
+                  {['Time', 'Market', 'Side', 'Size', 'Entry', 'Status', 'P/L'].map((h) => (
+                    <th key={h} style={{
+                      textAlign: 'left', padding: '0.2rem 0.35rem',
+                      color: 'rgba(248,250,252,0.3)', fontWeight: 600,
+                      borderBottom: '1px solid rgba(255,255,255,0.07)',
+                      fontSize: '0.62rem', letterSpacing: '0.05em',
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {lateStat.recent_trades.map((t, i) => {
+                  const ts = t.start_ts ? new Date(t.start_ts) : null;
+                  const timeStr = ts ? ts.toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+                  const slugDisplay = t.slug ? t.slug.replace(/^btc-/i, '').slice(0, 18) : '—';
+                  const sideStr = t.side?.toUpperCase() ?? '—';
+                  const sideColor = sideStr === 'UP' ? '#34d399' : sideStr === 'DOWN' ? '#f87171' : 'inherit';
+                  const status = t.status?.toUpperCase() ?? '—';
+                  const pnl = t.pnl_usd ?? null;
+                  const pnlStr = pnl != null ? `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(4)}` : (status === 'OPEN' ? 'Open' : '—');
+                  const pnlColor = pnl != null && pnl > 0 ? '#34d399' : pnl != null && pnl < 0 ? '#f87171' : 'rgba(248,250,252,0.45)';
+                  const sizeStr = t.size_usd != null ? `$${Number(t.size_usd).toFixed(2)}` : '—';
+                  const entryStr = t.entry_price != null ? `$${Number(t.entry_price).toFixed(3)}` : '—';
+                  return (
+                    <tr key={t.id ?? i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ padding: '0.25rem 0.35rem', color: 'rgba(248,250,252,0.55)', whiteSpace: 'nowrap' }}>{timeStr}</td>
+                      <td style={{ padding: '0.25rem 0.35rem', color: 'rgba(248,250,252,0.6)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slugDisplay}</td>
+                      <td style={{ padding: '0.25rem 0.35rem', fontWeight: 700, color: sideColor }}>{sideStr}</td>
+                      <td style={{ padding: '0.25rem 0.35rem', color: 'rgba(248,250,252,0.65)' }}>{sizeStr}</td>
+                      <td style={{ padding: '0.25rem 0.35rem', color: 'rgba(248,250,252,0.5)' }}>{entryStr}</td>
+                      <td style={{ padding: '0.25rem 0.35rem' }}>
+                        <span style={{
+                          fontSize: '0.6rem', fontWeight: 700, padding: '0.05rem 0.35rem',
+                          borderRadius: '0.25rem',
+                          background: status === 'OPEN' ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.05)',
+                          color: status === 'OPEN' ? '#fbbf24' : 'rgba(248,250,252,0.5)',
+                        }}>{status}</span>
+                      </td>
+                      <td style={{ padding: '0.25rem 0.35rem', fontWeight: 600, color: pnlColor, whiteSpace: 'nowrap' }}>{pnlStr}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -888,8 +1064,7 @@ export default function Crypto5MinPanel() {
   const [metrics,       setMetrics]       = useState<Metrics | null>(null);
   const [lateSettings,  setLateSettings]  = useState<LateSettings | null>(null);
   const [marketStatus,  setMarketStatus]  = useState<MarketStatus | null>(null);
-  // All-time stats for btc_5m_late from /api/crypto/bots
-  type LateStat = { total_trades: number; total_closed: number; open_positions: number; all_time_wins: number; all_time_losses: number; win_rate: number; all_time_pnl: number; today_trade_count: number; today_wins: number; today_losses: number; today_pnl: number; };
+  // Stats for btc_5m_late from /api/crypto/bots — uses LateStat type (module scope)
   const [lateStat, setLateStat] = useState<LateStat | null>(null);
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
@@ -921,7 +1096,10 @@ export default function Crypto5MinPanel() {
       if (metJson.ok) setMetrics({ open_count: metJson.open_count ?? 0, open_exposure: metJson.open_exposure ?? 0, total_pnl: metJson.total_pnl ?? 0 });
       if (lateJson.ok && lateJson.settings) setLateSettings(lateJson.settings);
       if (mktJson.ok !== false) setMarketStatus(mktJson);
-      if (cryptoBotsJson.ok && cryptoBotsJson.bots?.length) setLateStat(cryptoBotsJson.bots[0]);
+      // Use first bot row — contains stats sub-object + recent_trades
+      if (cryptoBotsJson.ok && Array.isArray(cryptoBotsJson.bots) && cryptoBotsJson.bots.length > 0) {
+        setLateStat(cryptoBotsJson.bots[0]);
+      }
     } catch {}
     finally { setLoading(false); }
   }, []);
