@@ -840,6 +840,15 @@ export default function CopyBotsSection() {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ updated: number } | null>(null);
 
+  // Bulk paper trade size
+  const [paperSizeAmount,       setPaperSizeAmount]       = useState('1');
+  const [showPaperSizeModal,    setShowPaperSizeModal]    = useState(false);
+  const [paperSizePreview,      setPaperSizePreview]      = useState<{ count: number; sizes: string } | null>(null);
+  const [paperSizeLoading,      setPaperSizeLoading]      = useState(false);
+  const [paperSizeApplying,     setPaperSizeApplying]     = useState(false);
+  const [paperSizeResult,       setPaperSizeResult]       = useState<string | null>(null);
+  const [paperSizeError,        setPaperSizeError]        = useState<string | null>(null);
+
   // Persist selected IDs to localStorage so MasterStrategySection can read them
   // for "Apply to Selected Bots" even when the operator switches tabs.
   useEffect(() => {
@@ -989,6 +998,50 @@ export default function CopyBotsSection() {
     finally { setBackfilling(false); }
   };
 
+  // ── Bulk paper trade size handlers ───────────────────────────────────────────
+  const handleOpenPaperSizeModal = async () => {
+    setPaperSizeError(null);
+    setPaperSizeResult(null);
+    const amount = parseFloat(paperSizeAmount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 1000) {
+      setPaperSizeError('Enter a valid amount between $0.01 and $1000');
+      return;
+    }
+    setPaperSizeLoading(true);
+    try {
+      const res     = await fetch('/api/copy/bots/paper-size', { cache: 'no-store' });
+      const payload = await res.json() as { ok: boolean; count: number; bots: { sizing_value: number | null; max_trade_size: number | null }[]; error?: string };
+      if (!payload.ok) { setPaperSizeError(payload.error ?? 'Failed to load preview'); return; }
+      const sizes = [...new Set(
+        payload.bots.map((b) => b.sizing_value != null ? `$${b.sizing_value}` : '—')
+      )].join(', ') || '—';
+      setPaperSizePreview({ count: payload.count, sizes });
+      setShowPaperSizeModal(true);
+    } catch { setPaperSizeError('Network error'); }
+    finally { setPaperSizeLoading(false); }
+  };
+
+  const handleApplyPaperSize = async () => {
+    const amount = parseFloat(paperSizeAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    setPaperSizeApplying(true);
+    setPaperSizeError(null);
+    try {
+      const res     = await fetch('/api/copy/bots/paper-size', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount_usd: amount }), cache: 'no-store',
+      });
+      const payload = await res.json() as { ok: boolean; updated_count?: number; error?: string };
+      if (!payload.ok) { setPaperSizeError(payload.error ?? 'Update failed'); return; }
+      setShowPaperSizeModal(false);
+      const n = payload.updated_count ?? 0;
+      setPaperSizeResult(`Updated ${n} active PAPER bot${n !== 1 ? 's' : ''} to $${amount} per trade.`);
+      setTimeout(() => setPaperSizeResult(null), 8000);
+      await load(); // refresh table so sizing displays update
+    } catch { setPaperSizeError('Network error'); }
+    finally { setPaperSizeApplying(false); }
+  };
+
   const handleAddBot = async (e: React.FormEvent) => {
     e.preventDefault(); setFError(null); setFSuccess(false);
     if (!fName.trim()) { setFError('Bot name is required'); return; }
@@ -1073,6 +1126,54 @@ export default function CopyBotsSection() {
         />
       )}
 
+      {/* ── Bulk paper size confirmation modal ── */}
+      {showPaperSizeModal && paperSizePreview && (
+        <div className="copy-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowPaperSizeModal(false); }}>
+          <div className="copy-modal" role="dialog" aria-modal="true" aria-label="Bulk paper trade size" style={{ maxWidth: 420 }}>
+            <div className="copy-modal-header">
+              <h3 className="copy-modal-title">Confirm Bulk Paper Size Update</h3>
+              <button className="copy-modal-close" onClick={() => setShowPaperSizeModal(false)} type="button">×</button>
+            </div>
+            <div className="copy-modal-body">
+              <p style={{ fontSize: '0.85rem', marginBottom: '1rem', color: 'rgba(248,250,252,0.75)' }}>
+                Set all active PAPER bots to <strong style={{ color: '#f8fafc' }}>${parseFloat(paperSizeAmount) || 1}</strong> per trade?
+              </p>
+              <div style={{ marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', padding: '0.2rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span style={{ color: 'rgba(248,250,252,0.45)' }}>Active PAPER bots</span>
+                  <span style={{ fontWeight: 600 }}>{paperSizePreview.count}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', padding: '0.2rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span style={{ color: 'rgba(248,250,252,0.45)' }}>Current sizes</span>
+                  <span style={{ fontWeight: 600 }}>{paperSizePreview.sizes}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', padding: '0.2rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span style={{ color: 'rgba(248,250,252,0.45)' }}>New size</span>
+                  <span style={{ fontWeight: 600, color: '#34d399' }}>${parseFloat(paperSizeAmount) || 1}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', padding: '0.2rem 0' }}>
+                  <span style={{ color: 'rgba(248,250,252,0.45)' }}>LIVE bots changed</span>
+                  <span style={{ fontWeight: 600 }}>0</span>
+                </div>
+              </div>
+              {paperSizeError && (
+                <div style={{ fontSize: '0.75rem', color: '#f87171', marginTop: '0.5rem' }}>✗ {paperSizeError}</div>
+              )}
+            </div>
+            <div className="copy-modal-footer">
+              <button className="copy-btn copy-btn-secondary" onClick={() => setShowPaperSizeModal(false)} disabled={paperSizeApplying}>Cancel</button>
+              <button
+                className="copy-btn copy-btn-primary"
+                onClick={handleApplyPaperSize}
+                disabled={paperSizeApplying || paperSizePreview.count === 0}
+              >
+                {paperSizeApplying ? 'Updating…' : `UPDATE ${paperSizePreview.count} PAPER BOT${paperSizePreview.count !== 1 ? 'S' : ''}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bulk apply modal */}
       {showBulkModal && (
         <BulkEditModal
@@ -1126,6 +1227,46 @@ export default function CopyBotsSection() {
         {bulkResult && (
           <div className="copy-backfill-result">
             ✓ Settings applied to {bulkResult.updated} bot{bulkResult.updated !== 1 ? 's' : ''}.
+          </div>
+        )}
+
+        {/* ── Bulk paper trade size result ── */}
+        {paperSizeResult && (
+          <div className="copy-backfill-result">✓ {paperSizeResult}</div>
+        )}
+
+        {/* ── Bulk paper trade size control ── */}
+        {!loading && bots.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.55rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.04)', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.4)', fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase' }}>Bulk Paper Trade Size</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'rgba(248,250,252,0.5)' }}>$</span>
+              <input
+                className="copy-form-input"
+                type="number"
+                min="0.01"
+                max="1000"
+                step="0.01"
+                value={paperSizeAmount}
+                onChange={(e) => { setPaperSizeAmount(e.target.value); setPaperSizeError(null); }}
+                style={{ width: '4.5rem', padding: '0.2rem 0.4rem', fontSize: '0.78rem' }}
+                placeholder="1"
+              />
+            </div>
+            <button
+              className="copy-btn copy-btn-secondary copy-btn-sm"
+              onClick={handleOpenPaperSizeModal}
+              disabled={paperSizeLoading}
+              title="Update sizing_value and max_trade_size for all enabled PAPER bots. LIVE bots are never changed."
+            >
+              {paperSizeLoading ? 'Loading…' : 'Update All Active Paper Bots'}
+            </button>
+            {paperSizeError && !showPaperSizeModal && (
+              <span style={{ fontSize: '0.72rem', color: '#f87171' }}>⚠ {paperSizeError}</span>
+            )}
+            <span style={{ fontSize: '0.65rem', color: 'rgba(248,250,252,0.22)', marginLeft: 'auto' }}>
+              Updates fixed trade size for enabled PAPER bots only. LIVE bots are never changed.
+            </span>
           </div>
         )}
 
