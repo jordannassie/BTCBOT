@@ -16,6 +16,21 @@ type CardState = {
   balance: number;
   pnl: number;
   default_amount: number;
+  // ── Extended combined accounting (from extended GET) ──
+  starting_balance?:      number;
+  copy_open_exposure?:    number;
+  copy_open_positions?:   number;
+  copy_realized_pnl?:     number;
+  btc_open_exposure?:     number;
+  btc_open_positions?:    number;
+  btc_realized_pnl?:      number;
+  btc_total_trades?:      number;
+  total_open_exposure?:   number;
+  combined_realized_pnl?: number;
+  account_equity?:        number;
+  available_balance?:     number;
+  active_copy_bots?:      number;
+  active_crypto_bots?:    number;
 };
 
 type ExposureMetrics = {
@@ -76,30 +91,60 @@ export default function CopyPaperBankrollCard() {
   const [freshStarting, setFreshStarting] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // Lightweight exposure-only refresh — uses /api/copy/summary so the Paper card
-  // reads from the exact same endpoint and data shape as CopyOverviewCards.
-  // Preserving cap from previous state means the cap display never flickers due
-  // to the summary endpoint not returning cap; remaining is recomputed from the
-  // current cap + the freshly-fetched exposure total.
+  // Exposure + combined accounting refresh.
+  // Fetches /api/copy/paper-bankroll (extended GET) for BTC + combined data,
+  // and /api/copy/summary for exposure cap, bot counts, and trade counts.
+  // Poll interval: 5 seconds so BTC trade settlements appear quickly.
   const loadExposure = useCallback(async () => {
     try {
-      const res = await fetch('/api/copy/summary', { cache: 'no-store' });
-      if (!res.ok) return;
-      const p = await res.json();
-      if (p.ok) {
-        const count    = Number(p.paperPositionCount ?? 0);
-        const exposure = Number(p.paperExposure      ?? 0);
-        const avg      = Number(p.paperAvgSize        ?? 0);
-        setPaperExposure((prev) => {
-          const cap = prev?.cap ?? 0;
-          const remaining = cap > 0 ? Math.max(0, cap - exposure) : null;
-          return { count, exposure, avg, cap, remaining };
-        });
-        setPaperBotsEnabled(Number(p.paperBotsEnabled      ?? 0));
-        setActiveTradingBots(Number(p.activeBotCount        ?? 0));
-        setActiveCryptoBots(Number(p.activeCryptoBotCount   ?? 0));
-        setCopyTradesToday(Number(p.copyTradesToday          ?? 0));
-        setCryptoTradesToday(Number(p.cryptoTradesToday      ?? 0));
+      const [bankrollRes, summaryRes] = await Promise.all([
+        fetch('/api/copy/paper-bankroll', { cache: 'no-store' }),
+        fetch('/api/copy/summary', { cache: 'no-store' }),
+      ]);
+
+      // Update combined accounting from extended bankroll GET
+      if (bankrollRes.ok) {
+        const b = await bankrollRes.json();
+        if (b.ok) {
+          setState((prev) => prev ? {
+            ...prev,
+            starting_balance:      b.starting_balance,
+            copy_open_exposure:    b.copy_open_exposure,
+            copy_open_positions:   b.copy_open_positions,
+            copy_realized_pnl:     b.copy_realized_pnl,
+            btc_open_exposure:     b.btc_open_exposure,
+            btc_open_positions:    b.btc_open_positions,
+            btc_realized_pnl:      b.btc_realized_pnl,
+            btc_total_trades:      b.btc_total_trades,
+            total_open_exposure:   b.total_open_exposure,
+            combined_realized_pnl: b.combined_realized_pnl,
+            account_equity:        b.account_equity,
+            available_balance:     b.available_balance,
+            active_copy_bots:      b.active_copy_bots,
+            active_crypto_bots:    b.active_crypto_bots,
+          } : prev);
+        }
+      }
+
+      // Update exposure cap + bot counts from summary
+      if (summaryRes.ok) {
+        const p = await summaryRes.json();
+        if (p.ok) {
+          // Use summary's paper exposure for the cap/remaining display (uses RPC aggregate)
+          const count    = Number(p.paperPositionCount ?? 0);
+          const exposure = Number(p.paperExposure      ?? 0);
+          const avg      = Number(p.paperAvgSize        ?? 0);
+          setPaperExposure((prev) => {
+            const cap = prev?.cap ?? 0;
+            const remaining = cap > 0 ? Math.max(0, cap - exposure) : null;
+            return { count, exposure, avg, cap, remaining };
+          });
+          setPaperBotsEnabled(Number(p.paperBotsEnabled      ?? 0));
+          setActiveTradingBots(Number(p.activeBotCount        ?? 0));
+          setActiveCryptoBots(Number(p.activeCryptoBotCount   ?? 0));
+          setCopyTradesToday(Number(p.copyTradesToday          ?? 0));
+          setCryptoTradesToday(Number(p.cryptoTradesToday      ?? 0));
+        }
       }
     } catch { /* network error — leave previous state as-is */ }
   }, []);
@@ -159,12 +204,10 @@ export default function CopyPaperBankrollCard() {
     void loadExposure();
   }, [load, loadExposure]);
 
-  // Keep exposure numbers fresh at the same cadence as the Overview cards
-  // (copy_open_exposure_by_mode RPC, 15 s poll + visibility wake-up).
-  // Both components call the same Supabase RPC so they converge to the same
-  // DB truth within one poll cycle rather than drifting apart indefinitely.
+  // Keep exposure + BTC accounting fresh every 5 seconds.
+  // Visibility wake-up ensures stale data doesn't linger after tab switch.
   useEffect(() => {
-    const interval = setInterval(() => { void loadExposure(); }, 15_000);
+    const interval = setInterval(() => { void loadExposure(); }, 5_000);
     const onVisible = () => { if (!document.hidden) void loadExposure(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
@@ -381,8 +424,31 @@ export default function CopyPaperBankrollCard() {
         <span className="copy-badge copy-badge-paper" style={{ alignSelf: 'flex-start' }}>PAPER</span>
       </div>
 
-      {/* Balance */}
-      <div className="copy-paper-balance">{fmt(state?.balance ?? 0)}</div>
+      {/* Starting Paper Bankroll */}
+      <div style={{ fontSize: '0.65rem', color: 'rgba(248,250,252,0.35)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '0.1rem' }}>
+        Starting Paper Bankroll
+      </div>
+      <div className="copy-paper-balance">{fmt(state?.starting_balance ?? state?.default_amount ?? 0)}</div>
+
+      {/* Current Paper Equity — prominent, updates as trades settle */}
+      {state?.account_equity != null && (
+        <div style={{ marginBottom: '0.6rem' }}>
+          <div style={{ fontSize: '0.62rem', color: 'rgba(248,250,252,0.35)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '0.15rem' }}>
+            Current Paper Equity
+          </div>
+          <div style={{
+            fontSize: '1.6rem', fontWeight: 800, letterSpacing: '-0.01em', lineHeight: 1.1,
+            color: state.account_equity >= (state.starting_balance ?? state.default_amount ?? 0)
+              ? '#34d399' : '#f87171',
+          }}>
+            {fmt(state.account_equity)}
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'rgba(248,250,252,0.45)', marginTop: '0.15rem' }}>
+            {(state.combined_realized_pnl ?? 0) >= 0 ? '+' : ''}
+            {fmt(state.combined_realized_pnl ?? 0)} combined realized P/L
+          </div>
+        </div>
+      )}
 
       {/* Trend sparkline — powered by localStorage ring buffer */}
       <div className="copy-paper-sparkline-row">
@@ -447,52 +513,73 @@ export default function CopyPaperBankrollCard() {
           )}
         </div>
 
-        {/* Active Trading Bots + Active Crypto Bots — two separate status lines */}
+        {/* ── Structured accounting breakdown ─────────────────────────────────── */}
         <div style={{
-          marginTop: '0.45rem',
-          paddingTop: '0.4rem',
-          borderTop: '1px solid rgba(255,255,255,0.05)',
-          fontSize: '0.72rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.25rem',
+          marginTop: '0.55rem', paddingTop: '0.45rem',
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          fontSize: '0.71rem', display: 'flex', flexDirection: 'column', gap: '0',
         }}>
-          {/* Active Trading Bots (copy_bots.is_enabled = true) */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: 'rgba(248,250,252,0.35)' }}>Active Trading Bots</span>
-            <span style={{
-              fontWeight: 700,
-              color: activeTradingBots !== null && activeTradingBots > 0 ? '#34d399' : 'rgba(248,250,252,0.45)',
-              fontVariantNumeric: 'tabular-nums',
-            }}>
-              {activeTradingBots !== null ? activeTradingBots : '—'}
-            </span>
-          </div>
-          {/* Active Crypto Bots (bot_settings.is_enabled for btc_5m_late) */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: 'rgba(248,250,252,0.35)' }}>Active Crypto Bots</span>
-            <span style={{
-              fontWeight: 700,
-              color: activeCryptoBots !== null && activeCryptoBots > 0 ? '#60a5fa' : 'rgba(248,250,252,0.45)',
-              fontVariantNumeric: 'tabular-nums',
-            }}>
-              {activeCryptoBots !== null ? activeCryptoBots : '—'}
-            </span>
-          </div>
-          {/* Copy Trades Today */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: 'rgba(248,250,252,0.35)' }}>Copy Trades Today</span>
-            <span style={{ fontWeight: 600, color: 'rgba(248,250,252,0.7)', fontVariantNumeric: 'tabular-nums' }}>
-              {copyTradesToday !== null ? copyTradesToday : '—'}
-            </span>
-          </div>
-          {/* Crypto Trades Today */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: 'rgba(248,250,252,0.35)' }}>Crypto Trades Today</span>
-            <span style={{ fontWeight: 600, color: cryptoTradesToday !== null && cryptoTradesToday > 0 ? '#60a5fa' : 'rgba(248,250,252,0.45)', fontVariantNumeric: 'tabular-nums' }}>
-              {cryptoTradesToday !== null ? cryptoTradesToday : '—'}
-            </span>
-          </div>
+          {/* COPY TRADING section */}
+          <div style={{
+            fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase',
+            color: 'rgba(248,250,252,0.28)', marginBottom: '0.2rem', marginTop: '0.05rem',
+          }}>COPY TRADING</div>
+          {[
+            ['Active Trading Bots', state?.active_copy_bots ?? activeTradingBots, (state?.active_copy_bots ?? activeTradingBots ?? 0) > 0 ? '#34d399' : undefined],
+            ['Open Positions',      state?.copy_open_positions, undefined],
+            ['Open Exposure',       state?.copy_open_exposure != null ? fmt(state.copy_open_exposure) : (exposureLoading ? '—' : fmt(paperExposure?.exposure ?? 0)), undefined],
+            ['Realized P/L',       state?.copy_realized_pnl != null ? ((state.copy_realized_pnl >= 0 ? '+' : '') + fmt(state.copy_realized_pnl)) : '—',
+              state?.copy_realized_pnl != null && state.copy_realized_pnl !== 0 ? (state.copy_realized_pnl > 0 ? '#34d399' : '#f87171') : undefined],
+          ].map(([label, val, color]) => (
+            <div key={String(label)} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.1rem 0', alignItems: 'center' }}>
+              <span style={{ color: 'rgba(248,250,252,0.35)' }}>{label}</span>
+              <span style={{ fontWeight: 600, color: (color as string | undefined) ?? 'rgba(248,250,252,0.7)', fontVariantNumeric: 'tabular-nums' }}>
+                {val != null ? String(val) : '—'}
+              </span>
+            </div>
+          ))}
+
+          {/* BTC 5-MIN section */}
+          <div style={{
+            fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase',
+            color: 'rgba(248,250,252,0.28)', marginBottom: '0.2rem', marginTop: '0.5rem',
+          }}>BTC 5-MIN</div>
+          {[
+            ['Active Crypto Bots', state?.active_crypto_bots ?? activeCryptoBots, (state?.active_crypto_bots ?? activeCryptoBots ?? 0) > 0 ? '#60a5fa' : undefined],
+            ['Total Trades',       state?.btc_total_trades, undefined],
+            ['Open Positions',     state?.btc_open_positions, undefined],
+            ['Open Exposure',      state?.btc_open_exposure != null ? fmt(state.btc_open_exposure) : '—', undefined],
+            ['Realized P/L',      state?.btc_realized_pnl != null ? ((state.btc_realized_pnl >= 0 ? '+' : '') + fmt(state.btc_realized_pnl)) : '—',
+              state?.btc_realized_pnl != null && state.btc_realized_pnl !== 0 ? (state.btc_realized_pnl > 0 ? '#34d399' : '#f87171') : undefined],
+          ].map(([label, val, color]) => (
+            <div key={String(label) + '-btc'} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.1rem 0', alignItems: 'center' }}>
+              <span style={{ color: 'rgba(248,250,252,0.35)' }}>{label}</span>
+              <span style={{ fontWeight: 600, color: (color as string | undefined) ?? 'rgba(248,250,252,0.7)', fontVariantNumeric: 'tabular-nums' }}>
+                {val != null ? String(val) : '—'}
+              </span>
+            </div>
+          ))}
+
+          {/* TOTAL PAPER ACCOUNT section */}
+          <div style={{
+            fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase',
+            color: 'rgba(248,250,252,0.28)', marginBottom: '0.2rem', marginTop: '0.5rem',
+          }}>TOTAL PAPER ACCOUNT</div>
+          {[
+            ['Total Open Exposure',     state?.total_open_exposure != null   ? fmt(state.total_open_exposure)   : '—', undefined],
+            ['Combined Realized P/L',  state?.combined_realized_pnl != null ? ((state.combined_realized_pnl >= 0 ? '+' : '') + fmt(state.combined_realized_pnl)) : '—',
+              state?.combined_realized_pnl != null && state.combined_realized_pnl !== 0 ? (state.combined_realized_pnl > 0 ? '#34d399' : '#f87171') : undefined],
+            ['Available Balance',       state?.available_balance    != null   ? fmt(state.available_balance)    : '—', undefined],
+            ['Account Equity',          state?.account_equity       != null   ? fmt(state.account_equity)       : '—',
+              state?.account_equity != null && state.account_equity !== (state.starting_balance ?? state.default_amount) ? (state.account_equity > (state.starting_balance ?? state.default_amount ?? 0) ? '#34d399' : '#f87171') : undefined],
+          ].map(([label, val, color]) => (
+            <div key={String(label) + '-tot'} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.12rem 0', alignItems: 'center', borderTop: label === 'Account Equity' ? '1px solid rgba(255,255,255,0.07)' : 'none', marginTop: label === 'Account Equity' ? '0.2rem' : 0 }}>
+              <span style={{ color: 'rgba(248,250,252,0.4)', fontWeight: label === 'Account Equity' ? 600 : 400 }}>{label}</span>
+              <span style={{ fontWeight: 700, color: (color as string | undefined) ?? 'rgba(248,250,252,0.8)', fontVariantNumeric: 'tabular-nums' }}>
+                {String(val)}
+              </span>
+            </div>
+          ))}
         </div>
 
         {/* Cap + remaining rows */}
@@ -600,13 +687,18 @@ export default function CopyPaperBankrollCard() {
         })()}
       </div>
 
-      {/* P&L row */}
+      {/* P&L row — combined copy + BTC */}
       <div className="copy-paper-pnl-row">
-        <span className="copy-paper-pnl-label">All-time P/L</span>
-        <span className="copy-paper-pnl-value" style={{ color: pnlColor }}>
-          {state && state.pnl !== 0
-            ? (state.pnl > 0 ? '+' : '') + fmt(state.pnl)
-            : '—'}
+        <span className="copy-paper-pnl-label">Combined All-time P/L</span>
+        <span className="copy-paper-pnl-value" style={{
+          color: (state?.combined_realized_pnl ?? state?.pnl ?? 0) === 0
+            ? 'rgba(248,250,252,0.45)'
+            : (state?.combined_realized_pnl ?? state?.pnl ?? 0) > 0 ? '#34d399' : '#f87171',
+        }}>
+          {(() => {
+            const v = state?.combined_realized_pnl ?? state?.pnl ?? 0;
+            return v !== 0 ? (v > 0 ? '+' : '') + fmt(v) : '—';
+          })()}
         </span>
       </div>
 

@@ -25,34 +25,128 @@ function getServiceClient() {
 }
 
 // ─── GET ─────────────────────────────────────────────────────────────────────
-// Returns current balance and saved default amount.
+// Returns current balance, saved default amount, and combined BTC + copy accounting.
+// BTC source: paper_positions WHERE bot_id = 'btc_5m_late' — never includes btc_5m_ema.
+// Copy source: copied_positions for open exposure; paper_pnl_usd for realized P/L.
 export async function GET() {
   const client = getServiceClient();
   if (!client) {
     return NextResponse.json({ ok: false, error: 'Supabase credentials missing' }, { status: 500 });
   }
 
-  try {
-    const { data, error } = await client
-      .from('bot_settings')
-      .select('paper_balance_usd, paper_pnl_usd, strategy_settings')
-      .eq('bot_id', BOT_ID)
-      .maybeSingle();
+  const NO_CACHE = { 'Cache-Control': 'no-store, max-age=0' };
 
-    if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  try {
+    const [bankrollRes, copyOpenRes, btcPosRes, botCountRes, cryptoBotRes] = await Promise.all([
+      // Existing: copy_paper bankroll row
+      client
+        .from('bot_settings')
+        .select('paper_balance_usd, paper_pnl_usd, strategy_settings')
+        .eq('bot_id', BOT_ID)
+        .maybeSingle(),
+
+      // Copy open exposure: copied_positions OPEN — field is `size` (not size_usd)
+      client
+        .from('copied_positions')
+        .select('status, size')
+        .eq('status', 'OPEN'),
+
+      // BTC 5-Min: all btc_5m_late positions for realized P/L + open exposure
+      // Never includes btc_5m_ema.
+      client
+        .from('paper_positions')
+        .select('status, size_usd, pnl_usd')
+        .eq('bot_id', 'btc_5m_late'),
+
+      // Active copy-trader bots
+      client
+        .from('copy_bots')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_enabled', true),
+
+      // Active crypto strategy bots (btc_5m_late only)
+      client
+        .from('bot_settings')
+        .select('is_enabled')
+        .eq('bot_id', 'btc_5m_late')
+        .eq('is_enabled', true)
+        .limit(1),
+    ]);
+
+    // ── Copy bankroll ─────────────────────────────────────────────────────────
+    const bankrollData = bankrollRes.data;
+    const defaultAmount: number =
+      (bankrollData?.strategy_settings as { paper_default?: number } | null)?.paper_default ??
+      FALLBACK_DEFAULT;
+    const startingBalance = defaultAmount;
+    // copy_realized_pnl = what FastLoop has tracked via paper_pnl_usd
+    const copyRealizedPnl = Number(bankrollData?.paper_pnl_usd ?? 0) || 0;
+
+    // ── Copy open exposure ─────────────────────────────────────────────────────
+    type CopyOpenRow = { status: string; size?: number | null };
+    const copyOpenRows = (copyOpenRes.data ?? []) as CopyOpenRow[];
+    const copyOpenPositions = copyOpenRows.length;
+    const copyOpenExposure  = copyOpenRows.reduce(
+      (s, r) => s + (Number(r.size ?? 0) || 0), 0
+    );
+
+    // ── BTC 5-Min stats (btc_5m_late only) ────────────────────────────────────
+    type BtcPosRow = { status: string; size_usd?: number | null; pnl_usd?: number | null };
+    const btcRows = (btcPosRes.data ?? []) as BtcPosRow[];
+
+    let btcOpenPositions = 0;
+    let btcOpenExposure  = 0;
+    let btcRealizedPnl   = 0;
+    let btcTotalTrades   = btcRows.length;
+
+    for (const r of btcRows) {
+      const st   = (r.status ?? '').toUpperCase();
+      const size = Number(r.size_usd ?? 0) || 0;
+      const pnl  = Number(r.pnl_usd  ?? 0) || 0;
+      if (st === 'OPEN') {
+        btcOpenPositions++;
+        btcOpenExposure += size;
+      } else if (st === 'CLOSED' || st === 'SETTLED') {
+        btcRealizedPnl += pnl;
+      }
     }
 
-    const defaultAmount: number =
-      (data?.strategy_settings as { paper_default?: number } | null)?.paper_default ??
-      FALLBACK_DEFAULT;
+    // ── Combined accounting ────────────────────────────────────────────────────
+    const totalOpenExposure    = copyOpenExposure + btcOpenExposure;
+    const combinedRealizedPnl  = copyRealizedPnl  + btcRealizedPnl;
+    const accountEquity        = startingBalance  + combinedRealizedPnl;
+    const availableBalance     = accountEquity    - totalOpenExposure;
 
-    return NextResponse.json({
-      ok: true,
-      balance: data?.paper_balance_usd ?? defaultAmount,
-      pnl: data?.paper_pnl_usd ?? 0,
-      default_amount: defaultAmount,
-    });
+    // ── Bot counts ─────────────────────────────────────────────────────────────
+    const activeCopyBots   = botCountRes.count ?? 0;
+    const activeCryptoBots = (cryptoBotRes.data ?? []).length > 0 ? 1 : 0;
+
+    return NextResponse.json(
+      {
+        ok: true,
+        // Legacy fields (preserved for backward compat)
+        balance:        bankrollData?.paper_balance_usd ?? defaultAmount,
+        pnl:            copyRealizedPnl,
+        default_amount: defaultAmount,
+
+        // ── New combined accounting fields ──────────────────────────────────────
+        starting_balance:       parseFloat(startingBalance.toFixed(2)),
+        copy_open_exposure:     parseFloat(copyOpenExposure.toFixed(4)),
+        copy_open_positions:    copyOpenPositions,
+        copy_realized_pnl:      parseFloat(copyRealizedPnl.toFixed(4)),
+        btc_open_exposure:      parseFloat(btcOpenExposure.toFixed(4)),
+        btc_open_positions:     btcOpenPositions,
+        btc_realized_pnl:       parseFloat(btcRealizedPnl.toFixed(4)),
+        btc_total_trades:       btcTotalTrades,
+        total_open_exposure:    parseFloat(totalOpenExposure.toFixed(4)),
+        combined_realized_pnl:  parseFloat(combinedRealizedPnl.toFixed(4)),
+        account_equity:         parseFloat(accountEquity.toFixed(4)),
+        available_balance:      parseFloat(availableBalance.toFixed(4)),
+        active_copy_bots:       activeCopyBots,
+        active_crypto_bots:     activeCryptoBots,
+      },
+      { headers: NO_CACHE }
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
