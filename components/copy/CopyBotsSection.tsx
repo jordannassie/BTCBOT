@@ -1305,9 +1305,17 @@ export default function CopyBotsSection() {
                           <input type="checkbox" className="copy-bulk-check" checked={isSelected} onChange={() => toggleSelect(bot.id)} />
                         </td>
                         <td>
-                          <span className="copy-td-name" title={bot.name}>
+                          <a
+                            href={getPolymarketProfileUrl(null, bot.wallet_address) ?? '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="View on Polymarket"
+                            className="copy-td-name"
+                            style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                          >
                             {walletNameMap.get(bot.wallet_address) ?? bot.name}
-                          </span>
+                            <span style={{ fontSize: '0.6rem', opacity: 0.4 }}>↗</span>
+                          </a>
                           <div style={{ marginTop: '0.25rem' }}>
                             <ExitModeBadge mode={bot.exit_mode} />
                             {bot.exit_mode !== 'mirror_only' && (
