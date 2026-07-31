@@ -1,10 +1,11 @@
 'use client';
 
-// DiscoverTradersSection — READ-ONLY leaderboard discovery view.
+// DiscoverTradersSection — Polymarket leaderboard discovery view.
 //
 // Data source: GET /api/copy/discover-traders?period=daily|weekly|monthly
-// No write actions. No bot creation. No trading execution.
 // Fetches Polymarket's public leaderboard and cross-references tracked_wallets.
+// "Add Paper Bot" action creates a single disabled PAPER bot for a row (no live bots,
+// no ARM LIVE, no auto-enable, no positions touched).
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
@@ -100,6 +101,12 @@ export default function DiscoverTradersSection() {
   const [lbError, setLbError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
 
+  // Add Paper Bot per-row state
+  const [addConfirmRow, setAddConfirmRow] = useState<DiscoverRow | null>(null);
+  const [addingWallet, setAddingWallet]   = useState<string | null>(null);
+  const [addedWallets, setAddedWallets]   = useState<Set<string>>(new Set());
+  const [addError, setAddError]           = useState<string | null>(null);
+
   // Period — which leaderboard window to load
   const [period, setPeriod] = useState<Period>('monthly');
 
@@ -149,6 +156,34 @@ export default function DiscoverTradersSection() {
     setRefreshing(true);
     load(period);
   };
+
+  // ── Add Paper Bot handler ─────────────────────────────────────────────────
+
+  async function confirmAddBot(row: DiscoverRow) {
+    setAddConfirmRow(null);
+    setAddingWallet(row.wallet_address);
+    setAddError(null);
+    try {
+      const res = await fetch('/api/copy/add-paper-bot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          wallet_address: row.wallet_address,
+          display_name:   row.display_name,
+          sizing_value:   0.10,
+          max_trade_size: 0.10,
+        }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'Failed to add bot');
+      setAddedWallets((prev) => new Set([...prev, row.wallet_address.toLowerCase()]));
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : 'Failed to add bot');
+    } finally {
+      setAddingWallet(null);
+    }
+  }
 
   const changePeriod = (p: Period) => {
     setPeriod(p);
@@ -326,6 +361,7 @@ export default function DiscoverTradersSection() {
                 <th style={{ minWidth: 100 }}>Already Tracked</th>
                 <th style={{ minWidth: 100 }} title="When this wallet was added to tracked_wallets">Discovery Time</th>
                 <th style={{ minWidth: 90 }} title="Last activity seen on Polymarket">Last Seen</th>
+                <th style={{ minWidth: 110 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -418,10 +454,66 @@ export default function DiscoverTradersSection() {
                   <td className="copy-td-muted copy-td-num" style={{ fontSize: '0.75rem' }}>
                     {fmtRelative(row.last_seen)}
                   </td>
+
+                  {/* Actions — Add Paper Bot */}
+                  <td>
+                    {addedWallets.has(row.wallet_address.toLowerCase()) ? (
+                      <span className="copy-badge copy-badge-enabled" style={{ fontSize: '0.68rem' }}>✓ Bot Added</span>
+                    ) : addingWallet === row.wallet_address ? (
+                      <span style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.4)' }}>Adding…</span>
+                    ) : (
+                      <button
+                        className="copy-btn copy-btn-secondary copy-btn-sm"
+                        style={{ fontSize: '0.68rem', padding: '0.2rem 0.5rem', whiteSpace: 'nowrap' }}
+                        onClick={() => { setAddError(null); setAddConfirmRow(row); }}
+                        title={`Add ${row.display_name ?? truncate(row.wallet_address)} as a disabled PAPER bot`}
+                      >
+                        + Paper Bot
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── Add Paper Bot confirm modal ── */}
+      {addConfirmRow && (
+        <div className="copy-modal-backdrop" onClick={() => setAddConfirmRow(null)}>
+          <div className="copy-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <h3 className="copy-modal-title">Add Paper Bot</h3>
+            <div style={{ fontSize: '0.82rem', color: 'rgba(248,250,252,0.6)', marginBottom: '1rem', lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#f8fafc', marginBottom: '0.5rem' }}>
+                {addConfirmRow.display_name ?? truncate(addConfirmRow.wallet_address)}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0.2rem 0.8rem', fontSize: '0.78rem' }}>
+                <span style={{ color: 'rgba(248,250,252,0.4)' }}>Mode:</span>        <span>PAPER</span>
+                <span style={{ color: 'rgba(248,250,252,0.4)' }}>Trade size:</span> <span>$0.10</span>
+                <span style={{ color: 'rgba(248,250,252,0.4)' }}>LIVE:</span>       <span style={{ color: '#6b7280' }}>OFF</span>
+                <span style={{ color: 'rgba(248,250,252,0.4)' }}>ARM LIVE:</span>  <span style={{ color: '#6b7280' }}>OFF</span>
+                <span style={{ color: 'rgba(248,250,252,0.4)' }}>Enabled:</span>   <span style={{ color: '#6b7280' }}>OFF (manual)</span>
+              </div>
+              <div style={{ marginTop: '0.75rem', fontSize: '0.72rem', color: 'rgba(248,250,252,0.35)' }}>
+                Bot will be created but disabled. Turn New Entries ON separately to start copying.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}>
+              <button className="copy-btn copy-btn-secondary copy-btn-sm" onClick={() => setAddConfirmRow(null)}>Cancel</button>
+              <button className="copy-btn copy-btn-primary copy-btn-sm" onClick={() => confirmAddBot(addConfirmRow)}>
+                ADD {(addConfirmRow.display_name ?? 'TRADER').toUpperCase()} PAPER BOT
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add error banner ── */}
+      {addError && (
+        <div style={{ margin: '0.4rem 1.5rem', padding: '0.45rem 0.9rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.45rem', fontSize: '0.76rem', color: '#f87171', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+          <span>⚠ {addError}</span>
+          <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', fontSize: '0.9rem' }} onClick={() => setAddError(null)}>×</button>
         </div>
       )}
 
