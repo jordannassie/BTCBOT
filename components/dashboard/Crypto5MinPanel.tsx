@@ -762,7 +762,13 @@ function BtcCard({
             marginBottom: '0.65rem',
             fontSize: '0.7rem',
           }}>
-            <div style={{ fontWeight: 700, color: 'rgba(248,250,252,0.9)', letterSpacing: '0.04em', marginBottom: '0.4rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, color: 'rgba(248,250,252,0.9)', letterSpacing: '0.04em', marginBottom: '0.4rem' }}>
+              <img
+                src="https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/Crypto/BTCfullsize.webp"
+                alt="BTC"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid rgba(251,146,60,0.45)', flexShrink: 0 }}
+              />
               BTC 5-Min — {lateSettings?.is_enabled ? 'ACTIVE' : 'INACTIVE'}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.2rem 1.2rem' }}>
@@ -973,7 +979,12 @@ function BtcCard({
             borderRadius: '0.45rem',
             fontSize: '0.7rem',
           }}>
-            <div style={{ fontWeight: 700, fontSize: '0.65rem', letterSpacing: '0.05em', color: 'rgba(248,250,252,0.4)', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.65rem', letterSpacing: '0.05em', color: 'rgba(248,250,252,0.4)', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
+              <img
+                src="https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/Crypto/BTCfullsize.webp"
+                alt="BTC" onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid rgba(251,146,60,0.45)', flexShrink: 0 }}
+              />
               BTC Paper Account
             </div>
             {rows.map(([label, val, color]) => (
@@ -1018,7 +1029,12 @@ function BtcCard({
             borderRadius: '0.45rem',
             fontSize: '0.7rem',
           }}>
-            <div style={{ fontWeight: 700, fontSize: '0.68rem', letterSpacing: '0.05em', color: 'rgba(248,250,252,0.45)', textTransform: 'uppercase', marginBottom: '0.45rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.68rem', letterSpacing: '0.05em', color: 'rgba(248,250,252,0.45)', textTransform: 'uppercase', marginBottom: '0.45rem' }}>
+              <img
+                src="https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/Crypto/BTCfullsize.webp"
+                alt="BTC" onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid rgba(251,146,60,0.45)', flexShrink: 0 }}
+              />
               Latest BTC Trade
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.2rem 1rem' }}>
@@ -1048,10 +1064,18 @@ function BtcCard({
         return (
           <div style={{ marginTop: '0.75rem' }}>
             <div style={{
+              display: 'flex', alignItems: 'center', gap: '0.4rem',
               fontSize: '0.67rem', fontWeight: 700, letterSpacing: '0.06em',
               color: 'rgba(248,250,252,0.4)', textTransform: 'uppercase',
               marginBottom: '0.4rem',
-            }}>Recent BTC Trades</div>
+            }}>
+              <img
+                src="https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/Crypto/BTCfullsize.webp"
+                alt="BTC" onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid rgba(251,146,60,0.45)', flexShrink: 0 }}
+              />
+              Recent BTC Trades
+            </div>
 
             {/* Desktop table */}
             <div className="btc-trades-desktop" style={{ overflowX: 'hidden' }}>

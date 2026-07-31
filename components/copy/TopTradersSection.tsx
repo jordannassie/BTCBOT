@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
+import SourceAvatar from './SourceAvatar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -335,8 +336,11 @@ export default function TopTradersSection() {
                   {/* Rank */}
                   <td className="copy-td-rank">{idx + 1}</td>
 
-                  {/* Trader — links to Polymarket @wallet profile */}
+                  {/* Trader — avatar + links to Polymarket @wallet profile */}
                   <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <SourceAvatar sourceType="COPY_TRADER" name={t.display_name ?? undefined} size={28} style={{ flexShrink: 0 }} />
+                      <div style={{ minWidth: 0 }}>
                     <div className="copy-td-name" style={{ fontWeight: 600, fontSize: '0.82rem', color: '#f8fafc' }}>
                       <a
                         href={getPolymarketProfileUrl(null, t.wallet_address) ?? '#'}
@@ -363,6 +367,8 @@ export default function TopTradersSection() {
                         inactive
                       </span>
                     )}
+                      </div>{/* end inner div */}
+                    </div>{/* end avatar+name flex */}
                   </td>
 
                   {/* Classification */}

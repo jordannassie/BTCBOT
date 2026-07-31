@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
 import { shortenWallet } from '@/lib/copy/traderIdentity';
+import SourceAvatar from '@/components/copy/SourceAvatar';
 import { BOT_DEFAULTS, BOT_DEFAULTS_LS_KEY } from '@/lib/copy/botDefaults';
 import { SELECTED_BOTS_LS_KEY } from '@/lib/copy/masterStrategy';
 
@@ -1549,8 +1550,11 @@ export default function CopyBotsSection() {
                           <input type="checkbox" className="copy-bulk-check" checked={isSelected} onChange={() => toggleSelect(bot.id)} />
                         </td>
 
-                        {/* Trader — name + profile link + shortened wallet + exit badge */}
+                        {/* Trader — avatar + name + profile link + shortened wallet + exit badge */}
                         <td className="col-trader">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                            <SourceAvatar sourceType="COPY_TRADER" name={walletNameMap.get(bot.wallet_address) ?? bot.name} size={28} />
+                            <div style={{ minWidth: 0 }}>
                           <a
                             href={getPolymarketProfileUrl(null, bot.wallet_address) ?? '#'}
                             target="_blank"
@@ -1593,6 +1597,8 @@ export default function CopyBotsSection() {
                               </div>
                             );
                           })()}
+                            </div>{/* end inner div */}
+                          </div>{/* end avatar+name flex row */}
                         </td>
 
                         {/* Wallet — shortened with copy button; full address in title tooltip */}

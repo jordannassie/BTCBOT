@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
+import SourceAvatar from './SourceAvatar';
 import TraderRotationReview from './TraderRotationReview';
 import dynamic from 'next/dynamic';
 
@@ -373,8 +374,11 @@ export default function DiscoverTradersSection() {
                   {/* Row # (position in filtered list) */}
                   <td className="copy-td-rank">{idx + 1}</td>
 
-                  {/* Trader — links to Polymarket profile (username or wallet address) */}
+                  {/* Trader — avatar + links to Polymarket profile */}
                   <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <SourceAvatar sourceType="COPY_TRADER" name={row.display_name ?? undefined} size={28} style={{ flexShrink: 0 }} />
+                      <div>
                     {row.display_name ? (
                       <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#f8fafc' }}>
                         <a
@@ -390,6 +394,8 @@ export default function DiscoverTradersSection() {
                     ) : (
                       <span className="copy-td-muted" style={{ fontSize: '0.75rem' }}>—</span>
                     )}
+                      </div>
+                    </div>
                   </td>
 
                   {/* Wallet address — links to Polymarket @wallet profile */}

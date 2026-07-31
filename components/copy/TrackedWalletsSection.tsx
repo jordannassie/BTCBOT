@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import WalletSparkline from './WalletSparkline';
+import SourceAvatar from './SourceAvatar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -986,8 +987,9 @@ export default function TrackedWalletsSection() {
 
                     {/* Wallet identity */}
                     <td>
-                      {/* Name row: HOT badge · classification badge · fast-speed badge · name link */}
-                      <div className="copy-wallet-identity-name-row">
+                      {/* Name row: avatar · HOT badge · classification badge · fast-speed badge · name link */}
+                      <div className="copy-wallet-identity-name-row" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        <SourceAvatar sourceType="COPY_TRADER" name={walletLabel(w)} size={28} style={{ flexShrink: 0 }} />
                         {w.source === 'hot_import' && (
                           <span className="copy-wallet-hot-badge" title="Imported via HOT tab">HOT</span>
                         )}

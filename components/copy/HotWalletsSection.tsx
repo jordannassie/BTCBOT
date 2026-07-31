@@ -1,5 +1,7 @@
 'use client';
 
+import SourceAvatar from './SourceAvatar';
+
 // Hot Wallets — discovery / ranking panel.
 //
 // Data sources (in priority order):
@@ -543,6 +545,7 @@ export default function HotWalletsSection() {
                     {/* Identity */}
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <SourceAvatar sourceType="COPY_TRADER" name={w.display_name ?? undefined} size={28} style={{ flexShrink: 0 }} />
                         <SourceBadge source={w.source} />
                         <div>
                           {w.display_name && (

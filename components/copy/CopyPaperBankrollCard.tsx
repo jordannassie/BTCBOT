@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import MiniSparkline from './MiniSparkline';
+import SourceAvatar from './SourceAvatar';
 import {
   appendBankrollPoint,
   getBankrollHistory,
@@ -521,9 +522,12 @@ export default function CopyPaperBankrollCard() {
         }}>
           {/* COPY TRADING section */}
           <div style={{
-            fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase',
-            color: 'rgba(248,250,252,0.28)', marginBottom: '0.2rem', marginTop: '0.05rem',
-          }}>COPY TRADING</div>
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+            marginBottom: '0.2rem', marginTop: '0.05rem',
+          }}>
+            <SourceAvatar sourceType="COPY_TRADER" size={20} style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.28)' }}>COPY TRADING</span>
+          </div>
           {[
             ['Active Trading Bots', state?.active_copy_bots ?? activeTradingBots, (state?.active_copy_bots ?? activeTradingBots ?? 0) > 0 ? '#34d399' : undefined],
             ['Open Positions',      state?.copy_open_positions, undefined],
@@ -541,9 +545,12 @@ export default function CopyPaperBankrollCard() {
 
           {/* BTC 5-MIN section */}
           <div style={{
-            fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase',
-            color: 'rgba(248,250,252,0.28)', marginBottom: '0.2rem', marginTop: '0.5rem',
-          }}>BTC 5-MIN</div>
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+            marginBottom: '0.2rem', marginTop: '0.5rem',
+          }}>
+            <SourceAvatar sourceType="BTC_CRYPTO" size={20} style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.28)' }}>BTC 5-MIN</span>
+          </div>
           {[
             ['Active Crypto Bots', state?.active_crypto_bots ?? activeCryptoBots, (state?.active_crypto_bots ?? activeCryptoBots ?? 0) > 0 ? '#60a5fa' : undefined],
             ['Total Trades',       state?.btc_total_trades, undefined],

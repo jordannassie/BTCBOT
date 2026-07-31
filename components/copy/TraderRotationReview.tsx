@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPolymarketProfileUrl } from '@/lib/polymarketProfile';
+import SourceAvatar from './SourceAvatar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -339,8 +340,11 @@ export default function TraderRotationReview() {
                     <tr key={r.wallet_address}>
                       <td className="copy-td-rank">{idx + 1}</td>
 
-                      {/* Trader — both name and address link to Polymarket profile */}
+                      {/* Trader — avatar + name + address link to Polymarket profile */}
                       <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                          <SourceAvatar sourceType="COPY_TRADER" name={r.display_name ?? undefined} size={28} style={{ flexShrink: 0 }} />
+                          <div>
                         <div style={{ fontWeight: 600, fontSize: '0.8rem', color: '#f8fafc' }}>
                           <a
                             href={getPolymarketProfileUrl(r.username, r.wallet_address) ?? '#'}
@@ -365,6 +369,8 @@ export default function TraderRotationReview() {
                             <span style={{ fontSize: '0.5rem', opacity: 0.3 }}>↗</span>
                           </span>
                         </a>
+                          </div>
+                        </div>
                       </td>
 
                       {/* Current Status */}

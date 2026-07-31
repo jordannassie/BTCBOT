@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import SourceAvatar from './SourceAvatar';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -307,7 +308,7 @@ export default function CopyOverviewCards() {
         {/* ── Active Trading Bots — copy-trader bots (copy_bots.is_enabled = true) ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
-            <div className="copy-stat-icon"><IconBot /></div>
+            <SourceAvatar sourceType="COPY_TRADER" size={28} style={{ flexShrink: 0 }} />
             <span className="copy-stat-label">Active Trading Bots</span>
           </div>
           <div className="copy-stat-value">
@@ -337,7 +338,7 @@ export default function CopyOverviewCards() {
         {/* ── Active Crypto Bots — bot_settings.is_enabled for supported strategy IDs ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
-            <div className="copy-stat-icon"><IconBot /></div>
+            <SourceAvatar sourceType="BTC_CRYPTO" size={28} style={{ flexShrink: 0 }} />
             <span className="copy-stat-label">Active Crypto Bots</span>
           </div>
           <div className="copy-stat-value" style={{ color: cryptoBotsActive > 0 ? '#f8fafc' : 'rgba(248,250,252,0.35)' }}>
@@ -356,7 +357,7 @@ export default function CopyOverviewCards() {
              Reflects copied_positions only — NOT paper_positions (BTC strategy). ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
-            <div className="copy-stat-icon"><IconPosition /></div>
+            <SourceAvatar sourceType="COPY_TRADER" size={28} style={{ flexShrink: 0 }} />
             <span className="copy-stat-label">Copy Paper Exposure</span>
           </div>
           <div className="copy-stat-value">{fmtUsd(data.paperExposure ?? 0)}</div>
@@ -378,7 +379,7 @@ export default function CopyOverviewCards() {
              Separate from copy paper exposure. ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
-            <div className="copy-stat-icon"><IconPosition /></div>
+            <SourceAvatar sourceType="BTC_CRYPTO" size={28} style={{ flexShrink: 0 }} />
             <span className="copy-stat-label">Crypto Paper Exposure</span>
           </div>
           <div className="copy-stat-value" style={{ color: cryptoPaperExp > 0 ? '#f8fafc' : 'rgba(248,250,252,0.35)' }}>
@@ -452,7 +453,7 @@ export default function CopyOverviewCards() {
         {/* ── Copy Trades Today — positions opened since midnight UTC ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
-            <div className="copy-stat-icon"><IconPosition /></div>
+            <SourceAvatar sourceType="COPY_TRADER" size={28} style={{ flexShrink: 0 }} />
             <span className="copy-stat-label">Copy Trades Today</span>
           </div>
           <div className="copy-stat-value">{copyTradesToday}</div>
@@ -465,7 +466,7 @@ export default function CopyOverviewCards() {
         {/* ── Crypto Trades Today — paper_positions (btc_5m_late) opened today ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
-            <div className="copy-stat-icon"><IconActivity /></div>
+            <SourceAvatar sourceType="BTC_CRYPTO" size={28} style={{ flexShrink: 0 }} />
             <span className="copy-stat-label">Crypto Trades Today</span>
           </div>
           <div className="copy-stat-value" style={{ color: cryptoTradesToday > 0 ? '#f8fafc' : 'rgba(248,250,252,0.35)' }}>
@@ -480,7 +481,7 @@ export default function CopyOverviewCards() {
         {/* ── BTC Performance — from /api/crypto/bots (btc_5m_late only) ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
-            <div className="copy-stat-icon"><IconActivity /></div>
+            <SourceAvatar sourceType="BTC_CRYPTO" size={28} style={{ flexShrink: 0 }} />
             <span className="copy-stat-label">BTC 5-Min Performance</span>
           </div>
           <div className="copy-stat-value" style={{
