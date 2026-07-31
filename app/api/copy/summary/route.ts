@@ -61,15 +61,17 @@ export async function GET() {
       totalWalletsRes,
       enabledBotsRes,
       totalBotsRes,
-      paperBotsRes,       // enabled bots in PAPER mode → "Active Trading Bots (paper)"
-      armLiveBotsRes,     // enabled bots with arm_live = true → "ARM LIVE Bots"
-      openStatsRes,       // overall totals (PAPER + LIVE combined)
-      modeStatsRes,       // per-mode split — drives the labelled overview cards
+      paperBotsRes,         // enabled bots in PAPER mode → "Active Trading Bots (paper)"
+      armLiveBotsRes,       // enabled bots with arm_live = true → "ARM LIVE Bots"
+      openStatsRes,         // overall totals (PAPER + LIVE combined)
+      modeStatsRes,         // per-mode split — drives the labelled overview cards
       attemptsTodayRes,
-      recentClosedRes,    // CLOSED positions last 24 h — for overview perf card
+      recentClosedRes,      // CLOSED positions last 24 h — for overview perf card
       settingsRes,
-      cryptoBotsRes,      // enabled crypto strategy bots (btc_5m_late etc.)
-      cryptoPaperPosRes,  // open paper_positions for btc_5m_late — crypto paper exposure
+      cryptoBotsRes,        // enabled crypto strategy bots (btc_5m_late etc.)
+      cryptoPaperPosRes,    // open paper_positions for btc_5m_late — crypto paper exposure
+      copyTradesTodayRes,   // copied_positions opened since midnight UTC
+      cryptoTradesTodayRes, // paper_positions (btc_5m_late) opened since midnight UTC
     ] = await Promise.all([
       client.from('tracked_wallets').select('*', { count: 'exact', head: true }).eq('is_active', true),
       client.from('tracked_wallets').select('*', { count: 'exact', head: true }),
@@ -109,6 +111,15 @@ export async function GET() {
         .select('trade_size_usd')
         .eq('bot_id', 'btc_5m_late')
         .eq('status', 'OPEN'),
+      // Copy Trades Today — copied_positions opened since midnight UTC
+      client.from('copied_positions')
+        .select('*', { count: 'exact', head: true })
+        .gte('opened_at', todayUTC.toISOString()),
+      // Crypto Trades Today — paper_positions for btc_5m_late opened since midnight UTC
+      client.from('paper_positions')
+        .select('*', { count: 'exact', head: true })
+        .eq('bot_id', 'btc_5m_late')
+        .gte('opened_at', todayUTC.toISOString()),
     ]);
 
     // ── Surface overall totals ─────────────────────────────────────────────────
@@ -194,6 +205,10 @@ export async function GET() {
         // Crypto paper exposure — open paper_positions for btc_5m_late
         cryptoPaperPositionCount,
         cryptoPaperExposure,
+
+        // Trade counts today (separate from attemptsTodayCount)
+        copyTradesToday:  copyTradesTodayRes.count  ?? 0,
+        cryptoTradesToday: cryptoTradesTodayRes.count ?? 0,
 
         // OPEN positions — overall totals (PAPER + LIVE combined)
         openPositionCount,

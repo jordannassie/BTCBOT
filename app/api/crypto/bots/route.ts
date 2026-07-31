@@ -54,27 +54,26 @@ export async function GET() {
   todayUTC.setUTCHours(0, 0, 0, 0);
 
   try {
-    const [settingsRes, openPosRes, todayPosRes] = await Promise.all([
+    const [settingsRes, openPosRes, allClosedRes] = await Promise.all([
       // Bot settings for all supported crypto bots
       client
         .from('bot_settings')
         .select('bot_id, is_enabled, mode, arm_live, trade_size_usd, strategy_settings, updated_at')
         .in('bot_id', SUPPORTED_BOT_IDS),
 
-      // Open paper positions — for exposure
+      // Open paper positions — for exposure count
       client
         .from('paper_positions')
         .select('bot_id, trade_size_usd')
         .in('bot_id', SUPPORTED_BOT_IDS)
         .eq('status', 'OPEN'),
 
-      // Today's settled positions — for win/loss/pnl stats
+      // All closed paper positions — compute today + all-time stats in-process
       client
         .from('paper_positions')
-        .select('bot_id, trade_size_usd, pnl, outcome')
+        .select('bot_id, trade_size_usd, pnl, outcome, closed_at, opened_at, created_at')
         .in('bot_id', SUPPORTED_BOT_IDS)
-        .eq('status', 'CLOSED')
-        .gte('closed_at', todayUTC.toISOString()),
+        .in('status', ['CLOSED', 'SETTLED']),
     ]);
 
     type SettingsRow = {
@@ -87,16 +86,28 @@ export async function GET() {
       updated_at: string;
     };
 
-    type PosRow = {
+    type OpenPosRow = {
       bot_id: string;
       trade_size_usd?: number | null;
-      pnl?: number | null;
-      outcome?: string | null;
     };
 
-    const settingsRows = (settingsRes.data ?? []) as SettingsRow[];
-    const openPosRows  = (openPosRes.data  ?? []) as PosRow[];
-    const todayPosRows = (todayPosRes.data ?? []) as PosRow[];
+    type ClosedPosRow = {
+      bot_id:     string;
+      trade_size_usd?: number | null;
+      pnl?:       number | null;
+      outcome?:   string | null;
+      closed_at?: string | null;
+      opened_at?: string | null;
+      created_at?: string | null;
+    };
+
+    // Midnight UTC for "today" calculations
+    const midnightUTC = new Date(todayUTC);
+    const midnightMs  = midnightUTC.getTime();
+
+    const settingsRows  = (settingsRes.data  ?? []) as SettingsRow[];
+    const openPosRows   = (openPosRes.data   ?? []) as OpenPosRow[];
+    const allClosedRows = (allClosedRes.data ?? []) as ClosedPosRow[];
 
     const bots = SUPPORTED_BOT_IDS.map((botId) => {
       const settings = settingsRows.find((r) => r.bot_id === botId);
@@ -106,12 +117,43 @@ export async function GET() {
       const openPositions = openForBot.length;
       const openExposure  = openForBot.reduce((s, r) => s + (Number(r.trade_size_usd ?? 0) || 0), 0);
 
-      // Today's trade stats
-      const todayForBot      = todayPosRows.filter((r) => r.bot_id === botId);
-      const todayTradeCount  = todayForBot.length;
-      const todayWins        = todayForBot.filter((r) => (r.outcome ?? '').toUpperCase() === 'WIN').length;
-      const todayLosses      = todayForBot.filter((r) => (r.outcome ?? '').toUpperCase() === 'LOSS').length;
-      const todayPnl         = todayForBot.reduce((s, r) => s + (Number(r.pnl ?? 0) || 0), 0);
+      // All-time closed stats
+      const closedForBot = allClosedRows.filter((r) => r.bot_id === botId);
+      const totalClosed  = closedForBot.length;
+
+      let todayTradeCount = 0;
+      let todayWins       = 0;
+      let todayLosses     = 0;
+      let todayPnl        = 0;
+      let allTimeWins     = 0;
+      let allTimeLosses   = 0;
+      let allTimePnl      = 0;
+
+      for (const r of closedForBot) {
+        const pnl     = Number(r.pnl     ?? 0) || 0;
+        const outcome = (r.outcome ?? '').toUpperCase();
+        const isWin   = outcome === 'WIN'  || (outcome === '' && pnl > 0);
+        const isLoss  = outcome === 'LOSS' || (outcome === '' && pnl < 0);
+
+        allTimePnl += pnl;
+        if (isWin)  allTimeWins++;
+        if (isLoss) allTimeLosses++;
+
+        // Today: closed today
+        const closedMs = r.closed_at ? new Date(r.closed_at).getTime() : 0;
+        if (closedMs >= midnightMs) {
+          todayTradeCount++;
+          todayPnl += pnl;
+          if (isWin)  todayWins++;
+          if (isLoss) todayLosses++;
+        }
+      }
+
+      const winLossDenom = allTimeWins + allTimeLosses;
+      const winRate      = winLossDenom > 0 ? parseFloat((allTimeWins / winLossDenom).toFixed(4)) : 0;
+
+      // Total trade count = open + closed
+      const totalTrades = openPositions + totalClosed;
 
       return {
         bot_id:            botId,
@@ -122,10 +164,16 @@ export async function GET() {
         trade_size_usd:    settings?.trade_size_usd    ?? 0,
         open_positions:    openPositions,
         open_exposure_usd: openExposure,
+        total_trades:      totalTrades,
+        total_closed:      totalClosed,
+        all_time_wins:     allTimeWins,
+        all_time_losses:   allTimeLosses,
+        win_rate:          winRate,
+        all_time_pnl:      parseFloat(allTimePnl.toFixed(4)),
         today_trade_count: todayTradeCount,
         today_wins:        todayWins,
         today_losses:      todayLosses,
-        today_pnl:         todayPnl,
+        today_pnl:         parseFloat(todayPnl.toFixed(4)),
         strategy_settings: settings?.strategy_settings ?? {},
       };
     });

@@ -443,6 +443,7 @@ function BtcCard({
   lateSettings, onToggleLate, lateToggling, lateDone, lateErr,
   marketStatus,
   onActivateTestMode, testModeActivating, testModeDone, testModeErr,
+  lateStat,
 }: {
   settings:       BotSettings | null;
   metrics:        Metrics | null;
@@ -461,6 +462,7 @@ function BtcCard({
   testModeActivating:   boolean;
   testModeDone:         boolean;
   testModeErr:          string | null;
+  lateStat:       { total_trades: number; total_closed: number; open_positions: number; all_time_wins: number; all_time_losses: number; win_rate: number; all_time_pnl: number; today_trade_count: number; today_wins: number; today_losses: number; today_pnl: number; } | null;
 }) {
   const ss = settings?.strategy_settings ?? {};
   const sig = signalLabel(ss.signal);
@@ -664,11 +666,31 @@ function BtcCard({
             <Stat label="EMA 200"         value={fmtNum(ss.ema200, 0)} />
             <Stat label="Signal"          value={typeof ss.signal === 'string' ? ss.signal : '—'} color={sig.color} />
             <Stat label="Last decision"   value="—" />
-            {metrics && <>
-              <Stat label="Today trades"  value={String(metrics.open_count ?? 0)} />
+            {/* Per-bot stats from paper_positions (btc_5m_late) via /api/crypto/bots */}
+            {lateStat ? (<>
+              <Stat label="Trades Today"  value={String(lateStat.today_trade_count)} />
+              <Stat label="Total Trades"  value={String(lateStat.total_trades)} />
+              <Stat label="Open"          value={String(lateStat.open_positions)} />
+              <Stat label="Closed"        value={String(lateStat.total_closed)} />
+              <Stat label="Wins"          value={String(lateStat.all_time_wins)} color={lateStat.all_time_wins > 0 ? '#34d399' : undefined} />
+              <Stat label="Losses"        value={String(lateStat.all_time_losses)} color={lateStat.all_time_losses > 0 ? '#f87171' : undefined} />
+              <Stat label="Win Rate"      value={lateStat.all_time_wins + lateStat.all_time_losses > 0 ? `${(lateStat.win_rate * 100).toFixed(0)}%` : '—'} />
+              <Stat label="Today P/L"     value={`${lateStat.today_pnl >= 0 ? '+' : ''}$${lateStat.today_pnl.toFixed(2)}`} color={lateStat.today_pnl > 0 ? '#34d399' : lateStat.today_pnl < 0 ? '#f87171' : undefined} />
+              <Stat label="All-Time P/L"  value={`${lateStat.all_time_pnl >= 0 ? '+' : ''}$${lateStat.all_time_pnl.toFixed(2)}`} color={lateStat.all_time_pnl > 0 ? '#34d399' : lateStat.all_time_pnl < 0 ? '#f87171' : undefined} />
+            </>) : (<>
+              <Stat label="Trades Today"  value="0" />
+              <Stat label="Total Trades"  value="0" />
+              <Stat label="Open"          value="0" />
+              <Stat label="Closed"        value="0" />
+              <Stat label="Wins"          value="0" />
+              <Stat label="Losses"        value="0" />
+              <Stat label="Win Rate"      value="—" />
+              <Stat label="Today P/L"     value="$0.00" />
+              <Stat label="All-Time P/L"  value="$0.00" />
+            </>)}
+            {metrics && (
               <Stat label="Open exposure" value={fmtUsd(metrics.open_exposure)} />
-              <Stat label="All-time P&L"  value={fmtUsd(metrics.total_pnl)} color={(metrics.total_pnl ?? 0) >= 0 ? '#34d399' : '#f87171'} />
-            </>}
+            )}
             <Stat label="Open positions"  value={String(ss.open_position_count ?? 0)} />
           </div>
 
@@ -866,6 +888,9 @@ export default function Crypto5MinPanel() {
   const [metrics,       setMetrics]       = useState<Metrics | null>(null);
   const [lateSettings,  setLateSettings]  = useState<LateSettings | null>(null);
   const [marketStatus,  setMarketStatus]  = useState<MarketStatus | null>(null);
+  // All-time stats for btc_5m_late from /api/crypto/bots
+  type LateStat = { total_trades: number; total_closed: number; open_positions: number; all_time_wins: number; all_time_losses: number; win_rate: number; all_time_pnl: number; today_trade_count: number; today_wins: number; today_losses: number; today_pnl: number; };
+  const [lateStat, setLateStat] = useState<LateStat | null>(null);
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [saveErr,       setSaveErr]       = useState<string | null>(null);
@@ -880,20 +905,23 @@ export default function Crypto5MinPanel() {
 
   const loadData = useCallback(async () => {
     try {
-      const [settRes, metRes, lateRes, mktRes] = await Promise.all([
+      const [settRes, metRes, lateRes, mktRes, cryptoBotsRes] = await Promise.all([
         fetch('/api/bot-settings?bot_id=btc_5m_ema', { cache: 'no-store' }),
         fetch('/api/btc-ema-metrics', { cache: 'no-store' }),
         fetch('/api/btc-5m-late', { cache: 'no-store' }),
         fetch(`/api/btc-5m-market?ts=${Date.now()}`, { cache: 'no-store' }),
+        fetch('/api/crypto/bots', { cache: 'no-store' }),
       ]);
-      const settJson = await settRes.json() as { ok: boolean; settings?: BotSettings };
-      const metJson  = await metRes.json()  as { ok: boolean; open_count?: number; open_exposure?: number; total_pnl?: number };
-      const lateJson = await lateRes.json() as { ok: boolean; settings?: LateSettings };
-      const mktJson  = await mktRes.json()  as MarketStatus;
+      const settJson        = await settRes.json()       as { ok: boolean; settings?: BotSettings };
+      const metJson         = await metRes.json()        as { ok: boolean; open_count?: number; open_exposure?: number; total_pnl?: number };
+      const lateJson        = await lateRes.json()       as { ok: boolean; settings?: LateSettings };
+      const mktJson         = await mktRes.json()        as MarketStatus;
+      const cryptoBotsJson  = await cryptoBotsRes.json() as { ok: boolean; bots?: LateStat[] };
       if (settJson.ok && settJson.settings) setSettings(settJson.settings);
       if (metJson.ok) setMetrics({ open_count: metJson.open_count ?? 0, open_exposure: metJson.open_exposure ?? 0, total_pnl: metJson.total_pnl ?? 0 });
       if (lateJson.ok && lateJson.settings) setLateSettings(lateJson.settings);
       if (mktJson.ok !== false) setMarketStatus(mktJson);
+      if (cryptoBotsJson.ok && cryptoBotsJson.bots?.length) setLateStat(cryptoBotsJson.bots[0]);
     } catch {}
     finally { setLoading(false); }
   }, []);
@@ -1008,7 +1036,7 @@ export default function Crypto5MinPanel() {
         <div style={{ display: 'flex', gap: '0.75rem', padding: '1rem 1.25rem', flexWrap: 'wrap' }}>
           {cards.map((c) =>
             c === 'btc'
-              ? <BtcCard key="btc" settings={settings} metrics={metrics} saving={saving} saveErr={saveErr} saveOk={saveOk} onSave={handleSave} onToggleMode={handleToggleMode} lateSettings={lateSettings} onToggleLate={handleToggleLate} lateToggling={lateToggling} lateDone={lateDone} lateErr={lateErr} marketStatus={marketStatus} onActivateTestMode={handleActivateTestMode} testModeActivating={testModeActivating} testModeDone={testModeDone} testModeErr={testModeErr} />
+              ? <BtcCard key="btc" settings={settings} metrics={metrics} saving={saving} saveErr={saveErr} saveOk={saveOk} onSave={handleSave} onToggleMode={handleToggleMode} lateSettings={lateSettings} onToggleLate={handleToggleLate} lateToggling={lateToggling} lateDone={lateDone} lateErr={lateErr} marketStatus={marketStatus} onActivateTestMode={handleActivateTestMode} testModeActivating={testModeActivating} testModeDone={testModeDone} testModeErr={testModeErr} lateStat={lateStat} />
               : <ComingSoonCard key={c} asset={c.toUpperCase()} />
           )}
         </div>

@@ -779,6 +779,9 @@ export default function CopyBotsSection() {
 
   // Open position counts per bot (bot ID → count)
   const [openPositionCounts, setOpenPositionCounts] = useState<Map<string, number>>(new Map());
+  // Per-bot trade statistics — keyed by copy_bots.id — from /api/copy/bot-stats
+  type BotStatRow = { today: number; total: number; open: number; closed: number; wins: number; losses: number; pushes: number; pnl: number };
+  const [botStats, setBotStats] = useState<Map<string, BotStatRow>>(new Map());
   // Bot status filter — Active (is_enabled=true) / Inactive (is_enabled=false)
   const [monitorFilter, setMonitorFilter] = useState<'all' | 'active' | 'inactive'>('all');
   // BOT STATUS confirmation modal
@@ -906,10 +909,11 @@ export default function CopyBotsSection() {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const [botsRes, settingsRes, positionsRes] = await Promise.all([
+      const [botsRes, settingsRes, positionsRes, statsRes] = await Promise.all([
         fetch('/api/copy/bots', { cache: 'no-store' }),
         fetch('/api/copy/settings', { cache: 'no-store' }),
         fetch('/api/copy/positions?status=OPEN&limit=500', { cache: 'no-store' }),
+        fetch('/api/copy/bot-stats', { cache: 'no-store' }),
       ]);
       const botsPayload     = await botsRes.json();
       const settingsPayload = await settingsRes.json();
@@ -929,6 +933,17 @@ export default function CopyBotsSection() {
           setOpenPositionCounts(countMap);
         }
       } catch { /* positions fetch is best-effort */ }
+      // Load per-bot trade statistics
+      try {
+        const statsPayload = await statsRes.json();
+        if (statsPayload.ok && statsPayload.copy_bot_stats) {
+          const statsMap = new Map<string, BotStatRow>();
+          for (const [id, stat] of Object.entries(statsPayload.copy_bot_stats as Record<string, BotStatRow>)) {
+            statsMap.set(id, stat);
+          }
+          setBotStats(statsMap);
+        }
+      } catch { /* stats are best-effort */ }
     } catch { setError('Network error loading bots'); }
     finally  { setLoading(false); }
   }, []);
@@ -1556,6 +1571,28 @@ export default function CopyBotsSection() {
                             </span>
                             <ExitModeBadge mode={bot.exit_mode} />
                           </div>
+                          {/* Per-bot trade statistics — compact second line */}
+                          {(() => {
+                            const s = botStats.get(bot.id);
+                            if (!s) return null;
+                            const pnlColor = s.pnl > 0 ? '#34d399' : s.pnl < 0 ? '#f87171' : 'rgba(248,250,252,0.35)';
+                            const pnlStr   = s.pnl === 0 ? '$0.00' : `${s.pnl > 0 ? '+' : ''}$${Math.abs(s.pnl).toFixed(2)}`;
+                            return (
+                              <div style={{ marginTop: '0.18rem', fontSize: '0.62rem', color: 'rgba(248,250,252,0.4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <span title={`Opened today: ${s.today}`}>Today {s.today}</span>
+                                <span style={{ opacity: 0.4, margin: '0 0.2rem' }}>·</span>
+                                <span title={`Open positions: ${s.open}`}>Open {s.open}</span>
+                                <span style={{ opacity: 0.4, margin: '0 0.2rem' }}>·</span>
+                                <span title={`Closed positions: ${s.closed}`}>Closed {s.closed}</span>
+                                {s.closed > 0 && (<>
+                                  <span style={{ opacity: 0.4, margin: '0 0.2rem' }}>·</span>
+                                  <span title={`Wins: ${s.wins}, Losses: ${s.losses}`}>W/L {s.wins}-{s.losses}</span>
+                                  <span style={{ opacity: 0.4, margin: '0 0.2rem' }}>·</span>
+                                  <span style={{ color: pnlColor, fontWeight: 600 }} title={`Closed P/L: ${pnlStr}`}>{pnlStr}</span>
+                                </>)}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* Wallet — shortened with copy button; full address in title tooltip */}

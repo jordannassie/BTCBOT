@@ -57,6 +57,9 @@ export default function CopyPaperBankrollCard() {
   const [activeTradingBots, setActiveTradingBots] = useState<number | null>(null);
   // Count of enabled crypto strategy bots — activeCryptoBotCount from summary
   const [activeCryptoBots, setActiveCryptoBots] = useState<number | null>(null);
+  // Trade counts today — from /api/copy/summary
+  const [copyTradesToday, setCopyTradesToday]   = useState<number | null>(null);
+  const [cryptoTradesToday, setCryptoTradesToday] = useState<number | null>(null);
 
   // Input for new default amount
   const [inputValue, setInputValue] = useState('');
@@ -92,9 +95,11 @@ export default function CopyPaperBankrollCard() {
           const remaining = cap > 0 ? Math.max(0, cap - exposure) : null;
           return { count, exposure, avg, cap, remaining };
         });
-        setPaperBotsEnabled(Number(p.paperBotsEnabled    ?? 0));
-        setActiveTradingBots(Number(p.activeBotCount       ?? 0));
-        setActiveCryptoBots(Number(p.activeCryptoBotCount  ?? 0));
+        setPaperBotsEnabled(Number(p.paperBotsEnabled      ?? 0));
+        setActiveTradingBots(Number(p.activeBotCount        ?? 0));
+        setActiveCryptoBots(Number(p.activeCryptoBotCount   ?? 0));
+        setCopyTradesToday(Number(p.copyTradesToday          ?? 0));
+        setCryptoTradesToday(Number(p.cryptoTradesToday      ?? 0));
       }
     } catch { /* network error — leave previous state as-is */ }
   }, []);
@@ -472,6 +477,20 @@ export default function CopyPaperBankrollCard() {
               fontVariantNumeric: 'tabular-nums',
             }}>
               {activeCryptoBots !== null ? activeCryptoBots : '—'}
+            </span>
+          </div>
+          {/* Copy Trades Today */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: 'rgba(248,250,252,0.35)' }}>Copy Trades Today</span>
+            <span style={{ fontWeight: 600, color: 'rgba(248,250,252,0.7)', fontVariantNumeric: 'tabular-nums' }}>
+              {copyTradesToday !== null ? copyTradesToday : '—'}
+            </span>
+          </div>
+          {/* Crypto Trades Today */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: 'rgba(248,250,252,0.35)' }}>Crypto Trades Today</span>
+            <span style={{ fontWeight: 600, color: cryptoTradesToday !== null && cryptoTradesToday > 0 ? '#60a5fa' : 'rgba(248,250,252,0.45)', fontVariantNumeric: 'tabular-nums' }}>
+              {cryptoTradesToday !== null ? cryptoTradesToday : '—'}
             </span>
           </div>
         </div>

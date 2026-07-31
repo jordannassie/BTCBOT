@@ -38,6 +38,9 @@ type Overview = {
   // ── Crypto paper exposure (paper_positions WHERE bot_id = 'btc_5m_late') ───
   cryptoPaperPositionCount?: number; // open paper_positions for btc_5m_late
   cryptoPaperExposure?: number;      // SUM(trade_size_usd) for those positions
+  // ── Trade counts today (distinct from attempt counts) ───────────────────────
+  copyTradesToday?: number;          // copied_positions opened since midnight UTC
+  cryptoTradesToday?: number;        // paper_positions (btc_5m_late) opened since midnight UTC
   // ───────────────────────────────────────────────────────────────────────────
   attemptsTodayCount: number;       // copy_attempts since midnight UTC today
   // Phase 3 — recent closed positions (last 24 h)
@@ -230,9 +233,11 @@ export default function CopyOverviewCards() {
   const botsTotal        = data.botsTotal ?? botsEnabled;
   const armLiveBots      = data.armLiveBotsCount ?? 0;
   const liveActiveNow    = data.liveActiveNow ?? 0;
-  const cryptoBotsActive = data.activeCryptoBotCount ?? 0;    // btc_5m_late etc.
-  const cryptoPaperCount = data.cryptoPaperPositionCount ?? 0;
-  const cryptoPaperExp   = data.cryptoPaperExposure ?? 0;
+  const cryptoBotsActive  = data.activeCryptoBotCount ?? 0;    // btc_5m_late etc.
+  const cryptoPaperCount  = data.cryptoPaperPositionCount ?? 0;
+  const cryptoPaperExp    = data.cryptoPaperExposure ?? 0;
+  const copyTradesToday   = data.copyTradesToday   ?? 0;
+  const cryptoTradesToday = data.cryptoTradesToday ?? 0;
 
   return (
     <>
@@ -397,6 +402,34 @@ export default function CopyOverviewCards() {
           <div className="copy-stat-value">{data.attemptsTodayCount}</div>
           <div className="copy-stat-helper">
             Copy decisions since midnight UTC
+          </div>
+        </div>
+
+        {/* ── Copy Trades Today — positions opened since midnight UTC ── */}
+        <div className="copy-stat-card">
+          <div className="copy-stat-header">
+            <div className="copy-stat-icon"><IconPosition /></div>
+            <span className="copy-stat-label">Copy Trades Today</span>
+          </div>
+          <div className="copy-stat-value">{copyTradesToday}</div>
+          <div className="copy-stat-helper">
+            <span className="copy-stat-badge copy-stat-badge-paper">COPY</span>
+            {' '}positions opened since midnight UTC
+          </div>
+        </div>
+
+        {/* ── Crypto Trades Today — paper_positions (btc_5m_late) opened today ── */}
+        <div className="copy-stat-card">
+          <div className="copy-stat-header">
+            <div className="copy-stat-icon"><IconActivity /></div>
+            <span className="copy-stat-label">Crypto Trades Today</span>
+          </div>
+          <div className="copy-stat-value" style={{ color: cryptoTradesToday > 0 ? '#f8fafc' : 'rgba(248,250,252,0.35)' }}>
+            {cryptoTradesToday}
+          </div>
+          <div className="copy-stat-helper">
+            <span className="copy-stat-badge copy-stat-badge-paper">BTC 5-Min</span>
+            {' '}paper trades opened today
           </div>
         </div>
 
