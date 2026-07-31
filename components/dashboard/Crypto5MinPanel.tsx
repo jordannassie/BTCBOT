@@ -37,17 +37,38 @@ type LateSettings = {
 type MarketStatus = {
   ok:               boolean;
   ready:            boolean;
+  reason:           string;
+  // market identification
   market_slug:      string | null;
+  market_url:       string | null;
+  // timing
   market_start:     string | null;
   market_end:       string | null;
   seconds_remaining: number | null;
+  // rich fields from FastLoop btc_5m_late.strategy_settings
+  price_to_beat:    number | null;
+  reference_price:  number | null;
+  distance_usd:     number | null;
+  leading_side:     string | null;
+  up_ask:           number | null;
+  down_ask:         number | null;
+  signal:           string | null;
+  last_decision:    string | null;
+  last_decision_reason: string | null;
+  current_position: boolean | null;
+  today_trade_count: number | null;
+  today_wins:       number | null;
+  today_losses:     number | null;
+  today_pnl:        number | null;
+  // token IDs from market_cache
   up_token_id:      string | null;
   down_token_id:    string | null;
+  // freshness
   updated_at:       string | null;
-  rotated_at:       string | null;
+  stale_tier:       'fresh' | 'delayed' | 'stale' | 'unknown';
   stale:            boolean;
   expired:          boolean;
-  reason:           string;
+  server_time:      string | null;
   error?:           string;
 };
 
@@ -164,58 +185,74 @@ function ActiveMarketSection({ market }: { market: MarketStatus | null }) {
     if (!market?.market_slug) return;
     if (prevSlugRef.current && prevSlugRef.current !== market.market_slug) {
       setRotationFlash(true);
-      setTimeout(() => setRotationFlash(false), 4000);
+      setTimeout(() => setRotationFlash(false), 5000);
     }
     prevSlugRef.current = market.market_slug;
   }, [market?.market_slug]);
 
   const slug   = market?.market_slug ?? null;
-  const pmUrl  = slug ? `https://polymarket.com/event/${encodeURIComponent(slug)}` : null;
-  const secsLeft = market?.seconds_remaining ?? null;
-  const secsDisplay = secsLeft != null
-    ? secsLeft > 0
-      ? `${secsLeft}s`
-      : '0s (expired)'
-    : '—';
+  // Use FastLoop-supplied URL directly; never retain a prior slug's URL
+  const pmUrl  = market?.market_url ?? (slug ? `https://polymarket.com/event/${encodeURIComponent(slug)}` : null);
+
+  const secsLeft    = market?.seconds_remaining ?? null;
+  const isExpired   = market?.expired ?? false;
+  const secsDisplay = isExpired       ? 'EXPIRED'
+                    : secsLeft == null ? '—'
+                    : secsLeft > 0    ? `${secsLeft}s`
+                    : 'EXPIRED';
+
+  // Three-tier freshness badge
+  const tier = market?.stale_tier ?? 'unknown';
+  const freshBadge =
+    tier === 'fresh'   ? { text: 'FRESH',   color: '#34d399', bg: 'rgba(52,211,153,0.1)',  border: 'rgba(52,211,153,0.25)' }
+  : tier === 'delayed' ? { text: 'DELAYED',  color: '#fbbf24', bg: 'rgba(251,191,36,0.1)',  border: 'rgba(251,191,36,0.25)' }
+  : tier === 'stale'   ? { text: 'STALE',    color: '#f87171', bg: 'rgba(239,68,68,0.1)',   border: 'rgba(239,68,68,0.25)' }
+  : null;
+
+  // Separate market-state badge
+  const marketBadge =
+    isExpired         ? { text: 'MARKET EXPIRED — WAITING FOR NEXT ROTATION', color: '#f87171', bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.25)' }
+  : market?.ready     ? { text: 'ACTIVE',  color: '#34d399', bg: 'rgba(52,211,153,0.1)', border: 'rgba(52,211,153,0.25)' }
+  : null;
+
+  function fmtMaybeUsd(v: number | null | undefined, digits = 2) {
+    if (v == null || !Number.isFinite(v)) return '—';
+    return `$${Math.abs(v).toFixed(digits)}`;
+  }
 
   return (
     <div style={{
       marginTop: '0.65rem',
       padding: '0.6rem 0.75rem',
       background: 'rgba(255,255,255,0.02)',
-      border: '1px solid rgba(255,255,255,0.06)',
+      border: `1px solid ${isExpired ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.06)'}`,
       borderRadius: '0.5rem',
     }}>
-      {/* Header row */}
+      {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.3rem' }}>
         <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.4)' }}>
           Active Market
         </span>
-        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Status badge */}
-          {market?.stale && (
-            <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.1em 0.45em', background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)', borderRadius: '0.3rem', letterSpacing: '0.06em' }}>
-              STALE MARKET DATA
+        <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Market-state badge */}
+          {marketBadge && (
+            <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.1em 0.45em', background: marketBadge.bg, color: marketBadge.color, border: `1px solid ${marketBadge.border}`, borderRadius: '0.3rem', letterSpacing: '0.05em' }}>
+              {marketBadge.text}
             </span>
           )}
-          {market?.expired && !market?.stale && (
-            <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.1em 0.45em', background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.3rem', letterSpacing: '0.06em' }}>
-              MARKET EXPIRED — WAITING FOR ROTATION
+          {/* Freshness badge */}
+          {freshBadge && (
+            <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.1em 0.45em', background: freshBadge.bg, color: freshBadge.color, border: `1px solid ${freshBadge.border}`, borderRadius: '0.3rem', letterSpacing: '0.05em' }}>
+              {freshBadge.text}
             </span>
           )}
-          {market?.ready && (
-            <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.1em 0.45em', background: 'rgba(52,211,153,0.1)', color: '#34d399', border: '1px solid rgba(52,211,153,0.25)', borderRadius: '0.3rem', letterSpacing: '0.06em' }}>
-              READY
-            </span>
-          )}
+          {/* Rotation flash */}
           {rotationFlash && (
-            <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.1em 0.45em', background: 'rgba(129,140,248,0.15)', color: '#818cf8', border: '1px solid rgba(129,140,248,0.3)', borderRadius: '0.3rem', letterSpacing: '0.06em' }}>
+            <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.1em 0.45em', background: 'rgba(129,140,248,0.15)', color: '#818cf8', border: '1px solid rgba(129,140,248,0.3)', borderRadius: '0.3rem', letterSpacing: '0.05em' }}>
               ROTATED TO NEW BTC 5-MIN MARKET
             </span>
           )}
-          {!market && (
-            <span style={{ fontSize: '0.6rem', color: 'rgba(248,250,252,0.25)' }}>Loading…</span>
-          )}
+          {!market && <span style={{ fontSize: '0.6rem', color: 'rgba(248,250,252,0.25)' }}>Loading…</span>}
         </div>
       </div>
 
@@ -227,25 +264,25 @@ function ActiveMarketSection({ market }: { market: MarketStatus | null }) {
 
       {slug && (
         <>
-          {/* Market slug + link */}
+          {/* Market slug + Polymarket link (always backend-supplied URL) */}
           <div style={{ marginBottom: '0.35rem' }}>
-            <div style={{ fontSize: '0.62rem', color: 'rgba(248,250,252,0.3)', marginBottom: '0.15rem' }}>Market slug</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-              <span style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: '#f8fafc', wordBreak: 'break-all' }}>{slug}</span>
-              {pmUrl && (
+              <span style={{ fontFamily: 'monospace', fontSize: '0.65rem', color: isExpired ? 'rgba(248,250,252,0.4)' : '#f8fafc', wordBreak: 'break-all', flex: 1 }}>{slug}</span>
+              {/* Only show the link when market is NOT expired */}
+              {pmUrl && !isExpired && (
                 <a
                   href={pmUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
-                    fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em',
+                    fontSize: '0.62rem', fontWeight: 700,
                     color: '#818cf8', background: 'rgba(129,140,248,0.1)',
                     border: '1px solid rgba(129,140,248,0.3)',
-                    borderRadius: '0.35rem', padding: '0.15rem 0.55rem',
+                    borderRadius: '0.35rem', padding: '0.15rem 0.5rem',
                     textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
                   }}
-                  title={`Open ${slug} on Polymarket`}
+                  title={pmUrl}
                 >
                   OPEN ON POLYMARKET ↗
                 </a>
@@ -253,7 +290,7 @@ function ActiveMarketSection({ market }: { market: MarketStatus | null }) {
             </div>
           </div>
 
-          {/* Timing rows */}
+          {/* Timing + market data rows */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
               <span style={{ color: 'rgba(248,250,252,0.38)' }}>Market start</span>
@@ -265,7 +302,33 @@ function ActiveMarketSection({ market }: { market: MarketStatus | null }) {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
               <span style={{ color: 'rgba(248,250,252,0.38)' }}>Time remaining</span>
-              <span style={{ fontWeight: 600, color: (secsLeft ?? 0) < 30 ? '#fbbf24' : '#f8fafc' }}>{secsDisplay}</span>
+              <span style={{ fontWeight: 600, color: isExpired ? '#f87171' : (secsLeft ?? 0) < 30 ? '#fbbf24' : '#f8fafc' }}>{secsDisplay}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Price to Beat</span>
+              <span style={{ fontWeight: 600 }}>{fmtMaybeUsd(market?.price_to_beat, 0)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Reference price</span>
+              <span style={{ fontWeight: 600 }}>{fmtMaybeUsd(market?.reference_price, 0)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Leading side</span>
+              <span style={{ fontWeight: 600, color: market?.leading_side === 'UP' ? '#34d399' : market?.leading_side === 'DOWN' ? '#f87171' : 'rgba(248,250,252,0.55)' }}>
+                {market?.leading_side ?? '—'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>UP ask</span>
+              <span style={{ fontWeight: 600 }}>{fmtMaybeUsd(market?.up_ask)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>DOWN ask</span>
+              <span style={{ fontWeight: 600 }}>{fmtMaybeUsd(market?.down_ask)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Signal / last decision</span>
+              <span style={{ fontWeight: 600 }}>{market?.last_decision ?? market?.signal ?? '—'}</span>
             </div>
 
             {/* Token IDs */}
@@ -273,7 +336,7 @@ function ActiveMarketSection({ market }: { market: MarketStatus | null }) {
             <TokenRow label="DOWN token" tokenId={market?.down_token_id ?? null} />
 
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Market data updated</span>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Snapshot updated</span>
               <span style={{ fontWeight: 600 }}>{fmtLocal(market?.updated_at ?? null)}</span>
             </div>
           </div>
@@ -704,7 +767,7 @@ export default function Crypto5MinPanel() {
         fetch('/api/bot-settings?bot_id=btc_5m_ema', { cache: 'no-store' }),
         fetch('/api/btc-ema-metrics', { cache: 'no-store' }),
         fetch('/api/btc-5m-late', { cache: 'no-store' }),
-        fetch('/api/btc-5m-market', { cache: 'no-store' }),
+        fetch(`/api/btc-5m-market?ts=${Date.now()}`, { cache: 'no-store' }),
       ]);
       const settJson = await settRes.json() as { ok: boolean; settings?: BotSettings };
       const metJson  = await metRes.json()  as { ok: boolean; open_count?: number; open_exposure?: number; total_pnl?: number };
@@ -720,8 +783,8 @@ export default function Crypto5MinPanel() {
 
   useEffect(() => {
     loadData();
-    // 15s so time-remaining stays fresh (market rotates every 5 min)
-    const interval = setInterval(loadData, 15_000);
+    // 12s so time-remaining stays fresh and rotation is caught quickly
+    const interval = setInterval(loadData, 12_000);
     return () => clearInterval(interval);
   }, [loadData]);
 
