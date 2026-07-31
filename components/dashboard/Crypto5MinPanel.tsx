@@ -11,7 +11,7 @@
 // Does NOT execute trades. Does NOT call FastLoop.
 // Settings changes write to bot_settings via /api/bot-settings (POST).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -32,6 +32,23 @@ type LateSettings = {
   arm_live:         boolean;
   trade_size_usd:   number;
   paper_balance_usd: number;
+};
+
+type MarketStatus = {
+  ok:               boolean;
+  ready:            boolean;
+  market_slug:      string | null;
+  market_start:     string | null;
+  market_end:       string | null;
+  seconds_remaining: number | null;
+  up_token_id:      string | null;
+  down_token_id:    string | null;
+  updated_at:       string | null;
+  rotated_at:       string | null;
+  stale:            boolean;
+  expired:          boolean;
+  reason:           string;
+  error?:           string;
 };
 
 type Metrics = {
@@ -80,6 +97,192 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
   );
 }
 
+// ─── Active Market Section ─────────────────────────────────────────────────────
+
+function CopyIcon({ size = 10 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+    </svg>
+  );
+}
+
+function CheckIcon({ size = 10 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  );
+}
+
+function fmtLocal(iso: string | null): string {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+  catch { return iso; }
+}
+
+function shortToken(id: string | null): string {
+  if (!id || id.length < 12) return id ?? '—';
+  return `${id.slice(0, 6)}…${id.slice(-6)}`;
+}
+
+function TokenRow({ label, tokenId }: { label: string; tokenId: string | null }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    if (!tokenId) return;
+    navigator.clipboard.writeText(tokenId).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+      <span style={{ color: 'rgba(248,250,252,0.38)' }}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+        <span style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.68rem', color: tokenId ? '#f8fafc' : 'rgba(248,250,252,0.3)' }}>
+          {tokenId ? shortToken(tokenId) : 'Not cached yet'}
+        </span>
+        {tokenId && (
+          <button
+            onClick={handleCopy}
+            title={copied ? 'Copied!' : 'Copy full token ID'}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.1rem', color: copied ? '#34d399' : 'rgba(248,250,252,0.35)', lineHeight: 1 }}
+          >
+            {copied ? <CheckIcon /> : <CopyIcon />}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ActiveMarketSection({ market }: { market: MarketStatus | null }) {
+  const prevSlugRef = useRef<string | null>(null);
+  const [rotationFlash, setRotationFlash] = useState(false);
+
+  useEffect(() => {
+    if (!market?.market_slug) return;
+    if (prevSlugRef.current && prevSlugRef.current !== market.market_slug) {
+      setRotationFlash(true);
+      setTimeout(() => setRotationFlash(false), 4000);
+    }
+    prevSlugRef.current = market.market_slug;
+  }, [market?.market_slug]);
+
+  const slug   = market?.market_slug ?? null;
+  const pmUrl  = slug ? `https://polymarket.com/event/${encodeURIComponent(slug)}` : null;
+  const secsLeft = market?.seconds_remaining ?? null;
+  const secsDisplay = secsLeft != null
+    ? secsLeft > 0
+      ? `${secsLeft}s`
+      : '0s (expired)'
+    : '—';
+
+  return (
+    <div style={{
+      marginTop: '0.65rem',
+      padding: '0.6rem 0.75rem',
+      background: 'rgba(255,255,255,0.02)',
+      border: '1px solid rgba(255,255,255,0.06)',
+      borderRadius: '0.5rem',
+    }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.3rem' }}>
+        <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.4)' }}>
+          Active Market
+        </span>
+        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Status badge */}
+          {market?.stale && (
+            <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.1em 0.45em', background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)', borderRadius: '0.3rem', letterSpacing: '0.06em' }}>
+              STALE MARKET DATA
+            </span>
+          )}
+          {market?.expired && !market?.stale && (
+            <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.1em 0.45em', background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.3rem', letterSpacing: '0.06em' }}>
+              MARKET EXPIRED — WAITING FOR ROTATION
+            </span>
+          )}
+          {market?.ready && (
+            <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.1em 0.45em', background: 'rgba(52,211,153,0.1)', color: '#34d399', border: '1px solid rgba(52,211,153,0.25)', borderRadius: '0.3rem', letterSpacing: '0.06em' }}>
+              READY
+            </span>
+          )}
+          {rotationFlash && (
+            <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '0.1em 0.45em', background: 'rgba(129,140,248,0.15)', color: '#818cf8', border: '1px solid rgba(129,140,248,0.3)', borderRadius: '0.3rem', letterSpacing: '0.06em' }}>
+              ROTATED TO NEW BTC 5-MIN MARKET
+            </span>
+          )}
+          {!market && (
+            <span style={{ fontSize: '0.6rem', color: 'rgba(248,250,252,0.25)' }}>Loading…</span>
+          )}
+        </div>
+      </div>
+
+      {!slug && (
+        <div style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.3)', padding: '0.25rem 0' }}>
+          MARKET DATA NOT READY
+        </div>
+      )}
+
+      {slug && (
+        <>
+          {/* Market slug + link */}
+          <div style={{ marginBottom: '0.35rem' }}>
+            <div style={{ fontSize: '0.62rem', color: 'rgba(248,250,252,0.3)', marginBottom: '0.15rem' }}>Market slug</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <span style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: '#f8fafc', wordBreak: 'break-all' }}>{slug}</span>
+              {pmUrl && (
+                <a
+                  href={pmUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+                    fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em',
+                    color: '#818cf8', background: 'rgba(129,140,248,0.1)',
+                    border: '1px solid rgba(129,140,248,0.3)',
+                    borderRadius: '0.35rem', padding: '0.15rem 0.55rem',
+                    textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
+                  }}
+                  title={`Open ${slug} on Polymarket`}
+                >
+                  OPEN ON POLYMARKET ↗
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Timing rows */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Market start</span>
+              <span style={{ fontWeight: 600 }}>{fmtLocal(market?.market_start ?? null)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Market end</span>
+              <span style={{ fontWeight: 600 }}>{fmtLocal(market?.market_end ?? null)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Time remaining</span>
+              <span style={{ fontWeight: 600, color: (secsLeft ?? 0) < 30 ? '#fbbf24' : '#f8fafc' }}>{secsDisplay}</span>
+            </div>
+
+            {/* Token IDs */}
+            <TokenRow label="UP token"   tokenId={market?.up_token_id   ?? null} />
+            <TokenRow label="DOWN token" tokenId={market?.down_token_id ?? null} />
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.15rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <span style={{ color: 'rgba(248,250,252,0.38)' }}>Market data updated</span>
+              <span style={{ fontWeight: 600 }}>{fmtLocal(market?.updated_at ?? null)}</span>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── COMING SOON card ──────────────────────────────────────────────────────────
 
 function ComingSoonCard({ asset }: { asset: string }) {
@@ -114,6 +317,7 @@ function BtcCard({
   settings, metrics, saving, saveErr, saveOk,
   onSave, onToggleMode,
   lateSettings, onToggleLate, lateToggling, lateDone, lateErr,
+  marketStatus,
 }: {
   settings:       BotSettings | null;
   metrics:        Metrics | null;
@@ -127,6 +331,7 @@ function BtcCard({
   lateToggling:   boolean;
   lateDone:       'on' | 'off' | null;
   lateErr:        string | null;
+  marketStatus:   MarketStatus | null;
 }) {
   const ss = settings?.strategy_settings ?? {};
   const sig = signalLabel(ss.signal);
@@ -277,6 +482,7 @@ function BtcCard({
           {/* ── Left: live stats ── */}
           <div style={{ flex: '1 1 140px', minWidth: 120 }}>
             <Stat label="Market"          value={slug ? slug.slice(0, 30) : '—'} />
+            <ActiveMarketSection market={marketStatus} />
             <Stat label="Time remaining"  value="—" />
             <Stat label="Price to Beat"   value="—" />
             <Stat label="BTC ref price"   value={fmtNum(ss.last_close, 0) !== '—' ? `$${fmtNum(ss.last_close, 0)}` : '—'} />
@@ -445,6 +651,7 @@ export default function Crypto5MinPanel() {
   const [settings,      setSettings]      = useState<BotSettings | null>(null);
   const [metrics,       setMetrics]       = useState<Metrics | null>(null);
   const [lateSettings,  setLateSettings]  = useState<LateSettings | null>(null);
+  const [marketStatus,  setMarketStatus]  = useState<MarketStatus | null>(null);
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [saveErr,       setSaveErr]       = useState<string | null>(null);
@@ -456,24 +663,28 @@ export default function Crypto5MinPanel() {
 
   const loadData = useCallback(async () => {
     try {
-      const [settRes, metRes, lateRes] = await Promise.all([
+      const [settRes, metRes, lateRes, mktRes] = await Promise.all([
         fetch('/api/bot-settings?bot_id=btc_5m_ema', { cache: 'no-store' }),
         fetch('/api/btc-ema-metrics', { cache: 'no-store' }),
         fetch('/api/btc-5m-late', { cache: 'no-store' }),
+        fetch('/api/btc-5m-market', { cache: 'no-store' }),
       ]);
       const settJson = await settRes.json() as { ok: boolean; settings?: BotSettings };
       const metJson  = await metRes.json()  as { ok: boolean; open_count?: number; open_exposure?: number; total_pnl?: number };
       const lateJson = await lateRes.json() as { ok: boolean; settings?: LateSettings };
+      const mktJson  = await mktRes.json()  as MarketStatus;
       if (settJson.ok && settJson.settings) setSettings(settJson.settings);
       if (metJson.ok) setMetrics({ open_count: metJson.open_count ?? 0, open_exposure: metJson.open_exposure ?? 0, total_pnl: metJson.total_pnl ?? 0 });
       if (lateJson.ok && lateJson.settings) setLateSettings(lateJson.settings);
+      if (mktJson.ok !== false) setMarketStatus(mktJson);
     } catch {}
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 30_000);
+    // 15s so time-remaining stays fresh (market rotates every 5 min)
+    const interval = setInterval(loadData, 15_000);
     return () => clearInterval(interval);
   }, [loadData]);
 
@@ -556,7 +767,7 @@ export default function Crypto5MinPanel() {
         <div style={{ display: 'flex', gap: '0.75rem', padding: '1rem 1.25rem', flexWrap: 'wrap' }}>
           {cards.map((c) =>
             c === 'btc'
-              ? <BtcCard key="btc" settings={settings} metrics={metrics} saving={saving} saveErr={saveErr} saveOk={saveOk} onSave={handleSave} onToggleMode={handleToggleMode} lateSettings={lateSettings} onToggleLate={handleToggleLate} lateToggling={lateToggling} lateDone={lateDone} lateErr={lateErr} />
+              ? <BtcCard key="btc" settings={settings} metrics={metrics} saving={saving} saveErr={saveErr} saveOk={saveOk} onSave={handleSave} onToggleMode={handleToggleMode} lateSettings={lateSettings} onToggleLate={handleToggleLate} lateToggling={lateToggling} lateDone={lateDone} lateErr={lateErr} marketStatus={marketStatus} />
               : <ComingSoonCard key={c} asset={c.toUpperCase()} />
           )}
         </div>
