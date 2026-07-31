@@ -12,6 +12,7 @@
 // Settings changes write to bot_settings via /api/bot-settings (POST).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import BtcEquityChart, { type EquityPoint } from './BtcEquityChart';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -82,16 +83,17 @@ type Metrics = {
 // ─── Crypto/bots API types (btc_5m_late from paper_positions) ─────────────────
 
 type RecentTrade = {
-  id?:          string | null;
-  status?:      string | null;   // 'OPEN' | 'CLOSED'
-  start_ts?:    string | null;
-  closed_at?:   string | null;
-  slug?:        string | null;
-  side?:        string | null;   // already translated: 'UP' | 'DOWN'
-  size_usd?:    number | null;
-  entry_price?: number | null;
-  pnl_usd?:     number | null;
-  result?:      string | null;   // 'OPEN' | 'WIN' | 'LOSS' | 'PUSH'
+  id?:           string | null;
+  status?:       string | null;   // 'OPEN' | 'CLOSED'
+  start_ts?:     string | null;
+  closed_at?:    string | null;
+  slug?:         string | null;
+  side?:         string | null;   // already translated: 'UP' | 'DOWN'
+  size_usd?:     number | null;
+  entry_price?:  number | null;
+  pnl_usd?:      number | null;
+  result?:       string | null;   // 'OPEN' | 'WIN' | 'LOSS' | 'PUSH'
+  equity_after?: number | null;   // running equity after this closed trade
 };
 
 type LatestTrade = {
@@ -124,9 +126,18 @@ type LateStat = {
   trade_size_usd:    number;
   open_positions:    number;
   open_exposure_usd: number;
+  // BTC paper balance
+  starting_balance:  number;
+  realized_pnl:      number;
+  open_exposure:     number;
+  available_balance: number;
+  account_equity:    number;
+  // Stats
   stats:             BotStatSummary;
   latest_trade:      LatestTrade | null;
   recent_trades:     RecentTrade[];
+  equity_curve:      EquityPoint[];
+  legacy_ema_enabled?: boolean;
   // Legacy flat fields for compatibility
   total_trades:      number;
   total_closed:      number;
@@ -581,11 +592,12 @@ function BtcCard({
   const lateColor = lateOn ? '#818cf8' : 'rgba(248,250,252,0.35)';
   const lateText  = lateOn ? 'PAPER ON' : 'OFF';
 
-  // Test mode active detection: strategy_settings.test_mode=true AND trade_size_usd=0.10
+  // Test mode active: strategy_settings.test_mode or paper_test_mode is true
+  // NOTE: does NOT require trade_size_usd === 0.10 — size comes from bot_settings
   const testModeActive = Boolean(
     (lateSettings?.strategy_settings as Record<string, unknown> | undefined)?.test_mode
     || (lateSettings?.strategy_settings as Record<string, unknown> | undefined)?.paper_test_mode
-  ) && (lateSettings?.trade_size_usd ?? 0) === 0.10;
+  );
 
   // Test mode modal
   const [testModeModal, setTestModeModal] = useState(false);
@@ -707,6 +719,19 @@ function BtcCard({
 
       {!settings && (
         <div style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.3)', padding: '0.5rem 0' }}>Waiting for market data…</div>
+      )}
+
+      {/* ── Legacy EMA warning ──────────────────────────────────────────────── */}
+      {lateStat?.legacy_ema_enabled && (
+        <div style={{
+          marginBottom: '0.5rem', padding: '0.35rem 0.7rem',
+          background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)',
+          borderRadius: '0.4rem', fontSize: '0.68rem', color: '#fbbf24',
+          display: 'flex', alignItems: 'center', gap: '0.4rem',
+        }}>
+          <span>⚠</span>
+          <span>Legacy BTC EMA bot is also active — statistics shown are btc_5m_late only</span>
+        </div>
       )}
 
       {/* ── Bot Summary Banner ─────────────────────────────────────────────── */}
@@ -888,6 +913,48 @@ function BtcCard({
         </div>
       )}
 
+      {/* ── BTC Paper Balance Summary ─────────────────────────────────────── */}
+      {lateStat && (() => {
+        const pnlColor = lateStat.realized_pnl >= 0 ? '#34d399' : '#f87171';
+        const rows: [string, string, string?][] = [
+          ['Starting Balance', `$${lateStat.starting_balance.toFixed(2)}`],
+          ['Realized P/L',     `${lateStat.realized_pnl >= 0 ? '+' : ''}$${lateStat.realized_pnl.toFixed(2)}`, lateStat.realized_pnl !== 0 ? (lateStat.realized_pnl > 0 ? '#34d399' : '#f87171') : undefined],
+          ['Open Exposure',    `$${lateStat.open_exposure.toFixed(2)}`],
+          ['Available',        `$${lateStat.available_balance.toFixed(2)}`],
+          ['Account Equity',   `$${lateStat.account_equity.toFixed(2)}`, pnlColor],
+        ];
+        return (
+          <div style={{
+            marginTop: '0.65rem',
+            padding: '0.55rem 0.7rem',
+            background: 'rgba(255,255,255,0.025)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: '0.45rem',
+            fontSize: '0.7rem',
+          }}>
+            <div style={{ fontWeight: 700, fontSize: '0.65rem', letterSpacing: '0.05em', color: 'rgba(248,250,252,0.4)', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
+              BTC Paper Account
+            </div>
+            {rows.map(([label, val, color]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.1rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                <span style={{ color: 'rgba(248,250,252,0.4)' }}>{label}</span>
+                <span style={{ fontWeight: 600, color: color ?? 'rgba(248,250,252,0.85)', fontFamily: 'monospace' }}>{val}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* ── BTC Equity Chart ─────────────────────────────────────────────── */}
+      {lateStat && (
+        <div style={{ marginTop: '0.75rem' }}>
+          <BtcEquityChart
+            curve={lateStat.equity_curve ?? []}
+            startingBalance={lateStat.starting_balance}
+          />
+        </div>
+      )}
+
       {/* ── Latest BTC Trade ─────────────────────────────────────────────── */}
       {lateStat?.latest_trade && (() => {
         const lt = lateStat.latest_trade!;
@@ -934,9 +1001,9 @@ function BtcCard({
         );
       })()}
 
-      {/* ── Recent BTC Trades ─────────────────────────────────────────────── */}
+      {/* ── Recent BTC Trades (shown below equity chart) ───────────────────── */}
       {lateStat && lateStat.recent_trades.length > 0 && (() => {
-        const cols = ['Time', 'Market', 'Side', 'Size', 'Entry', 'Status', 'Result', 'P/L'];
+        const cols = ['Time', 'Market', 'Side', 'Size', 'Entry', 'Result', 'P/L', 'Equity'];
         return (
           <div style={{ marginTop: '0.75rem' }}>
             <div style={{
@@ -971,27 +1038,21 @@ function BtcCard({
                     const result = t.result ?? '—';
                     const resultColor = result === 'WIN' ? '#34d399' : result === 'LOSS' ? '#f87171' : result === 'OPEN' ? '#fbbf24' : 'rgba(248,250,252,0.45)';
                     const pnl = t.pnl_usd ?? null;
-                    const pnlStr = pnl != null && status !== 'OPEN' ? `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(4)}` : (status === 'OPEN' ? '—' : '—');
+                    const pnlStr = pnl != null && status !== 'OPEN' ? `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(4)}` : '—';
                     const pnlColor = pnl != null && pnl > 0 ? '#34d399' : pnl != null && pnl < 0 ? '#f87171' : 'rgba(248,250,252,0.4)';
                     const sizeStr = t.size_usd != null ? `$${Number(t.size_usd).toFixed(2)}` : '—';
                     const entryStr = t.entry_price != null ? `$${Number(t.entry_price).toFixed(3)}` : '—';
+                    const eqStr = t.equity_after != null ? `$${Number(t.equity_after).toFixed(2)}` : '—';
                     return (
                       <tr key={t.id ?? i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                         <td style={{ padding: '0.22rem 0.3rem', color: 'rgba(248,250,252,0.5)', whiteSpace: 'nowrap' }}>{timeStr}</td>
-                        <td style={{ padding: '0.22rem 0.3rem', color: 'rgba(248,250,252,0.55)', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.slug ?? ''}>{slugDisplay}</td>
+                        <td style={{ padding: '0.22rem 0.3rem', color: 'rgba(248,250,252,0.55)', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.slug ?? ''}>{slugDisplay}</td>
                         <td style={{ padding: '0.22rem 0.3rem', fontWeight: 700, color: sideColor }}>{side}</td>
                         <td style={{ padding: '0.22rem 0.3rem', color: 'rgba(248,250,252,0.6)' }}>{sizeStr}</td>
                         <td style={{ padding: '0.22rem 0.3rem', color: 'rgba(248,250,252,0.5)' }}>{entryStr}</td>
-                        <td style={{ padding: '0.22rem 0.3rem' }}>
-                          <span style={{
-                            fontSize: '0.59rem', fontWeight: 700, padding: '0.03rem 0.3rem',
-                            borderRadius: '0.22rem',
-                            background: status === 'OPEN' ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.05)',
-                            color: status === 'OPEN' ? '#fbbf24' : 'rgba(248,250,252,0.45)',
-                          }}>{status}</span>
-                        </td>
                         <td style={{ padding: '0.22rem 0.3rem', fontWeight: 700, color: resultColor }}>{result}</td>
                         <td style={{ padding: '0.22rem 0.3rem', fontWeight: 600, color: pnlColor, whiteSpace: 'nowrap' }}>{pnlStr}</td>
+                        <td style={{ padding: '0.22rem 0.3rem', color: 'rgba(248,250,252,0.4)', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '0.6rem' }}>{eqStr}</td>
                       </tr>
                     );
                   })}
@@ -1020,8 +1081,9 @@ function BtcCard({
                   }}>
                     <span style={{ color: 'rgba(248,250,252,0.4)' }}>{timeStr}</span>
                     <span style={{ fontWeight: 700, color: sideColor }}>{side}</span>
-                    <span style={{ color: 'rgba(248,250,252,0.5)' }}>{t.slug ?? '—'}</span>
+                    <span style={{ color: 'rgba(248,250,252,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.slug ?? '—'}</span>
                     <span style={{ fontWeight: 700, color: resultColor }}>{result} · <span style={{ color: pnlColor }}>{pnlStr}</span></span>
+                    {t.equity_after != null && <span style={{ color: 'rgba(248,250,252,0.3)', fontSize: '0.62rem', gridColumn: '1 / -1' }}>Equity: ${Number(t.equity_after).toFixed(2)}</span>}
                   </div>
                 );
               })}

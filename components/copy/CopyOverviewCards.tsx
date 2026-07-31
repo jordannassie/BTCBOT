@@ -170,12 +170,22 @@ type BtcOverviewStats = {
   today_pnl:     number;
 };
 
+type BtcBalance = {
+  starting_balance:  number;
+  realized_pnl:      number;
+  open_exposure:     number;
+  available_balance: number;
+  account_equity:    number;
+  trade_size_usd:    number;
+};
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export default function CopyOverviewCards() {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [btcStats, setBtcStats] = useState<BtcOverviewStats | null>(null);
+  const [btcStats,   setBtcStats]   = useState<BtcOverviewStats | null>(null);
+  const [btcBalance, setBtcBalance] = useState<BtcBalance | null>(null);
 
   const fetchSummary = useCallback(async () => {
     try {
@@ -190,12 +200,20 @@ export default function CopyOverviewCards() {
       } else {
         setError(payload.error ?? 'Failed to load summary');
       }
-      // Extract BTC stats from the first bot
+      // Extract BTC stats from the first bot (btc_5m_late only)
       try {
-        const cryptoJson = await cryptoBotsRes.json() as { ok: boolean; bots?: { stats?: BtcOverviewStats }[] };
+        const cryptoJson = await cryptoBotsRes.json() as { ok: boolean; bots?: (BtcBalance & { stats?: BtcOverviewStats })[] };
         if (cryptoJson.ok && cryptoJson.bots?.length) {
-          const s = cryptoJson.bots[0].stats;
-          if (s) setBtcStats(s);
+          const bot = cryptoJson.bots[0];
+          if (bot.stats) setBtcStats(bot.stats);
+          setBtcBalance({
+            starting_balance:  bot.starting_balance  ?? 0,
+            realized_pnl:      bot.realized_pnl      ?? 0,
+            open_exposure:     bot.open_exposure      ?? 0,
+            available_balance: bot.available_balance  ?? 0,
+            account_equity:    bot.account_equity     ?? 0,
+            trade_size_usd:    bot.trade_size_usd     ?? 0,
+          });
         }
       } catch { /* non-blocking */ }
     } catch {
@@ -459,34 +477,44 @@ export default function CopyOverviewCards() {
           </div>
         </div>
 
-        {/* ── BTC Performance — from /api/crypto/bots stats ── */}
+        {/* ── BTC Performance — from /api/crypto/bots (btc_5m_late only) ── */}
         <div className="copy-stat-card">
           <div className="copy-stat-header">
             <div className="copy-stat-icon"><IconActivity /></div>
-            <span className="copy-stat-label">BTC Performance</span>
+            <span className="copy-stat-label">BTC 5-Min Performance</span>
           </div>
           <div className="copy-stat-value" style={{
-            color: btcStats && btcStats.all_time_pnl !== 0
-              ? (btcStats.all_time_pnl > 0 ? '#34d399' : '#f87171')
+            color: btcBalance && btcBalance.realized_pnl !== 0
+              ? (btcBalance.realized_pnl > 0 ? '#34d399' : '#f87171')
               : 'rgba(248,250,252,0.35)',
-            fontSize: '1.25rem',
+            fontSize: '1.1rem',
           }}>
-            {btcStats
-              ? `${btcStats.all_time_pnl >= 0 ? '+' : ''}$${btcStats.all_time_pnl.toFixed(2)}`
+            {btcBalance
+              ? `${btcBalance.account_equity >= 0 ? '' : ''}$${btcBalance.account_equity.toFixed(2)}`
               : '—'}
           </div>
           <div className="copy-stat-helper">
-            {btcStats ? (<>
+            {btcStats && btcBalance ? (<>
               <span className="copy-stat-badge copy-stat-badge-paper">BTC 5-Min</span>
-              {' '}All-Time P/L
-              <span style={{ display: 'block', marginTop: '0.25rem', lineHeight: 1.6 }}>
-                Today: {btcStats.trades_today} · Total: {btcStats.total_trades}<br />
-                Open: {btcStats.open_trades} · Closed: {btcStats.closed_trades}<br />
+              {' '}Account Equity
+              <span style={{ display: 'block', marginTop: '0.25rem', lineHeight: 1.7, fontSize: '0.68rem' }}>
+                Start: ${btcBalance.starting_balance.toFixed(2)}&nbsp;·&nbsp;
+                P/L:{' '}
+                <span style={{ color: btcBalance.realized_pnl > 0 ? '#34d399' : btcBalance.realized_pnl < 0 ? '#f87171' : 'inherit', fontWeight: 600 }}>
+                  {btcBalance.realized_pnl >= 0 ? '+' : ''}${btcBalance.realized_pnl.toFixed(2)}
+                </span>
+                <br />
+                Exposure: ${btcBalance.open_exposure.toFixed(2)}&nbsp;·&nbsp;
+                Avail: ${btcBalance.available_balance.toFixed(2)}<br />
+                Total: {btcStats.total_trades}&nbsp;·&nbsp;
+                Open: {btcStats.open_trades}&nbsp;·&nbsp;
+                Closed: {btcStats.closed_trades}<br />
                 {btcStats.wins > 0 || btcStats.losses > 0 ? (
-                  <>W/L: {btcStats.wins}/{btcStats.losses} · {(btcStats.win_rate * 100).toFixed(0)}% win rate</>
-                ) : (
-                  <>W/L: 0/0</>
-                )}
+                  <>
+                    W/L: {btcStats.wins}/{btcStats.losses}&nbsp;·&nbsp;
+                    {(btcStats.win_rate * 100).toFixed(0)}% win rate
+                  </>
+                ) : 'No closed trades yet'}
               </span>
             </>) : 'Loading…'}
           </div>
