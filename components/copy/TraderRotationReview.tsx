@@ -123,7 +123,14 @@ export default function TraderRotationReview() {
   const [error,   setError]   = useState<string | null>(null);
   const [summary, setSummary] = useState<RotationSummary | null>(null);
   const [filter,  setFilter]  = useState<RotationFilter>('all');
-  const [isOpen,  setIsOpen]  = useState(true);
+  const [isOpen,        setIsOpen]        = useState(true);
+  // FastLoop snapshot metadata
+  const [stale,         setStale]         = useState(false);
+  const [source,        setSource]        = useState<string | null>(null);
+  const [generatedAt,   setGeneratedAt]   = useState<string | null>(null);
+  const [version,       setVersion]       = useState<number | null>(null);
+  const [noSnapshot,    setNoSnapshot]    = useState(false);
+  const [noSnapshotMsg, setNoSnapshotMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -131,8 +138,14 @@ export default function TraderRotationReview() {
       const res     = await fetch('/api/copy/rotation-review', { cache: 'no-store' });
       const payload = await res.json();
       if (payload.ok) {
-        setRows(payload.rows    ?? []);
-        setSummary(payload.summary ?? null);
+        setRows(payload.rows        ?? []);
+        setSummary(payload.summary  ?? null);
+        setStale(payload.stale      ?? false);
+        setSource(payload.source    ?? null);
+        setGeneratedAt(payload.generated_at ?? null);
+        setVersion(payload.version  ?? null);
+        setNoSnapshot(payload.no_snapshot   ?? false);
+        setNoSnapshotMsg(payload.message    ?? null);
       } else {
         setError(payload.error ?? 'Failed to load rotation review');
       }
@@ -206,6 +219,30 @@ export default function TraderRotationReview() {
       {isOpen && (
         <div>
 
+          {/* ── Stale warning ── */}
+          {!loading && stale && (
+            <div style={{ margin: '0 1.5rem 0.6rem', padding: '0.5rem 0.85rem', background: 'rgba(234,179,8,0.07)', border: '1px solid rgba(234,179,8,0.25)', borderRadius: '0.5rem', fontSize: '0.75rem', color: '#fbbf24' }}>
+              ⚠ This rotation review is more than 12 hours old. Wait for FastLoop to refresh before making changes.
+            </div>
+          )}
+
+          {/* ── FastLoop source status line ── */}
+          {!loading && generatedAt && (
+            <div style={{ padding: '0 1.5rem 0.55rem', display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', fontSize: '0.68rem', color: 'rgba(248,250,252,0.35)' }}>
+              <span>Generated: {fmtRelative(generatedAt)}</span>
+              <span style={{ width: 1, height: 10, background: 'rgba(255,255,255,0.1)', display: 'inline-block' }} />
+              <span>Source: <span style={{ color: '#818cf8', fontWeight: 700 }}>{source ?? 'FASTLOOP'}</span></span>
+              <span style={{ width: 1, height: 10, background: 'rgba(255,255,255,0.1)', display: 'inline-block' }} />
+              <span>Status: <span style={{ color: stale ? '#fbbf24' : '#34d399', fontWeight: 700 }}>{stale ? 'STALE' : 'FRESH'}</span></span>
+              {version != null && (
+                <>
+                  <span style={{ width: 1, height: 10, background: 'rgba(255,255,255,0.1)', display: 'inline-block' }} />
+                  <span style={{ color: 'rgba(248,250,252,0.2)' }}>v{version}</span>
+                </>
+              )}
+            </div>
+          )}
+
           {/* ── Summary cards ── */}
           {!loading && summary && (
             <div style={{ display: 'flex', gap: '0.55rem', padding: '0 1.5rem 0.7rem', flexWrap: 'wrap' }}>
@@ -270,7 +307,9 @@ export default function TraderRotationReview() {
             </div>
           ) : rows.length === 0 ? (
             <div style={{ padding: '1rem 1.5rem', fontSize: '0.78rem', color: 'rgba(248,250,252,0.35)' }}>
-              No rotation recommendations yet. Add tracked wallets and refresh to generate suggestions.
+              {noSnapshot
+                ? (noSnapshotMsg ?? 'FastLoop has not published a rotation review yet.')
+                : 'No rotation recommendations available in the current snapshot.'}
             </div>
           ) : filteredRows.length === 0 ? (
             <div style={{ padding: '0.75rem 1.5rem', fontSize: '0.75rem', color: 'rgba(248,250,252,0.3)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
