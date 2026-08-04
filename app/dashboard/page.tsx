@@ -15,9 +15,10 @@ import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { SHOW_COPY_UI } from '@/lib/features';
 
-import LiveCard         from '@/components/dashboard/LiveCard';
-import CryptoPaperCard  from '@/components/dashboard/CryptoPaperCard';
-import CryptoKPIStrip   from '@/components/dashboard/CryptoKPIStrip';
+import LiveCard              from '@/components/dashboard/LiveCard';
+import CryptoPaperCard       from '@/components/dashboard/CryptoPaperCard';
+import CryptoKPIStrip        from '@/components/dashboard/CryptoKPIStrip';
+import CryptoControlCenter   from '@/components/dashboard/CryptoControlCenter';
 
 const Crypto5MinPanel = dynamic(() => import('@/components/dashboard/Crypto5MinPanel'), { ssr: false });
 
@@ -87,6 +88,9 @@ export default function CryptoDashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Sticky control center — above KPI strip ── */}
+      <CryptoControlCenter />
 
       {/* ── KPI strip ── */}
       <CryptoKPIStrip />

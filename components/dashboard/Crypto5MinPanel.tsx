@@ -1369,7 +1369,13 @@ export default function Crypto5MinPanel() {
     loadData();
     // 5s poll so btc_5m_late.is_enabled is always fresh (never stale OFF after worker enables)
     const interval = setInterval(loadData, 5_000);
-    return () => clearInterval(interval);
+    // Immediate re-fetch when control center or another source changes bot state
+    const onBotChange = () => loadData();
+    window.addEventListener('crypto:bot-state-changed', onBotChange);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('crypto:bot-state-changed', onBotChange);
+    };
   }, [loadData]);
 
   const handleSave = async (fields: Record<string, unknown>) => {
@@ -1406,6 +1412,8 @@ export default function Crypto5MinPanel() {
         setLateSettings(payload.settings);
         setLateDone(enabled ? 'on' : 'off');
         setTimeout(() => setLateDone(null), 4000);
+        // Notify control center and other listeners of the state change
+        window.dispatchEvent(new CustomEvent('crypto:bot-state-changed'));
       } else {
         setLateErr(payload.error ?? 'Toggle failed');
       }

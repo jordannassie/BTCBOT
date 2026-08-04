@@ -2139,3 +2139,34 @@
     gap: 0.75rem;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CRYPTO CONTROL CENTER — sticky top control bar
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Bleed the bar to full page width (overrides .crypto-page padding) */
+.crypto-cc-bar {
+  /* base styles set inline; overrides happen in media queries */
+}
+
+@media (max-width: 1024px) {
+  .crypto-cc-bar {
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .crypto-cc-bar {
+    /* Bot toggles wrap to a 2×2 grid on mobile */
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    margin-left: -1rem !important;
+    margin-right: -1rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .crypto-cc-bar {
+    gap: 0.4rem;
+  }
+}

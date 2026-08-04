@@ -161,7 +161,13 @@ export default function CryptoAssetPaperCard({ asset, allBotStats }: {
     } catch {}
   }, [botId]);
 
-  useEffect(() => { loadSettings(); }, [loadSettings]);
+  useEffect(() => {
+    loadSettings();
+    // Re-fetch when control center changes this bot's state
+    const onBotChange = () => loadSettings();
+    window.addEventListener('crypto:bot-state-changed', onBotChange);
+    return () => window.removeEventListener('crypto:bot-state-changed', onBotChange);
+  }, [loadSettings]);
 
   useEffect(() => {
     if (settings?.trade_size_usd != null) setTradeSize(String(settings.trade_size_usd));
@@ -180,6 +186,8 @@ export default function CryptoAssetPaperCard({ asset, allBotStats }: {
         setSettings(json.settings);
         setToggleDone(enable ? 'on' : 'off');
         setTimeout(() => setToggleDone(null), 4000);
+        // Notify control center so its toggles stay in sync
+        window.dispatchEvent(new CustomEvent('crypto:bot-state-changed'));
       } else {
         setToggleErr(json.error ?? 'Toggle failed');
       }
