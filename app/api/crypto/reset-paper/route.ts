@@ -5,19 +5,29 @@
 //
 // !! DESTRUCTIVE — deletes paper_positions + PAPER bot_trades for crypto bots !!
 //
+// Request body (optional — defaults to 1000 if omitted):
+//   { "starting_balance_usd": 1000.00 }
+//   - must be numeric
+//   - must be > 0
+//   - must be ≤ 1,000,000
+//   - stored/returned rounded to 2 decimal places
+//   Returns HTTP 400 with { ok: false, error: "..." } for invalid values.
+//
 // Reset steps (in order):
-//   1.  Read before-state (positions count, current balance, per-bot stats)
-//   2.  DELETE paper_positions WHERE bot_id IN (CRYPTO_BOT_IDS)
-//   3.  DELETE bot_trades WHERE bot_id IN (CRYPTO_BOT_IDS) AND status = 'PAPER_CLOSED'
-//   4.  UPSERT bot_settings row bot_id = 'crypto_paper':
-//         paper_balance_usd = RESET_BALANCE, paper_pnl_usd = 0
-//   5.  UPDATE per-bot bot_settings rows: paper_pnl_usd = 0, paper_balance_usd = 0
+//   1.  Parse + validate starting_balance_usd from request body
+//   2.  Read before-state (positions count, current balance, per-bot stats)
+//   3.  DELETE paper_positions WHERE bot_id IN (CRYPTO_BOT_IDS)
+//   4.  DELETE bot_trades WHERE bot_id IN (CRYPTO_BOT_IDS) AND status = 'PAPER_CLOSED'
+//   5.  UPSERT bot_settings row bot_id = 'crypto_paper':
+//         paper_balance_usd = resetBalance, paper_pnl_usd = 0
+//   6.  UPDATE per-bot bot_settings rows: paper_pnl_usd = 0, paper_balance_usd = 0
 //       (balance lives in crypto_paper; per-bot rows are cleared for consistency)
-//   6.  Read after-state and return confirmation
+//   7.  Merge paper_start = resetBalance into each bot's strategy_settings
+//   8.  Read after-state and return confirmation
 //
 // PRESERVED (never touched):
 //   - is_enabled, mode, arm_live, trade_size_usd on all rows
-//   - strategy_settings on all rows
+//   - strategy_settings on all rows (except paper_start key above)
 //   - Live positions, LIVE bankroll, wallet credentials
 //   - Copy trading data (copied_positions, copy_bots etc.)
 //   - Any bot_id NOT in CRYPTO_BOT_IDS
@@ -30,8 +40,11 @@ export const revalidate = 0;
 
 const NO_CACHE = { 'Cache-Control': 'no-store, max-age=0' };
 
-/** Shared paper starting balance after reset */
-const RESET_BALANCE = 1000;
+/** Fallback starting balance when no body is provided */
+const DEFAULT_RESET_BALANCE = 1000;
+
+/** Maximum allowed reset balance */
+const MAX_RESET_BALANCE = 1_000_000;
 
 /** Shared account bot_id — holds paper_balance_usd and paper_pnl_usd for all crypto bots */
 const SHARED_ACCOUNT_ID = 'crypto_paper';
@@ -65,12 +78,55 @@ async function countPositions(client: ReturnType<typeof getServiceClient>, botId
 
 // ─── POST ─────────────────────────────────────────────────────────────────────
 
-export async function POST() {
+export async function POST(request: Request) {
   const client = getServiceClient();
   if (!client) {
     return NextResponse.json(
       { ok: false, error: 'Supabase service client unavailable' },
       { status: 500, headers: NO_CACHE }
+    );
+  }
+
+  // ── 0. Parse + validate request body ─────────────────────────────────────
+  let resetBalance = DEFAULT_RESET_BALANCE;
+
+  try {
+    const text = await request.text();
+    if (text.trim()) {
+      const body = JSON.parse(text) as Record<string, unknown>;
+      const raw  = body?.starting_balance_usd;
+
+      if (raw !== undefined) {
+        // Must be a finite number (rejects strings, booleans, null, objects, arrays)
+        if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+          return NextResponse.json(
+            { ok: false, error: 'starting_balance_usd must be a numeric value.' },
+            { status: 400, headers: NO_CACHE }
+          );
+        }
+        if (raw <= 0) {
+          return NextResponse.json(
+            { ok: false, error: 'starting_balance_usd must be greater than 0.' },
+            { status: 400, headers: NO_CACHE }
+          );
+        }
+        if (raw > MAX_RESET_BALANCE) {
+          return NextResponse.json(
+            {
+              ok:    false,
+              error: `starting_balance_usd must not exceed ${MAX_RESET_BALANCE.toLocaleString()}.`,
+            },
+            { status: 400, headers: NO_CACHE }
+          );
+        }
+        // Round to 2 decimal places
+        resetBalance = Math.round(raw * 100) / 100;
+      }
+    }
+  } catch {
+    return NextResponse.json(
+      { ok: false, error: 'Request body must be valid JSON (or empty).' },
+      { status: 400, headers: NO_CACHE }
     );
   }
 
@@ -152,7 +208,7 @@ export async function POST() {
           mode:              'PAPER',
           arm_live:          false,
           trade_size_usd:    0,
-          paper_balance_usd: RESET_BALANCE,
+          paper_balance_usd: resetBalance,
           paper_pnl_usd:     0,
           updated_at:        new Date().toISOString(),
         },
@@ -188,7 +244,7 @@ export async function POST() {
         .maybeSingle();
 
       const existing = (botRow?.strategy_settings as Record<string, unknown> | null) ?? {};
-      const updated  = { ...existing, paper_start: RESET_BALANCE };
+      const updated  = { ...existing, paper_start: resetBalance };
 
       await client
         .from('bot_settings')
@@ -218,7 +274,7 @@ export async function POST() {
     );
 
     // Verification
-    const balanceCorrect  = afterShared?.paper_balance_usd === RESET_BALANCE;
+    const balanceCorrect  = afterShared?.paper_balance_usd === resetBalance;
     const pnlCorrect      = afterShared?.paper_pnl_usd     === 0;
     const positionsCleared = afterOpenPositions === 0;
 
@@ -232,11 +288,11 @@ export async function POST() {
     return NextResponse.json(
       {
         ok:                   true,
-        message:              `Shared Crypto PAPER account reset to $${RESET_BALANCE.toLocaleString()}.`,
+        message:              `Shared Crypto PAPER account reset to $${resetBalance.toLocaleString()}.`,
         account:              SHARED_ACCOUNT_ID,
-        starting_balance:     RESET_BALANCE,
-        available_balance:    RESET_BALANCE,
-        account_equity:       RESET_BALANCE,
+        starting_balance:     resetBalance,
+        available_balance:    resetBalance,
+        account_equity:       resetBalance,
         realized_pnl:         0,
         open_exposure:        0,
         open_positions:       0,
