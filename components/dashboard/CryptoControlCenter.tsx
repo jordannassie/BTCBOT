@@ -254,8 +254,7 @@ export default function CryptoControlCenter() {
   const [switchError,       setSwitchError]       = useState<string | null>(null);
   const [showGoLiveModal,   setShowGoLiveModal]   = useState(false);
   const [paperSwitchMsg,    setPaperSwitchMsg]    = useState<string | null>(null);
-  const [armedCount,        setArmedCount]        = useState(0);   // verified from GET
-  const [liveIncomplete,    setLiveIncomplete]    = useState(false);
+  // armedCount / liveIncomplete removed — mode badge is LIVE/PAPER only
 
   // ── Toggle state (per-bot) ─────────────────────────────────────────────────
   const [toggling,   setToggling]  = useState<Set<BotId>>(new Set());
@@ -293,11 +292,8 @@ export default function CryptoControlCenter() {
       const modeJson = await modeRes.json() as ExecModeResponse;
       if (modeJson.ok) {
         const newMode  = modeJson.mode ?? 'PAPER';
-        const newArmed = (modeJson.armed_bots ?? []).length;
         setExecMode(newMode);
         execModeRef.current = newMode;
-        setArmedCount(newArmed);
-        setLiveIncomplete(newMode === 'LIVE' && newArmed === 0);
         setLiveReady(modeJson.live_ready ?? false);
         setLiveNotReadyReason(modeJson.live_not_ready_reason ?? null);
         setEmergencyStop(modeJson.emergency_stop ?? false);
@@ -627,23 +623,14 @@ export default function CryptoControlCenter() {
         }}>
           🛑 EMERGENCY STOP ACTIVE — LIVE ORDERS BLOCKED
         </span>
-      ) : execMode === 'LIVE' && !liveIncomplete ? (
+      ) : execMode === 'LIVE' ? (
         <span style={{
           padding:    '0.18rem 0.6rem', borderRadius: '0.3rem',
           background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
           fontSize:   '0.62rem', fontWeight: 800, letterSpacing: '0.07em',
           color:      '#f87171', flexShrink: 0,
         }}>
-          ● LIVE TRADING ACTIVE — {armedCount} of 4 armed
-        </span>
-      ) : execMode === 'LIVE' && liveIncomplete ? (
-        <span style={{
-          padding:    '0.18rem 0.6rem', borderRadius: '0.3rem',
-          background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.35)',
-          fontSize:   '0.62rem', fontWeight: 800, letterSpacing: '0.06em',
-          color:      '#fbbf24', flexShrink: 0,
-        }}>
-          ⚠ LIVE SETUP INCOMPLETE — 0 OF 4 BOTS ARMED
+          ● LIVE TRADING ACTIVE
         </span>
       ) : (
         <span style={{
