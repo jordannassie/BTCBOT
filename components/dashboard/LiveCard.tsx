@@ -450,10 +450,10 @@ export default function LiveCard() {
         {/* Avatar — upper right, prominent but not layout-breaking */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/guy2.png"
+          src="https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/object/public/Storage/image/Guy%203.png"
           alt="Profile"
           style={{
-            width:        80, height: 80,
+            width:        160, height: 160,
             borderRadius: '50%', objectFit: 'cover', flexShrink: 0,
             border:       '2px solid rgba(52,211,153,0.25)',
             boxShadow:    '0 0 0 4px rgba(52,211,153,0.06), 0 3px 14px rgba(0,0,0,0.5)',
