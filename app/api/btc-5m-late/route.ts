@@ -90,20 +90,30 @@ export async function POST(request: Request) {
   try { body = await request.json(); }
   catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400, headers: NO_CACHE }); }
 
-  // is_enabled is required
-  const rawEnabled = body.is_enabled;
-  if (rawEnabled !== true && rawEnabled !== false) {
+  // is_enabled — optional. Validated only when present.
+  const hasIsEnabled = 'is_enabled' in body;
+  if (hasIsEnabled && body.is_enabled !== true && body.is_enabled !== false) {
     return NextResponse.json(
       { ok: false, error: 'is_enabled must be a boolean' },
       { status: 400, headers: NO_CACHE }
     );
   }
-  const isEnabled = rawEnabled as boolean;
+  const isEnabled = hasIsEnabled ? (body.is_enabled as boolean) : null;
 
   // test_mode — optional boolean; forces trade_size_usd=0.10 when true
   const testMode = body.test_mode === true;
 
-  // trade_size_usd — optional override; ignored in test_mode (always 0.10)
+  // trade_size_usd — optional. Validated only when present.
+  const hasSizeField = 'trade_size_usd' in body;
+  if (hasSizeField) {
+    const checkSize = Number(body.trade_size_usd);
+    if (!Number.isFinite(checkSize) || checkSize <= 0) {
+      return NextResponse.json(
+        { ok: false, error: 'trade_size_usd must be a positive number' },
+        { status: 400, headers: NO_CACHE }
+      );
+    }
+  }
   const rawSize = body.trade_size_usd;
   const tradeSizeOverride = testMode
     ? 0.10
@@ -129,16 +139,19 @@ export async function POST(request: Request) {
       strategySettings = { ...strategySettings, test_mode: true, paper_test_mode: true };
     }
 
-    // Upsert: always force mode=PAPER, arm_live=false; only accepted fields from client
+    // Upsert: always force mode=PAPER, arm_live=false; only write fields that were sent
     const upsertPayload: Record<string, unknown> = {
       ...(existing ?? SAFE_DEFAULTS),  // preserve everything else
       bot_id:            BOT_ID,        // locked
       mode:              'PAPER',       // forced
       arm_live:          false,         // forced
-      is_enabled:        isEnabled,     // client-supplied
       strategy_settings: strategySettings,
       updated_at:        now,
     };
+    // Only overwrite is_enabled when it was explicitly supplied in the request
+    if (isEnabled !== null) {
+      upsertPayload.is_enabled = isEnabled;
+    }
     if (tradeSizeOverride !== null) {
       upsertPayload.trade_size_usd = tradeSizeOverride;
     }
@@ -154,7 +167,7 @@ export async function POST(request: Request) {
     }
 
     console.info(
-      `BTC_5M_LATE_TOGGLE is_enabled=${isEnabled} mode=PAPER arm_live=false ` +
+      `BTC_5M_LATE is_enabled=${isEnabled ?? 'unchanged'} mode=PAPER arm_live=false ` +
       `test_mode=${testMode} trade_size_usd=${tradeSizeOverride ?? 'unchanged'} ts=${now}`
     );
 

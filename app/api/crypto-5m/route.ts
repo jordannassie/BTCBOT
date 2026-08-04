@@ -112,15 +112,26 @@ export async function POST(request: Request) {
     );
   }
 
-  const rawEnabled = body.is_enabled;
-  if (rawEnabled !== true && rawEnabled !== false) {
+  // is_enabled — optional. Validated only when present in the body.
+  const hasIsEnabled = 'is_enabled' in body;
+  if (hasIsEnabled && body.is_enabled !== true && body.is_enabled !== false) {
     return NextResponse.json(
       { ok: false, error: 'is_enabled must be a boolean' },
       { status: 400, headers: NO_CACHE }
     );
   }
-  const isEnabled = rawEnabled as boolean;
+  const isEnabled = hasIsEnabled ? (body.is_enabled as boolean) : null;
 
+  // trade_size_usd — optional. Validated only when present.
+  if ('trade_size_usd' in body) {
+    const checkSize = Number(body.trade_size_usd);
+    if (!Number.isFinite(checkSize) || checkSize <= 0) {
+      return NextResponse.json(
+        { ok: false, error: 'trade_size_usd must be a positive number' },
+        { status: 400, headers: NO_CACHE }
+      );
+    }
+  }
   const rawSize = body.trade_size_usd;
   const tradeSizeOverride = (typeof rawSize === 'number' && rawSize > 0) ? rawSize : null;
 
@@ -138,9 +149,12 @@ export async function POST(request: Request) {
       bot_id:    botId,
       mode:      'PAPER',   // forced
       arm_live:  false,     // forced
-      is_enabled: isEnabled,
       updated_at: now,
     };
+    // Only overwrite is_enabled when explicitly supplied
+    if (isEnabled !== null) {
+      upsertPayload.is_enabled = isEnabled;
+    }
     if (tradeSizeOverride !== null) {
       upsertPayload.trade_size_usd = tradeSizeOverride;
     }
@@ -156,7 +170,7 @@ export async function POST(request: Request) {
     }
 
     console.info(
-      `CRYPTO5M_TOGGLE bot_id=${botId} is_enabled=${isEnabled} mode=PAPER ` +
+      `CRYPTO5M bot_id=${botId} is_enabled=${isEnabled ?? 'unchanged'} mode=PAPER ` +
       `trade_size_usd=${tradeSizeOverride ?? 'unchanged'} ts=${now}`
     );
 
