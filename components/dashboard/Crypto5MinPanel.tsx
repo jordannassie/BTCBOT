@@ -1016,7 +1016,7 @@ function BtcCard({
                 alt="BTC" onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid rgba(251,146,60,0.45)', flexShrink: 0 }}
               />
-              BTC Paper Account
+              Shared Paper Account
             </div>
             {rows.map(([label, val, color]) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.1rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>

@@ -117,8 +117,8 @@ export async function GET() {
   const fetchedAt  = new Date().toISOString();
 
   try {
-    const [settingsRes, emaSettingsRes, statsRes, detailRes] = await Promise.all([
-      // btc_5m_late bot settings (trade_size_usd, is_enabled, strategy_settings)
+    const [settingsRes, emaSettingsRes, statsRes, detailRes, sharedAccountRes] = await Promise.all([
+      // per-bot settings (trade_size_usd, is_enabled, strategy_settings)
       client
         .from('bot_settings')
         .select('bot_id, is_enabled, mode, arm_live, trade_size_usd, paper_balance_usd, strategy_settings, updated_at')
@@ -149,6 +149,13 @@ export async function GET() {
         .in('bot_id', SUPPORTED_BOT_IDS)
         .order('market_slug', { ascending: false })
         .limit(RECENT_LIMIT),
+
+      // Shared crypto paper account balance (single row for all 4 bots)
+      client
+        .from('bot_settings')
+        .select('paper_balance_usd, paper_pnl_usd')
+        .eq('bot_id', 'crypto_paper')
+        .maybeSingle(),
     ]);
 
     type SettingsRow = {
@@ -174,6 +181,12 @@ export async function GET() {
       console.error('[crypto/bots] detailRes error:', detailRes.error.message);
     }
 
+    // Shared crypto paper account balance (all 4 bots debit this row)
+    type SharedAccountRow = { paper_balance_usd: number; paper_pnl_usd: number } | null;
+    const sharedAccount = (sharedAccountRes.data ?? null) as SharedAccountRow;
+    const sharedBalance = Number(sharedAccount?.paper_balance_usd ?? 1000);
+    const sharedPnl     = Number(sharedAccount?.paper_pnl_usd     ?? 0);
+
     const statRows   = (statsRes.data  ?? []) as StatRow[];
     const detailRows = (detailRes.data ?? []) as DetailRow[];
 
@@ -181,15 +194,16 @@ export async function GET() {
       const settings = settingsRows.find((r) => r.bot_id === botId);
 
       // ── Starting balance ───────────────────────────────────────────────────
-      // Use strategy_settings.btc_paper_start if saved, else BTC_PAPER_START_DEFAULT.
-      // Never use paper_balance_usd (FastLoop mutates it as P/L flows).
+      // All crypto bots share one bankroll in the crypto_paper row.
+      // Starting balance = paper_start from per-bot strategy_settings, or the
+      // shared balance, or the default $1000.
       const startingBalance: number =
         Number(
           (settings?.strategy_settings as Record<string, unknown> | null)
-            ?.btc_paper_start ?? PAPER_START_DEFAULTS[botId] ?? BTC_PAPER_START_DEFAULT
+            ?.paper_start ?? sharedBalance ?? PAPER_START_DEFAULTS[botId] ?? BTC_PAPER_START_DEFAULT
         ) || (PAPER_START_DEFAULTS[botId] ?? BTC_PAPER_START_DEFAULT);
 
-      // ── Aggregate stats (from safe stats query) ────────────────────────────
+      // ── Per-bot aggregate stats (from paper_positions for this bot only) ──
       const forBot = statRows.filter((r) => r.bot_id === botId);
 
       let openCount      = 0;
@@ -231,8 +245,10 @@ export async function GET() {
       const winLossDenom  = wins + losses;
       const winRate       = winLossDenom > 0 ? parseFloat((wins / winLossDenom).toFixed(4)) : 0;
       const totalTrades   = forBot.length;
-      const accountEquity = startingBalance + realizedPnl;
-      const availBalance  = accountEquity - openExposure;
+      // Balance/equity comes from the SHARED account (all bots combined).
+      // Per-bot card shows the shared balance since they all share one bankroll.
+      const accountEquity = startingBalance + sharedPnl;
+      const availBalance  = accountEquity - openExposure;  // per-bot exposure subtracted
 
       // ── Equity curve (from stats rows sorted ASC by market_slug) ──────────
       // statRows are already sorted ASC (market_slug contains Unix ts → chronological)
@@ -315,14 +331,15 @@ export async function GET() {
         trade_size_usd:    settings?.trade_size_usd ?? 0,
         strategy_settings: settings?.strategy_settings ?? {},
 
-        // ── Balance summary ────────────────────────────────────────────────
+        // ── Shared account balance (all 4 bots share one bankroll) ─────────
+        // realized_pnl and balance come from the crypto_paper shared row.
         starting_balance:  parseFloat(startingBalance.toFixed(2)),
-        realized_pnl:      parseFloat(realizedPnl.toFixed(4)),
-        open_exposure:     parseFloat(openExposure.toFixed(4)),
+        realized_pnl:      parseFloat(sharedPnl.toFixed(4)),   // shared
+        open_exposure:     parseFloat(openExposure.toFixed(4)), // per-bot
         available_balance: parseFloat(availBalance.toFixed(4)),
         account_equity:    parseFloat(accountEquity.toFixed(4)),
 
-        // ── Stats (primary nested object) ──────────────────────────────────
+        // ── Per-bot stats (separately queryable) ──────────────────────────
         stats: {
           total_trades:        totalTrades,
           trades_today:        todayCount,
@@ -335,7 +352,7 @@ export async function GET() {
           open_exposure_usd:   parseFloat(openExposure.toFixed(4)),
           total_amount_traded: parseFloat(totalAmtTraded.toFixed(4)),
           today_pnl:           parseFloat(todayPnl.toFixed(4)),
-          all_time_pnl:        parseFloat(realizedPnl.toFixed(4)),
+          all_time_pnl:        parseFloat(realizedPnl.toFixed(4)), // per-bot cumulative
         },
 
         open_positions:    openCount,
@@ -355,14 +372,37 @@ export async function GET() {
         all_time_wins:     wins,
         all_time_losses:   losses,
         win_rate:          winRate,
-        all_time_pnl:      parseFloat(realizedPnl.toFixed(4)),
+        all_time_pnl:      parseFloat(realizedPnl.toFixed(4)), // per-bot
         today_trade_count: todayCount,
         today_pnl:         parseFloat(todayPnl.toFixed(4)),
       };
     });
 
+    // ── Combined stats across all 4 crypto bots ────────────────────────────
+    const allOpenPositions = statRows.filter((r) => (r.status ?? '').toUpperCase() === 'OPEN');
+    const totalOpenExposure = allOpenPositions.reduce((s, r) => s + (Number(r.size_usd ?? 0)), 0);
+    const sharedStartingBalance = Number(
+      (bots[0]?.strategy_settings as Record<string, unknown> | null)?.paper_start ?? 1000
+    ) || 1000;
+
+    const shared_account = {
+      account_id:        'crypto_paper',
+      starting_balance:  sharedStartingBalance,
+      realized_pnl:      parseFloat(sharedPnl.toFixed(4)),
+      open_exposure:     parseFloat(totalOpenExposure.toFixed(4)),
+      available_balance: parseFloat((sharedStartingBalance + sharedPnl - totalOpenExposure).toFixed(4)),
+      account_equity:    parseFloat((sharedStartingBalance + sharedPnl).toFixed(4)),
+      raw_balance:       sharedBalance,
+    };
+
     return NextResponse.json(
-      { ok: true, bots, legacy_ema_enabled: legacyEmaEnabled, fetched_at: fetchedAt },
+      {
+        ok: true,
+        bots,
+        shared_account,
+        legacy_ema_enabled: legacyEmaEnabled,
+        fetched_at: fetchedAt,
+      },
       { headers: NO_CACHE }
     );
   } catch (err) {

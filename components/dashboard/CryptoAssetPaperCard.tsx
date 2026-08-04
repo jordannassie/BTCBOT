@@ -352,7 +352,7 @@ export default function CryptoAssetPaperCard({ asset, allBotStats }: {
           background: 'rgba(255,255,255,0.025)', borderRadius: '0.35rem',
           border: '1px solid rgba(255,255,255,0.05)' }}>
           <div style={{ fontWeight: 700, fontSize: '0.62rem', color: 'rgba(248,250,252,0.4)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.2rem' }}>
-            Paper Account
+            Shared Paper Account
           </div>
           <Stat label="Starting"  value={fmtUsd(stat.starting_balance)} />
           <Stat label="P/L"       value={fmtPnl(stat.realized_pnl)} color={pnlColor(stat.realized_pnl)} />
