@@ -271,6 +271,9 @@ export default function CryptoControlCenter() {
   const resetUnlocked    = resetText.trim() === CONFIRM_PHRASE && resetAmountValid;
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
+  // Use a ref to track current execMode so the load() callback's safety-revert
+  // check can read the latest value without a stale closure.
+  const execModeRef = useRef<'PAPER' | 'LIVE'>('PAPER');
   const load = useCallback(async () => {
     try {
       const [botsRes, modeRes] = await Promise.all([
@@ -284,10 +287,11 @@ export default function CryptoControlCenter() {
       if (modeJson.ok) {
         const newMode = modeJson.mode ?? 'PAPER';
         setExecMode(newMode);
+        execModeRef.current = newMode;
         setLiveReady(modeJson.live_ready ?? false);
         setLiveNotReadyReason(modeJson.live_not_ready_reason ?? null);
         // If backend reports PAPER while we thought we were LIVE → safety revert
-        if (newMode === 'PAPER' && execMode === 'LIVE') {
+        if (newMode === 'PAPER' && execModeRef.current === 'LIVE') {
           setSwitchError('LIVE DISABLED — backend reverted to PAPER');
         }
       }
@@ -380,7 +384,7 @@ export default function CryptoControlCenter() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bot_id: 'live', is_enabled: true }), cache: 'no-store',
       }).catch(() => {});
-      setExecMode('LIVE');
+      // Do NOT optimistically set execMode — let load() confirm from GET.
       setShowGoLiveModal(false);
       await load();
       dispatchBotChange();
