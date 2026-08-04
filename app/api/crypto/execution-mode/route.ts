@@ -124,10 +124,17 @@ export async function GET() {
       ? `invalid_trade_size:${badSizeBots.join(',')}`
       : null;
 
+    // is_live_active = mode is LIVE AND all four bot rows confirm arm_live=true
+    const allFourArmedGet = CRYPTO_BOT_IDS.every((id) =>
+      botRows.find((r) => r.bot_id === id)?.arm_live === true
+    );
+    const isLiveActiveGet = currentMode === 'LIVE' && allFourArmedGet;
+
     return NextResponse.json(
       {
         ok:                           true,
         mode:                         currentMode,
+        is_live_active:               isLiveActiveGet,
         account_id:                   ACCOUNT_ID,
         crypto_live_master_enabled:   cryptoLiveMasterEnabled,
         global_live_master_enabled:   globalLiveMasterEnabled,
@@ -325,20 +332,39 @@ export async function POST(request: Request) {
       }
     }
 
-    // ── 5. Write arm_live for all four crypto bots ─────────────────────────
-    const armErrors: string[] = [];
+    // ── 5. Write arm_live for all four crypto bots, verify each write ─────────
+    //
+    // Using .select() so Supabase returns the affected rows.
+    // data=[] means zero rows matched — the bot_settings row is missing.
+    // This is a hard failure — we roll back and surface the exact bot name.
+    //
+    type ArmRow = { bot_id: string; arm_live: boolean };
+    const armErrors:  string[] = [];
+    const armedRows:  ArmRow[] = [];
 
     for (const botId of CRYPTO_BOT_IDS) {
-      const { error: armErr } = await client
+      const { data: updData, error: armErr } = await client
         .from('bot_settings')
         .update({ arm_live: armValue, updated_at: ts })
-        .eq('bot_id', botId);
+        .eq('bot_id', botId)
+        .select('bot_id, arm_live');
 
-      if (armErr) armErrors.push(`${botId}: ${armErr.message}`);
+      if (armErr) {
+        armErrors.push(`${botId}: ${armErr.message}`);
+      } else if (!updData || updData.length === 0) {
+        armErrors.push(`${botId}: row not found in bot_settings (0 rows updated)`);
+      } else {
+        const row = updData[0] as ArmRow;
+        if (row.arm_live !== armValue) {
+          armErrors.push(`${botId}: write did not persist (expected ${armValue}, got ${row.arm_live})`);
+        } else {
+          armedRows.push(row);
+        }
+      }
     }
 
     if (armErrors.length > 0) {
-      // Best-effort rollback: restore the crypto_paper row to previous state
+      // Hard rollback: restore crypto_paper mode AND clear all arm_live writes that succeeded
       const rollbackSS: Record<string, unknown> = {
         ...existingSS,
         crypto_execution_mode:      previousMode,
@@ -349,41 +375,30 @@ export async function POST(request: Request) {
         .update({ strategy_settings: rollbackSS, updated_at: ts })
         .eq('bot_id', ACCOUNT_ID);
 
+      // Attempt to undo any partial arm_live changes
+      for (const row of armedRows) {
+        await client
+          .from('bot_settings')
+          .update({ arm_live: !armValue, updated_at: ts })
+          .eq('bot_id', row.bot_id);
+      }
+
       const reason = `arm_live_write_failed: ${armErrors.join('; ')}`;
       console.error('[execution-mode POST] CRYPTO_GLOBAL_MODE_TRANSITION_FAILED:', reason);
       return NextResponse.json(
-        { ok: false, error: reason, previous_mode: previousMode },
+        { ok: false, error: reason, failed_bots: armErrors.map((e) => e.split(':')[0].trim()), previous_mode: previousMode },
         { status: 500, headers: NO_CACHE }
       );
     }
 
-    // ── 6. Best-effort read-back (diagnostic only — does not gate success) ──
-    // arm_live write errors above are already caught. Here we log but do NOT
-    // rollback or block — the strategy_settings write succeeded (step 4), so
-    // the mode is authoritative. FastLoop reads arm_live at entry time.
-    const { data: verifyRows, error: verifyErr } = await client
+    // ── 6. Read final state for response (all writes confirmed above) ─────
+    type VerifyRow = { bot_id: string; arm_live: boolean; is_enabled: boolean };
+    const { data: verifyRows } = await client
       .from('bot_settings')
       .select('bot_id, arm_live, is_enabled')
       .in('bot_id', CRYPTO_BOT_IDS);
 
-    type VerifyRow = { bot_id: string; arm_live: boolean; is_enabled: boolean };
     const verifiedRows: VerifyRow[] = (verifyRows ?? []) as VerifyRow[];
-
-    if (verifyErr) {
-      console.warn('[execution-mode POST] arm_live read-back warn:', verifyErr.message);
-    }
-
-    // Diagnostic log: log any rows where arm_live didn't match expected value
-    const mismatchRows = verifiedRows.filter((r) => r.arm_live !== armValue);
-    if (mismatchRows.length > 0) {
-      console.warn(
-        '[execution-mode POST] arm_live mismatch (non-fatal) for:',
-        mismatchRows.map((r) => r.bot_id).join(', '),
-        '— mode is still', newMode,
-      );
-    }
-
-    // ── 7. Read final state for response ──────────────────────────────────
     const enabledBots = verifiedRows.filter((r) => r.is_enabled).map((r) => r.bot_id);
     const armedBots   = verifiedRows.filter((r) => r.arm_live).map((r) => r.bot_id);
 
@@ -393,11 +408,18 @@ export async function POST(request: Request) {
       `live_master=${armValue} armed_bots=${armedBots.length}`
     );
 
+    // is_live_active = mode is LIVE AND all four bot rows confirmed arm_live=true
+    const allFourArmed = CRYPTO_BOT_IDS.every((id) =>
+      verifiedRows.find((r) => r.bot_id === id)?.arm_live === true
+    );
+    const isLiveActive = newMode === 'LIVE' && allFourArmed;
+
     return NextResponse.json(
       {
         ok:                       true,
         previous_mode:            previousMode,
         mode:                     newMode,
+        is_live_active:           isLiveActive,
         live_master_enabled:      armValue,   // crypto-specific master
         armed_crypto_bots:        armedBots,
         enabled_crypto_bots:      enabledBots,

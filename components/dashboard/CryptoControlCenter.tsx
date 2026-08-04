@@ -65,6 +65,7 @@ interface BotsApiResponse {
 interface ExecModeResponse {
   ok:                    boolean;
   mode?:                 'PAPER' | 'LIVE';
+  is_live_active?:       boolean;          // mode=LIVE AND all 4 bot rows arm_live=true
   live_ready?:           boolean;
   live_not_ready_reason?: string | null;
   emergency_stop?:       boolean;
@@ -254,7 +255,7 @@ export default function CryptoControlCenter() {
   const [switchError,       setSwitchError]       = useState<string | null>(null);
   const [showGoLiveModal,   setShowGoLiveModal]   = useState(false);
   const [paperSwitchMsg,    setPaperSwitchMsg]    = useState<string | null>(null);
-  // armedCount / liveIncomplete removed — mode badge is LIVE/PAPER only
+  const [isLiveActive,      setIsLiveActive]      = useState(false); // GET-confirmed: mode=LIVE AND all 4 arm_live=true
 
   // ── Toggle state (per-bot) ─────────────────────────────────────────────────
   const [toggling,   setToggling]  = useState<Set<BotId>>(new Set());
@@ -294,6 +295,7 @@ export default function CryptoControlCenter() {
         const newMode  = modeJson.mode ?? 'PAPER';
         setExecMode(newMode);
         execModeRef.current = newMode;
+        setIsLiveActive(modeJson.is_live_active ?? false);
         setLiveReady(modeJson.live_ready ?? false);
         setLiveNotReadyReason(modeJson.live_not_ready_reason ?? null);
         setEmergencyStop(modeJson.emergency_stop ?? false);
@@ -623,7 +625,7 @@ export default function CryptoControlCenter() {
         }}>
           🛑 EMERGENCY STOP ACTIVE — LIVE ORDERS BLOCKED
         </span>
-      ) : execMode === 'LIVE' ? (
+      ) : isLiveActive ? (
         <span style={{
           padding:    '0.18rem 0.6rem', borderRadius: '0.3rem',
           background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
