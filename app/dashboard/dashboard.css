@@ -2170,3 +2170,44 @@
     gap: 0.4rem;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FOUR-COLUMN CRYPTO BOT GRID
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.crypto-bot-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  align-items: start;
+}
+
+/* Laptop / large tablet: keep 4 columns if space allows, else 2 */
+@media (max-width: 1100px) {
+  .crypto-bot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Tablet */
+@media (max-width: 768px) {
+  .crypto-bot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .crypto-bot-grid {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+}
+
+/* CryptoBotDetails stats grid: 4 cols → 2 on small screens */
+@media (max-width: 768px) {
+  .crypto-bot-grid + * [style*="grid-template-columns: repeat(4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}

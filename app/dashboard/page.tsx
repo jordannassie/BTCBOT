@@ -20,7 +20,7 @@ import CryptoPaperCard       from '@/components/dashboard/CryptoPaperCard';
 import CryptoKPIStrip        from '@/components/dashboard/CryptoKPIStrip';
 import CryptoControlCenter   from '@/components/dashboard/CryptoControlCenter';
 
-const Crypto5MinPanel = dynamic(() => import('@/components/dashboard/Crypto5MinPanel'), { ssr: false });
+const CryptoBotSection = dynamic(() => import('@/components/dashboard/CryptoBotSection'), { ssr: false });
 
 function IconRefresh() {
   return (
@@ -101,10 +101,10 @@ export default function CryptoDashboardPage() {
         <LiveCard />
       </section>
 
-      {/* ── Crypto Bots section ── */}
+      {/* ── Four-column crypto bot grid + expanded details ── */}
       <section className="crypto-bots-section">
         <div className="crypto-section-label">Crypto Bots</div>
-        <Crypto5MinPanel />
+        <CryptoBotSection />
       </section>
 
       {/* Copy Trading link — only visible when SHOW_COPY_UI=true.

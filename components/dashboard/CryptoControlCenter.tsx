@@ -88,13 +88,16 @@ export default function CryptoControlCenter() {
   const [pauseMsg,   setPauseMsg]  = useState<{ ok: boolean; text: string } | null>(null);
 
   // ── Reset modal state ──────────────────────────────────────────────────────
-  const [showReset,  setShowReset]    = useState(false);
-  const [resetText,  setResetText]    = useState('');
-  const [resetting,  setResetting]    = useState(false);
-  const [resetMsg,   setResetMsg]     = useState<{ ok: boolean; text: string } | null>(null);
-  const resetInputRef                 = useRef<HTMLInputElement>(null);
+  const [showReset,     setShowReset]     = useState(false);
+  const [resetText,     setResetText]     = useState('');
+  const [resetAmountStr,setResetAmountStr]= useState('1000');
+  const [resetting,     setResetting]     = useState(false);
+  const [resetMsg,      setResetMsg]      = useState<{ ok: boolean; text: string } | null>(null);
+  const resetInputRef                     = useRef<HTMLInputElement>(null);
 
-  const resetUnlocked = resetText.trim() === CONFIRM_PHRASE;
+  const resetAmountNum   = parseFloat(resetAmountStr);
+  const resetAmountValid = Number.isFinite(resetAmountNum) && resetAmountNum > 0 && resetAmountNum <= 1_000_000;
+  const resetUnlocked    = resetText.trim() === CONFIRM_PHRASE && resetAmountValid;
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -200,12 +203,19 @@ export default function CryptoControlCenter() {
     setResetting(true);
     setResetMsg(null);
     try {
-      const res  = await fetch('/api/crypto/reset-paper', { method: 'POST', cache: 'no-store' });
+      const res  = await fetch('/api/crypto/reset-paper', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ starting_balance_usd: resetAmountNum }),
+        cache:   'no-store',
+      });
       const json = await res.json() as { ok: boolean; message?: string; error?: string };
       if (json.ok) {
-        setResetMsg({ ok: true, text: json.message ?? 'Crypto paper account reset to $1,000.' });
+        const amtStr = fmtUsd(resetAmountNum);
+        setResetMsg({ ok: true, text: `Crypto Paper Account reset to ${amtStr}.` });
         setShowReset(false);
         setResetText('');
+        setResetAmountStr('1000');
         await load();
         window.dispatchEvent(new CustomEvent('crypto:paper-reset'));
         dispatchBotChange();
@@ -217,7 +227,7 @@ export default function CryptoControlCenter() {
     } finally {
       setResetting(false);
     }
-  }, [resetUnlocked, resetting, load]);
+  }, [resetUnlocked, resetting, resetAmountNum, load]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -343,7 +353,7 @@ export default function CryptoControlCenter() {
 
         {/* Reset Paper */}
         <button
-          onClick={() => { setShowReset(true); setResetText(''); setResetMsg(null); }}
+          onClick={() => { setShowReset(true); setResetText(''); setResetMsg(null); setResetAmountStr('1000'); }}
           disabled={resetting}
           title="Reset shared crypto paper account (BTC, ETH, SOL, XRP)"
           style={{
@@ -409,7 +419,7 @@ export default function CryptoControlCenter() {
     {showReset && (
       <div
         className="copy-modal-overlay"
-        onClick={(e) => { if (e.target === e.currentTarget && !resetting) { setShowReset(false); setResetText(''); } }}
+        onClick={(e) => { if (e.target === e.currentTarget && !resetting) { setShowReset(false); setResetText(''); setResetAmountStr('1000'); } }}
         style={{ zIndex: 200 }}
       >
         <div className="copy-modal" role="dialog" aria-modal="true" style={{ maxWidth: 440 }}>
@@ -417,7 +427,7 @@ export default function CryptoControlCenter() {
           {/* Header */}
           <div className="copy-modal-header">
             <h3 className="copy-modal-title">Reset Crypto Paper Account?</h3>
-            <button className="copy-modal-close" onClick={() => { setShowReset(false); setResetText(''); }} disabled={resetting}>×</button>
+            <button className="copy-modal-close" onClick={() => { setShowReset(false); setResetText(''); setResetAmountStr('1000'); }} disabled={resetting}>×</button>
           </div>
 
           {/* Body */}
@@ -433,15 +443,43 @@ export default function CryptoControlCenter() {
               Bot ON/OFF states, trade sizes and strategy settings are preserved.
             </p>
 
-            {/* Expected outcome */}
+            {/* ── Reset amount ── */}
+            <label style={{ display: 'block', fontSize: '0.72rem', color: 'rgba(248,250,252,0.5)', marginBottom: '0.35rem' }}>
+              Reset Paper Balance
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+              <span style={{ color: 'rgba(248,250,252,0.4)', fontFamily: 'monospace', fontSize: '0.85rem' }}>$</span>
+              <input
+                type="number"
+                value={resetAmountStr}
+                onChange={(e) => setResetAmountStr(e.target.value)}
+                min="0.01" max="1000000" step="any"
+                disabled={resetting}
+                style={{
+                  flex: 1, padding: '0.4rem 0.65rem',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: `1px solid ${resetAmountValid ? 'rgba(255,255,255,0.15)' : 'rgba(248,113,113,0.4)'}`,
+                  borderRadius: '0.4rem', color: '#f8fafc', fontSize: '0.85rem',
+                  fontFamily: 'monospace', outline: 'none',
+                }}
+              />
+            </div>
+            {!resetAmountValid && resetAmountStr.length > 0 && (
+              <p style={{ fontSize: '0.68rem', color: '#f87171', marginBottom: '0.5rem' }}>
+                Enter a number between $0.01 and $1,000,000
+              </p>
+            )}
+
+            {/* Expected outcome — live preview */}
             <div style={{
               background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
               borderRadius: '0.45rem', padding: '0.6rem 0.8rem', marginBottom: '1rem',
               fontSize: '0.7rem', display: 'flex', flexDirection: 'column', gap: '0.2rem',
             }}>
               {[
-                ['Starting Balance', '$1,000.00'],
-                ['Current Equity',   '$1,000.00'],
+                ['Starting Balance', resetAmountValid ? fmtUsd(resetAmountNum) : '—'],
+                ['Current Equity',   resetAmountValid ? fmtUsd(resetAmountNum) : '—'],
+                ['Available Balance',resetAmountValid ? fmtUsd(resetAmountNum) : '—'],
                 ['Realized P/L',     '$0.00'],
                 ['Open Positions',   '0'],
                 ['Total Trades',     '0'],
@@ -482,7 +520,7 @@ export default function CryptoControlCenter() {
           <div className="copy-modal-footer">
             <button
               className="copy-btn copy-btn-secondary"
-              onClick={() => { setShowReset(false); setResetText(''); }}
+              onClick={() => { setShowReset(false); setResetText(''); setResetAmountStr('1000'); }}
               disabled={resetting}
             >
               Cancel

@@ -11,7 +11,7 @@
 // This is READ-ONLY display. No trading logic, no writes, no calculations beyond display formatting.
 
 import { useCallback, useEffect, useState } from 'react';
-import BtcEquityChart, { type EquityPoint } from './BtcEquityChart';
+import CryptoEquityChart, { type EquityPoint } from './CryptoEquityChart';
 import SourceAvatar, { BTC_AVATAR_URL } from '@/components/copy/SourceAvatar';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -93,11 +93,14 @@ export default function CryptoPaperCard() {
   // ── Reset paper account state ──────────────────────────────────────────────
   const [showResetModal,  setShowResetModal]  = useState(false);
   const [resetConfirmTxt, setResetConfirmTxt] = useState('');
+  const [resetAmountStr,  setResetAmountStr]  = useState('1000');
   const [resetting,       setResetting]       = useState(false);
   const [resetMsg,        setResetMsg]        = useState<{ ok: boolean; text: string } | null>(null);
 
-  const CONFIRM_PHRASE = 'RESET PAPER';
-  const resetUnlocked  = resetConfirmTxt.trim() === CONFIRM_PHRASE;
+  const CONFIRM_PHRASE  = 'RESET PAPER';
+  const resetAmountNum  = parseFloat(resetAmountStr);
+  const resetAmountValid= Number.isFinite(resetAmountNum) && resetAmountNum > 0 && resetAmountNum <= 1_000_000;
+  const resetUnlocked   = resetConfirmTxt.trim() === CONFIRM_PHRASE && resetAmountValid;
 
   const load = useCallback(async () => {
     try {
@@ -122,12 +125,19 @@ export default function CryptoPaperCard() {
     setResetting(true);
     setResetMsg(null);
     try {
-      const res  = await fetch('/api/crypto/reset-paper', { method: 'POST', cache: 'no-store' });
+      const res  = await fetch('/api/crypto/reset-paper', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ starting_balance_usd: resetAmountNum }),
+        cache:   'no-store',
+      });
       const json = await res.json() as { ok: boolean; message?: string; error?: string };
       if (json.ok) {
-        setResetMsg({ ok: true, text: json.message ?? 'Crypto paper account reset.' });
+        const amtStr = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(resetAmountNum);
+        setResetMsg({ ok: true, text: `Crypto Paper Account reset to ${amtStr}.` });
         setShowResetModal(false);
         setResetConfirmTxt('');
+        setResetAmountStr('1000');
         // Refresh all crypto data immediately
         await load();
         // Notify KPI strip and other listeners
@@ -260,9 +270,14 @@ export default function CryptoPaperCard() {
       )}
 
       {/* ── Mini equity chart ── */}
-      {bot?.equity_curve && bot.equity_curve.length > 0 && (
+      {bot?.equity_curve && (
         <div style={{ marginTop: '-0.25rem' }}>
-          <BtcEquityChart curve={bot.equity_curve} startingBalance={bot.starting_balance} />
+          <CryptoEquityChart
+            asset="BTC"
+            curve={bot.equity_curve}
+            startingBalance={bot.starting_balance}
+            compact={false}
+          />
         </div>
       )}
 
@@ -307,7 +322,7 @@ export default function CryptoPaperCard() {
       {/* ── Reset Paper Account button ── */}
       <div style={{ marginTop: '0.5rem', paddingTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <button
-          onClick={() => { setShowResetModal(true); setResetMsg(null); setResetConfirmTxt(''); }}
+          onClick={() => { setShowResetModal(true); setResetMsg(null); setResetConfirmTxt(''); setResetAmountStr('1000'); }}
           disabled={resetting}
           style={{
             width: '100%', padding: '0.45rem 0.75rem',
@@ -326,7 +341,7 @@ export default function CryptoPaperCard() {
       {showResetModal && (
         <div
           className="copy-modal-overlay"
-          onClick={(e) => { if (e.target === e.currentTarget && !resetting) { setShowResetModal(false); setResetConfirmTxt(''); } }}
+          onClick={(e) => { if (e.target === e.currentTarget && !resetting) { setShowResetModal(false); setResetConfirmTxt(''); setResetAmountStr('1000'); } }}
           style={{ zIndex: 1000 }}
         >
           <div className="copy-modal" role="dialog" aria-modal="true" style={{ maxWidth: 440 }}>
@@ -336,7 +351,7 @@ export default function CryptoPaperCard() {
               <h3 className="copy-modal-title">Reset Crypto Paper Account?</h3>
               <button
                 className="copy-modal-close"
-                onClick={() => { setShowResetModal(false); setResetConfirmTxt(''); }}
+                onClick={() => { setShowResetModal(false); setResetConfirmTxt(''); setResetAmountStr('1000'); }}
                 disabled={resetting}
               >×</button>
             </div>
@@ -353,15 +368,43 @@ export default function CryptoPaperCard() {
                 Bot ON/OFF states, trade sizes and strategy settings are preserved.
               </p>
 
-              {/* Expected outcome */}
+              {/* ── Reset amount ── */}
+              <label style={{ display: 'block', fontSize: '0.72rem', color: 'rgba(248,250,252,0.5)', marginBottom: '0.35rem' }}>
+                Reset Paper Balance
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                <span style={{ color: 'rgba(248,250,252,0.4)', fontFamily: 'monospace', fontSize: '0.85rem' }}>$</span>
+                <input
+                  type="number"
+                  value={resetAmountStr}
+                  onChange={(e) => setResetAmountStr(e.target.value)}
+                  min="0.01" max="1000000" step="any"
+                  disabled={resetting}
+                  style={{
+                    flex: 1, padding: '0.4rem 0.65rem',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: `1px solid ${resetAmountValid ? 'rgba(255,255,255,0.15)' : 'rgba(248,113,113,0.4)'}`,
+                    borderRadius: '0.4rem', color: '#f8fafc', fontSize: '0.85rem',
+                    fontFamily: 'monospace', outline: 'none',
+                  }}
+                />
+              </div>
+              {!resetAmountValid && resetAmountStr.length > 0 && (
+                <p style={{ fontSize: '0.68rem', color: '#f87171', marginBottom: '0.5rem', marginTop: '-0.5rem' }}>
+                  Enter a number between $0.01 and $1,000,000
+                </p>
+              )}
+
+              {/* Expected outcome — live preview */}
               <div style={{
                 background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
                 borderRadius: '0.45rem', padding: '0.6rem 0.8rem', marginBottom: '1rem',
                 fontSize: '0.7rem', display: 'flex', flexDirection: 'column', gap: '0.2rem',
               }}>
                 {[
-                  ['Starting Balance', '$1,000.00'],
-                  ['Current Equity',   '$1,000.00'],
+                  ['Starting Balance', resetAmountValid ? usd(resetAmountNum) : '—'],
+                  ['Current Equity',   resetAmountValid ? usd(resetAmountNum) : '—'],
+                  ['Available Balance',resetAmountValid ? usd(resetAmountNum) : '—'],
                   ['Realized P/L',     '$0.00'],
                   ['Open Positions',   '0'],
                   ['Total Trades',     '0'],
@@ -400,7 +443,7 @@ export default function CryptoPaperCard() {
             <div className="copy-modal-footer">
               <button
                 className="copy-btn copy-btn-secondary"
-                onClick={() => { setShowResetModal(false); setResetConfirmTxt(''); }}
+                onClick={() => { setShowResetModal(false); setResetConfirmTxt(''); setResetAmountStr('1000'); }}
                 disabled={resetting}
               >
                 Cancel
