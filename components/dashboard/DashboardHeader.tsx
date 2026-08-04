@@ -18,7 +18,7 @@ export default function DashboardHeader() {
           </svg>
           <span className="brand-text">{APP_NAME}</span>
           <span className="brand-divider" />
-          <span className="brand-product">Copy Trading</span>
+          <span className="brand-product">Crypto Trading</span>
         </Link>
 
       </div>

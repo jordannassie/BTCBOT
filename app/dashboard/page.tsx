@@ -1,23 +1,26 @@
 'use client';
 
-// The Copy Trading dashboard. All data is fetched client-side by child
-// components, so this page is a client component to host the shared refresh
-// status header (last-updated timestamp + manual Refresh button).
+// Crypto Trading Dashboard — primary product page.
 //
-// Refresh timing:
-//   - CopyTradingTabs polls /api/copy/summary every 15 s for tab badge counts.
-//     After each successful fetch it dispatches 'copy:data-fetched' so this
-//     header can update its "Updated X ago" timestamp without a separate fetch.
-//   - When the user clicks "Refresh" here, we dispatch 'copy:refresh' and all
-//     polling components (CopyTradingTabs, CopyOverviewCards) re-fetch at once.
+// Feature flags (lib/features.ts):
+//   SHOW_COPY_UI    = false → copy trading link is hidden from this page
+//   SHOW_CRYPTO_UI  = true  → crypto bots are the primary content
+//
+// Copy trading dashboard remains accessible at /dashboard/copy regardless of flags.
+//
+// No trading logic in this file. All execution is in child components.
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import LiveCard from '@/components/dashboard/LiveCard';
-import CopyPaperBankrollCard from '@/components/copy/CopyPaperBankrollCard';
-import CopyTradingTabs from '@/components/copy/CopyTradingTabs';
+import { SHOW_COPY_UI } from '@/lib/features';
 
-const CopyTradingStatusPanel  = dynamic(() => import('@/components/copy/CopyTradingStatusPanel'), { ssr: false });
+import LiveCard         from '@/components/dashboard/LiveCard';
+import CryptoPaperCard  from '@/components/dashboard/CryptoPaperCard';
+import CryptoKPIStrip   from '@/components/dashboard/CryptoKPIStrip';
+
+const Crypto5MinPanel = dynamic(() => import('@/components/dashboard/Crypto5MinPanel'), { ssr: false });
+
+// ── Refresh icon ──────────────────────────────────────────────────────────────
 
 function IconRefresh() {
   return (
@@ -35,28 +38,23 @@ function fmtAge(date: Date): string {
   return `${Math.floor(diff / 60)}m ago`;
 }
 
-export default function DashboardPage() {
+// ── Page ─────────────────────────────────────────────────────────────────────
+
+export default function CryptoDashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshing, setRefreshing]   = useState(false);
   const [, setTick]                   = useState(0);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    // Tell all polling child components to re-fetch right now
     window.dispatchEvent(new CustomEvent('copy:refresh'));
-    // Reset spinner after a comfortable window for child fetches to complete
     setTimeout(() => setRefreshing(false), 2_000);
   };
 
   useEffect(() => {
-    // Tick every second so the "X ago" string stays live
     const ticker = setInterval(() => setTick((n) => n + 1), 1_000);
-
-    // CopyTradingTabs dispatches this after every successful summary fetch,
-    // so we stay in sync without a redundant fetch from this component.
     const onDataFetched = () => setLastUpdated(new Date());
     window.addEventListener('copy:data-fetched', onDataFetched);
-
     return () => {
       clearInterval(ticker);
       window.removeEventListener('copy:data-fetched', onDataFetched);
@@ -64,28 +62,27 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="dashboard-container copy-page">
-      <div className="copy-page-header">
-        {/* ── Left: title + subtitle ── */}
-        <div className="copy-page-header-left">
-          <h1 className="copy-page-title">Copy Trading</h1>
-          <p className="copy-page-subtitle">
-            Monitor wallets, manage copy bots, and control live execution safely
+    <div className="dashboard-container crypto-page">
+
+      {/* ── Page header ── */}
+      <div className="crypto-page-header">
+        <div className="crypto-page-header-left">
+          <h1 className="crypto-page-title">Crypto Trading</h1>
+          <p className="crypto-page-subtitle">
+            BTC 5-Min paper strategy · live bankroll monitoring · real-time market data
           </p>
         </div>
-
-        {/* ── Right: last-updated timestamp + manual Refresh button ── */}
-        <div className="copy-page-header-right">
+        <div className="crypto-page-header-right">
           <span className="copy-overview-freshness">
             {lastUpdated
-              ? `Updated ${fmtAge(lastUpdated)} · refreshes every 15s`
+              ? `Updated ${fmtAge(lastUpdated)} · 5s auto-refresh`
               : 'Loading…'}
           </span>
           <button
             className="copy-overview-refresh-btn"
             onClick={handleRefresh}
             disabled={refreshing}
-            title="Refresh now"
+            title="Refresh all data"
             aria-label="Refresh dashboard"
           >
             <IconRefresh />
@@ -94,17 +91,60 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Bankroll cards stay pinned at the top */}
-      <section className="copy-bankroll-row">
+      {/* ── KPI strip ── */}
+      <CryptoKPIStrip />
+
+      {/* ── Hero bankroll area ── */}
+      <section className="crypto-bankroll-row">
+        <CryptoPaperCard />
         <LiveCard />
-        <CopyPaperBankrollCard />
       </section>
 
-      {/* Consolidated copy trading status panel */}
-      <CopyTradingStatusPanel />
+      {/* ── Crypto Bots section ── */}
+      <section className="crypto-bots-section">
+        <div className="crypto-section-label">Crypto Bots</div>
+        <Crypto5MinPanel />
+      </section>
 
-      {/* Tabbed layout — includes Crypto Bots tab */}
-      <CopyTradingTabs />
+      {/* ── Admin access to Copy Trading (hidden unless SHOW_COPY_UI=true) ── */}
+      {SHOW_COPY_UI && (
+        <div style={{
+          marginTop: '2rem',
+          padding: '0.75rem 1rem',
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          borderRadius: '0.5rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.3)' }}>
+            Copy Trading dashboard is active
+          </span>
+          <a
+            href="/dashboard/copy"
+            style={{
+              fontSize: '0.72rem', fontWeight: 600, color: '#60a5fa',
+              textDecoration: 'none', padding: '0.25rem 0.6rem',
+              border: '1px solid rgba(96,165,250,0.2)', borderRadius: '0.35rem',
+            }}
+          >
+            Open Copy Trading →
+          </a>
+        </div>
+      )}
+
+      {/* Always-available subtle admin link (no flag dependency) */}
+      <div style={{
+        marginTop: '1.5rem', textAlign: 'center',
+        borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '1rem',
+      }}>
+        <a
+          href="/dashboard/copy"
+          style={{ fontSize: '0.62rem', color: 'rgba(248,250,252,0.18)', textDecoration: 'none' }}
+          title="Copy Trading dashboard"
+        >
+          Copy Trading ↗
+        </a>
+      </div>
     </div>
   );
 }

@@ -2038,3 +2038,104 @@
   color: rgba(52, 211, 153, 0.55);
   font-weight: 500;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CRYPTO TRADING PAGE — Primary dashboard layout
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.crypto-page {
+  padding: 1.25rem 1.5rem 3rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* ── Page header ── */
+.crypto-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.crypto-page-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.crypto-page-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: -0.02em;
+}
+
+.crypto-page-subtitle {
+  margin: 0;
+  font-size: 0.75rem;
+  color: rgba(248, 250, 252, 0.35);
+  font-weight: 400;
+}
+
+.crypto-page-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.2rem;
+}
+
+/* ── Hero bankroll row ── */
+.crypto-bankroll-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.crypto-bankroll-row > * {
+  flex: 1;
+  min-width: 280px;
+}
+
+/* ── Section label ── */
+.crypto-section-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.25);
+  margin-bottom: 0.6rem;
+  padding-left: 0.25rem;
+}
+
+/* ── Crypto bots section ── */
+.crypto-bots-section {
+  margin-bottom: 1.25rem;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .crypto-page {
+    padding: 1rem;
+  }
+
+  .crypto-page-title {
+    font-size: 1.2rem;
+  }
+
+  .crypto-bankroll-row {
+    flex-direction: column;
+  }
+
+  .crypto-bankroll-row > * {
+    min-width: 0;
+  }
+
+  .crypto-page-header {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
