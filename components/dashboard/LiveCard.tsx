@@ -450,7 +450,7 @@ export default function LiveCard() {
         {/* Avatar — upper right, prominent but not layout-breaking */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/render/image/public/Storage/image/Ape%20bro.png?width=320&height=320&quality=100&resize=cover"
+          src="https://jyhfffqximlbhlaarozs.supabase.co/storage/v1/render/image/public/Storage/image/Apenew.png?width=320&height=320&quality=100&resize=cover"
           alt="Profile"
           style={{
             width:           160, height: 160,
