@@ -357,9 +357,55 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── 6. Read final state for response ──────────────────────────────────
-    const enabledBots  = botRows.filter((r) => r.is_enabled).map((r) => r.bot_id);
-    const armedBots    = CRYPTO_BOT_IDS;  // all armed if going LIVE, all cleared if PAPER
+    // ── 6. Verify arm_live was actually persisted (read-back check) ────────
+    const { data: verifyRows, error: verifyErr } = await client
+      .from('bot_settings')
+      .select('bot_id, arm_live, is_enabled')
+      .in('bot_id', CRYPTO_BOT_IDS);
+
+    if (verifyErr || !verifyRows) {
+      const reason = `arm_live_verify_failed: ${verifyErr?.message ?? 'no rows returned'}`;
+      console.error('[execution-mode POST] CRYPTO_GLOBAL_MODE_TRANSITION_FAILED:', reason);
+      // Rollback
+      const rollbackSS: Record<string, unknown> = {
+        ...existingSS,
+        crypto_execution_mode:      previousMode,
+        crypto_live_master_enabled: !armValue,
+      };
+      await client.from('bot_settings').update({ strategy_settings: rollbackSS, updated_at: ts }).eq('bot_id', ACCOUNT_ID);
+      return NextResponse.json(
+        { ok: false, error: reason, previous_mode: previousMode },
+        { status: 500, headers: NO_CACHE }
+      );
+    }
+
+    type VerifyRow = { bot_id: string; arm_live: boolean; is_enabled: boolean };
+    const verifiedRows = verifyRows as VerifyRow[];
+    const incorrectRows = verifiedRows.filter((r) => r.arm_live !== armValue);
+
+    if (incorrectRows.length > 0 && goingLive) {
+      // Some rows did not persist arm_live=true — rollback everything
+      const failedBots = incorrectRows.map((r) => r.bot_id);
+      const reason = `arm_live_not_persisted for: ${failedBots.join(', ')}`;
+      console.error('[execution-mode POST] CRYPTO_GLOBAL_MODE_TRANSITION_FAILED:', reason);
+      const rollbackSS: Record<string, unknown> = {
+        ...existingSS,
+        crypto_execution_mode:      previousMode,
+        crypto_live_master_enabled: !armValue,
+      };
+      await client.from('bot_settings').update({ strategy_settings: rollbackSS, updated_at: ts }).eq('bot_id', ACCOUNT_ID);
+      for (const botId of CRYPTO_BOT_IDS) {
+        await client.from('bot_settings').update({ arm_live: false, updated_at: ts }).eq('bot_id', botId);
+      }
+      return NextResponse.json(
+        { ok: false, error: reason, failed_bots: failedBots, previous_mode: previousMode },
+        { status: 500, headers: NO_CACHE }
+      );
+    }
+
+    // ── 7. Read final state for response ──────────────────────────────────
+    const enabledBots  = verifiedRows.filter((r) => r.is_enabled).map((r) => r.bot_id);
+    const armedBots    = verifiedRows.filter((r) => r.arm_live).map((r) => r.bot_id);
 
     console.info(
       `[execution-mode POST] CRYPTO_GLOBAL_MODE_TRANSITION ` +
@@ -373,7 +419,7 @@ export async function POST(request: Request) {
         previous_mode:            previousMode,
         mode:                     newMode,
         live_master_enabled:      armValue,   // crypto-specific master
-        armed_crypto_bots:        armValue ? armedBots : [],
+        armed_crypto_bots:        armedBots,
         enabled_crypto_bots:      enabledBots,
         existing_paper_open:      existingPaperOpen,
         existing_live_open:       existingLiveOpen,

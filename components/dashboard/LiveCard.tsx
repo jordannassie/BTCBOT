@@ -114,7 +114,7 @@ export default function LiveCard() {
   const [sparkPoints,   setSparkPoints]   = useState<BankrollPoint[]>([]);
   const [liveExposure,  setLiveExposure]  = useState<ExposureMetrics | null>(null);
   const [exposureLoading, setExposureLoading] = useState(true);
-  const [armLiveBots,   setArmLiveBots]   = useState<number | null>(null);
+  // arm_live counters removed — managed by global PAPER/LIVE toggle
   const [livePnl,       setLivePnl]       = useState<LivePnl | null>(null);
   const [capInput,      setCapInput]      = useState('0');
   const [savingCap,     setSavingCap]     = useState(false);
@@ -130,10 +130,9 @@ export default function LiveCard() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const [settingsRes, exposureRes, summaryRes, pnlRes] = await Promise.all([
+      const [settingsRes, exposureRes, pnlRes] = await Promise.all([
         fetch('/api/bot-settings?bot_id=live', { cache: 'no-store' }),
         fetch('/api/copy/exposure',             { cache: 'no-store' }),
-        fetch('/api/copy/summary',              { cache: 'no-store' }),
         fetch('/api/copy/live-pnl',             { cache: 'no-store' }),
       ]);
 
@@ -178,13 +177,6 @@ export default function LiveCard() {
         setLiveExposure(zeroExposure);
       }
       setExposureLoading(false);
-
-      if (summaryRes.ok) {
-        try {
-          const sumPayload = await summaryRes.json();
-          if (sumPayload.ok) setArmLiveBots(sumPayload.armLiveBotsCount ?? 0);
-        } catch { /* non-critical */ }
-      }
 
       if (pnlRes.ok) {
         try {
@@ -378,8 +370,7 @@ export default function LiveCard() {
   const openExposure  = liveExposure?.exposure ?? 0;
   const openCount     = liveExposure?.count    ?? 0;
   const allTimePnl    = livePnl?.live_all_time_pnl_usd ?? null;
-  const armCount      = armLiveBots ?? null;
-  const liveNow       = armCount !== null && isEnabled ? armCount : 0;
+  // armCount / liveNow removed — use global PAPER/LIVE toggle in CryptoControlCenter
 
   const cap           = liveExposure?.cap       ?? 0;
   const remaining     = liveExposure?.remaining ?? null;
@@ -746,23 +737,6 @@ export default function LiveCard() {
                   }} />
                 </div>
               )}
-            </div>
-
-            {/* ARM LIVE bots + Live Active */}
-            <div style={{
-              padding: '0.55rem 0.75rem', background: 'rgba(248,250,252,0.02)',
-              border: '1px solid rgba(248,250,252,0.06)', borderRadius: '0.5rem',
-              display: 'flex', flexDirection: 'column', gap: '0.25rem',
-            }}>
-              {([
-                { label: 'ARM LIVE Bots',   val: armCount !== null ? String(armCount) : '—', color: armCount !== null && armCount > 0 ? '#f8fafc' : 'rgba(248,250,252,0.35)' },
-                { label: 'Live Active Now', val: armCount !== null ? String(liveNow) : '—', color: liveNow > 0 ? '#34d399' : 'rgba(248,250,252,0.35)' },
-              ] as { label: string; val: string; color: string }[]).map(({ label, val, color }) => (
-                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
-                  <span style={{ color: 'rgba(248,250,252,0.38)' }}>{label}</span>
-                  <span style={{ fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
-                </div>
-              ))}
             </div>
 
             {/* Live status diagnostic */}

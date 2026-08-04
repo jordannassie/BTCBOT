@@ -67,8 +67,12 @@ interface ExecModeResponse {
   mode?:                 'PAPER' | 'LIVE';
   live_ready?:           boolean;
   live_not_ready_reason?: string | null;
+  emergency_stop?:       boolean;
+  armed_bots?:           string[];
+  enabled_bots?:         string[];
   error?:                string;
   blocking_reason?:      string;
+  failed_bots?:          string[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -245,10 +249,13 @@ export default function CryptoControlCenter() {
   const [execMode,          setExecMode]          = useState<'PAPER' | 'LIVE'>('PAPER');
   const [liveReady,         setLiveReady]         = useState(false);
   const [liveNotReadyReason,setLiveNotReadyReason]= useState<string | null>(null);
+  const [emergencyStop,     setEmergencyStop]     = useState(false);
   const [switching,         setSwitching]         = useState(false);
   const [switchError,       setSwitchError]       = useState<string | null>(null);
   const [showGoLiveModal,   setShowGoLiveModal]   = useState(false);
   const [paperSwitchMsg,    setPaperSwitchMsg]    = useState<string | null>(null);
+  const [armedCount,        setArmedCount]        = useState(0);   // verified from GET
+  const [liveIncomplete,    setLiveIncomplete]    = useState(false);
 
   // ── Toggle state (per-bot) ─────────────────────────────────────────────────
   const [toggling,   setToggling]  = useState<Set<BotId>>(new Set());
@@ -285,11 +292,15 @@ export default function CryptoControlCenter() {
 
       const modeJson = await modeRes.json() as ExecModeResponse;
       if (modeJson.ok) {
-        const newMode = modeJson.mode ?? 'PAPER';
+        const newMode  = modeJson.mode ?? 'PAPER';
+        const newArmed = (modeJson.armed_bots ?? []).length;
         setExecMode(newMode);
         execModeRef.current = newMode;
+        setArmedCount(newArmed);
+        setLiveIncomplete(newMode === 'LIVE' && newArmed === 0);
         setLiveReady(modeJson.live_ready ?? false);
         setLiveNotReadyReason(modeJson.live_not_ready_reason ?? null);
+        setEmergencyStop(modeJson.emergency_stop ?? false);
         // If backend reports PAPER while we thought we were LIVE → safety revert
         if (newMode === 'PAPER' && execModeRef.current === 'LIVE') {
           setSwitchError('LIVE DISABLED — backend reverted to PAPER');
@@ -370,10 +381,13 @@ export default function CryptoControlCenter() {
       const modeJson = await modeRes.json() as ExecModeResponse;
       if (!modeJson.ok) {
         const rawErr = modeJson.error ?? modeJson.blocking_reason ?? 'Switch to LIVE failed';
+        const failed = modeJson.failed_bots?.join(', ');
         const friendly = rawErr === 'emergency_stop_active'
           ? 'LIVE BLOCKED — Emergency stop is active'
           : rawErr.startsWith('invalid_trade_size')
           ? 'LIVE BLOCKED — One or more bots have an invalid trade size'
+          : rawErr.startsWith('arm_live_not_persisted') && failed
+          ? `LIVE BLOCKED — Could not arm: ${failed}`
           : rawErr;
         setSwitchError(friendly);
         setShowGoLiveModal(false);
@@ -603,15 +617,33 @@ export default function CryptoControlCenter() {
       </div>
 
       {/* Mode status badge */}
-      {execMode === 'LIVE' ? (
+      {execMode === 'LIVE' && emergencyStop ? (
+        <span style={{
+          padding:    '0.18rem 0.6rem', borderRadius: '0.3rem',
+          background: 'rgba(239,68,68,0.25)', border: '1px solid rgba(239,68,68,0.7)',
+          fontSize:   '0.62rem', fontWeight: 800, letterSpacing: '0.07em',
+          color:      '#f87171', flexShrink: 0,
+          animation:  'none',
+        }}>
+          🛑 EMERGENCY STOP ACTIVE — LIVE ORDERS BLOCKED
+        </span>
+      ) : execMode === 'LIVE' && !liveIncomplete ? (
         <span style={{
           padding:    '0.18rem 0.6rem', borderRadius: '0.3rem',
           background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
           fontSize:   '0.62rem', fontWeight: 800, letterSpacing: '0.07em',
           color:      '#f87171', flexShrink: 0,
-          animation:  'none',
         }}>
-          ● LIVE TRADING ACTIVE
+          ● LIVE TRADING ACTIVE — {armedCount} of 4 armed
+        </span>
+      ) : execMode === 'LIVE' && liveIncomplete ? (
+        <span style={{
+          padding:    '0.18rem 0.6rem', borderRadius: '0.3rem',
+          background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.35)',
+          fontSize:   '0.62rem', fontWeight: 800, letterSpacing: '0.06em',
+          color:      '#fbbf24', flexShrink: 0,
+        }}>
+          ⚠ LIVE SETUP INCOMPLETE — 0 OF 4 BOTS ARMED
         </span>
       ) : (
         <span style={{
