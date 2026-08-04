@@ -118,7 +118,10 @@ export default function LiveCard() {
   const [livePnl,       setLivePnl]       = useState<LivePnl | null>(null);
   const [capInput,      setCapInput]      = useState('0');
   const [savingCap,     setSavingCap]     = useState(false);
+  const [capEditing,    setCapEditing]    = useState(false);
+  const [capSaveMsg,    setCapSaveMsg]    = useState<{ ok: boolean; text: string } | null>(null);
   const capSynced = useRef(false);
+  const capPrev   = useRef('0'); // stores last confirmed value for cancel/rollback
 
   // ── NEW: collapsible risk panel ──────────────────────────────────────────
   const [riskExpanded, setRiskExpanded] = useState(false);
@@ -157,7 +160,9 @@ export default function LiveCard() {
           const live = expPayload.live as ExposureMetrics;
           if (!capSynced.current) {
             setLiveExposure(live);
-            setCapInput(String(live.cap));
+            const initialCap = String(live.cap);
+            setCapInput(initialCap);
+            capPrev.current = initialCap;
             capSynced.current = true;
           } else {
             setLiveExposure((prev) => {
@@ -222,12 +227,12 @@ export default function LiveCard() {
 
   const handleSaveLiveCap = async () => {
     const parsed = Number(capInput);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      setMessage({ text: 'Enter a valid amount (0 = unlimited)', type: 'error' });
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setCapSaveMsg({ ok: false, text: 'Enter a number greater than $0' });
       return;
     }
     setSavingCap(true);
-    setMessage(null);
+    setCapSaveMsg(null);
     try {
       const res = await fetch('/api/copy/settings', {
         method: 'PATCH',
@@ -240,21 +245,67 @@ export default function LiveCard() {
         const savedCap: number =
           (payload.settings as { live_max_exposure_usd?: number } | null)
             ?.live_max_exposure_usd ?? parsed;
-        setCapInput(String(savedCap));
+        const confirmedStr = String(savedCap);
+        setCapInput(confirmedStr);
+        capPrev.current = confirmedStr;
         setLiveExposure((prev) => {
           if (!prev) return prev;
           const remaining = savedCap > 0 ? Math.max(0, savedCap - prev.exposure) : null;
           return { ...prev, cap: savedCap, remaining };
         });
-        const label = savedCap > 0
-          ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(savedCap)
-          : 'Unlimited';
-        setMessage({ text: `Live max exposure set to ${label}`, type: 'success' });
+        setCapEditing(false);
+        setCapSaveMsg({ ok: true, text: 'Saved' });
+        setTimeout(() => setCapSaveMsg(null), 2000);
       } else {
-        setMessage({ text: payload.error ?? 'Save failed', type: 'error' });
+        // Rollback input to last confirmed value on API error
+        setCapInput(capPrev.current);
+        setCapSaveMsg({ ok: false, text: payload.error ?? 'Save failed' });
       }
     } catch {
-      setMessage({ text: 'Network error saving cap', type: 'error' });
+      setCapInput(capPrev.current);
+      setCapSaveMsg({ ok: false, text: 'Network error — value restored' });
+    } finally {
+      setSavingCap(false);
+    }
+  };
+
+  const handleQuickAdjust = async (delta: number) => {
+    const current = Number(capPrev.current);
+    const next = Number.isFinite(current) ? Math.max(1, current + delta) : Math.abs(delta);
+    const nextStr = String(next);
+    setCapInput(nextStr);
+    // Immediately save the adjusted value
+    setSavingCap(true);
+    setCapSaveMsg(null);
+    try {
+      const res = await fetch('/api/copy/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ live_max_exposure_usd: next }),
+        cache: 'no-store',
+      });
+      const payload = await res.json();
+      if (payload.ok) {
+        const savedCap: number =
+          (payload.settings as { live_max_exposure_usd?: number } | null)
+            ?.live_max_exposure_usd ?? next;
+        const confirmedStr = String(savedCap);
+        setCapInput(confirmedStr);
+        capPrev.current = confirmedStr;
+        setLiveExposure((prev) => {
+          if (!prev) return prev;
+          const remaining = savedCap > 0 ? Math.max(0, savedCap - prev.exposure) : null;
+          return { ...prev, cap: savedCap, remaining };
+        });
+        setCapSaveMsg({ ok: true, text: `Saved ${delta > 0 ? '+' : ''}${formatUSD(delta)}` });
+        setTimeout(() => setCapSaveMsg(null), 1500);
+      } else {
+        setCapInput(capPrev.current);
+        setCapSaveMsg({ ok: false, text: payload.error ?? 'Save failed' });
+      }
+    } catch {
+      setCapInput(capPrev.current);
+      setCapSaveMsg({ ok: false, text: 'Network error' });
     } finally {
       setSavingCap(false);
     }
@@ -560,10 +611,12 @@ export default function LiveCard() {
 
         {/* Collapsed summary */}
         {!riskExpanded && (
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.4rem', fontSize: '0.62rem', color: 'rgba(248,250,252,0.35)' }}>
-            <span>Max Exposure: <span style={{ color: 'rgba(248,250,252,0.55)', fontFamily: 'monospace' }}>{cap > 0 ? formatUSD(cap) : 'Unlimited'}</span></span>
-            <span>Armed Bots: <span style={{ color: armCount !== null && armCount > 0 ? '#f8fafc' : 'rgba(248,250,252,0.35)', fontFamily: 'monospace' }}>{armCount ?? '—'}</span></span>
-            <span>Live Positions: <span style={{ color: liveNow > 0 ? '#34d399' : 'rgba(248,250,252,0.35)', fontFamily: 'monospace' }}>{armCount !== null ? liveNow : '—'}</span></span>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.4rem', fontSize: '0.62rem', color: 'rgba(248,250,252,0.35)' }}>
+            <span>Max: <span style={{ color: 'rgba(248,250,252,0.6)', fontFamily: 'monospace', fontWeight: 700 }}>{cap > 0 ? formatUSD(cap) : 'Unlimited'}</span></span>
+            <span style={{ color: 'rgba(248,250,252,0.2)' }}>·</span>
+            <span>Current: <span style={{ color: 'rgba(248,250,252,0.55)', fontFamily: 'monospace' }}>{exposureLoading ? '—' : formatUSD(openExposure)}</span></span>
+            <span style={{ color: 'rgba(248,250,252,0.2)' }}>·</span>
+            <span>Remaining: <span style={{ color: remColor, fontFamily: 'monospace' }}>{remaining === null ? 'Unlimited' : formatUSD(remaining)}</span></span>
           </div>
         )}
 
@@ -571,33 +624,150 @@ export default function LiveCard() {
         {riskExpanded && (
           <div style={{ marginTop: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
 
-            {/* Exposure overview */}
+            {/* ── Max Live Exposure control ── */}
             <div style={{
-              padding: '0.65rem 0.85rem',
-              background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.15)',
-              borderRadius: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.25rem',
-              opacity: exposureLoading ? 0.5 : 1, transition: 'opacity 0.2s',
+              padding: '0.75rem 0.85rem',
+              background: 'rgba(52,211,153,0.04)', border: '1px solid rgba(52,211,153,0.15)',
+              borderRadius: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.5rem',
             }}>
-              <div style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.3)', marginBottom: '0.25rem' }}>
-                Open Exposure
+              {/* Label */}
+              <div style={{ fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.3)' }}>
+                Max Live Exposure
               </div>
 
-              {/* Exposure rows */}
-              {([
-                { label: 'Max Exposure',      val: cap > 0 ? formatUSD(cap) : 'Unlimited', color: cap > 0 ? '#f8fafc' : 'rgba(248,250,252,0.38)' },
-                { label: 'Remaining',          val: remaining === null ? 'Unlimited' : formatUSD(remaining), color: remColor },
-                { label: 'Current Exposure',   val: exposureLoading ? '—' : formatUSD(openExposure), color: '#f8fafc' },
-                { label: 'Open Positions',     val: exposureLoading ? '—' : `${openCount} position${openCount !== 1 ? 's' : ''}`, color: '#f8fafc' },
-              ] as { label: string; val: string; color: string }[]).map(({ label, val, color }) => (
-                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem' }}>
-                  <span style={{ color: 'rgba(248,250,252,0.38)' }}>{label}</span>
-                  <span style={{ fontWeight: 700, color, fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace' }}>{val}</span>
+              {/* View mode */}
+              {!capEditing ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {/* Quick -$10 */}
+                  <button
+                    onClick={() => handleQuickAdjust(-10)}
+                    title="Decrease by $10"
+                    style={{
+                      padding: '0.15rem 0.4rem', borderRadius: '0.3rem',
+                      background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)',
+                      color: '#f87171', fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer',
+                      lineHeight: 1, whiteSpace: 'nowrap',
+                    }}
+                  >
+                    −$10
+                  </button>
+
+                  {/* Current value */}
+                  <span style={{
+                    fontSize: '1.15rem', fontWeight: 800, fontFamily: 'monospace',
+                    color: '#f8fafc', letterSpacing: '-0.01em', flex: 1,
+                  }}>
+                    {cap > 0 ? formatUSD(cap) : 'Unlimited'}
+                  </span>
+
+                  {/* Quick +$10 */}
+                  <button
+                    onClick={() => handleQuickAdjust(10)}
+                    title="Increase by $10"
+                    style={{
+                      padding: '0.15rem 0.4rem', borderRadius: '0.3rem',
+                      background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)',
+                      color: '#34d399', fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer',
+                      lineHeight: 1, whiteSpace: 'nowrap',
+                    }}
+                  >
+                    +$10
+                  </button>
+
+                  {/* Edit button */}
+                  <button
+                    onClick={() => { setCapEditing(true); setCapSaveMsg(null); }}
+                    style={{
+                      padding: '0.18rem 0.55rem', borderRadius: '0.3rem',
+                      background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
+                      color: 'rgba(248,250,252,0.6)', fontSize: '0.65rem', fontWeight: 700,
+                      cursor: 'pointer', lineHeight: 1,
+                    }}
+                  >
+                    Edit
+                  </button>
                 </div>
-              ))}
+              ) : (
+                /* Edit mode */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <span style={{ color: 'rgba(248,250,252,0.35)', fontFamily: 'monospace', fontSize: '0.85rem', flexShrink: 0 }}>$</span>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="1"
+                      value={capInput}
+                      onChange={(e) => { setCapInput(e.target.value); setCapSaveMsg(null); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveLiveCap();
+                        if (e.key === 'Escape') { setCapEditing(false); setCapInput(capPrev.current); setCapSaveMsg(null); }
+                      }}
+                      disabled={savingCap}
+                      autoFocus
+                      style={{
+                        flex: 1, minWidth: 0,
+                        background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(52,211,153,0.3)',
+                        borderRadius: '0.35rem', color: '#f8fafc', fontSize: '0.9rem',
+                        padding: '0.3rem 0.55rem', fontFamily: 'monospace', outline: 'none',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    />
+                    <button
+                      onClick={handleSaveLiveCap}
+                      disabled={savingCap}
+                      style={{
+                        padding: '0.28rem 0.65rem', borderRadius: '0.35rem',
+                        border: '1px solid rgba(52,211,153,0.4)', background: 'rgba(52,211,153,0.12)',
+                        color: '#34d399', fontSize: '0.7rem', fontWeight: 700,
+                        cursor: savingCap ? 'not-allowed' : 'pointer',
+                        opacity: savingCap ? 0.55 : 1, lineHeight: 1, whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {savingCap ? '…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => { setCapEditing(false); setCapInput(capPrev.current); setCapSaveMsg(null); }}
+                      disabled={savingCap}
+                      style={{
+                        padding: '0.28rem 0.55rem', borderRadius: '0.35rem',
+                        border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)',
+                        color: 'rgba(248,250,252,0.45)', fontSize: '0.7rem', fontWeight: 600,
+                        cursor: 'pointer', lineHeight: 1,
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '0.58rem', color: 'rgba(248,250,252,0.2)' }}>
+                    Enter &amp; save · Esc to cancel
+                  </div>
+                </div>
+              )}
+
+              {/* Save feedback message */}
+              {capSaveMsg && (
+                <div style={{ fontSize: '0.65rem', fontWeight: 600, color: capSaveMsg.ok ? '#34d399' : '#f87171' }}>
+                  {capSaveMsg.ok ? '✓ ' : '✗ '}{capSaveMsg.text}
+                </div>
+              )}
+
+              {/* ── Three read-only rows below ── */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', paddingTop: '0.45rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                {([
+                  { label: 'Current Exposure', val: exposureLoading ? '—' : formatUSD(openExposure), color: '#f8fafc' },
+                  { label: 'Remaining Capacity', val: remaining === null ? 'Unlimited' : formatUSD(remaining), color: remColor },
+                  { label: 'Open Positions',    val: exposureLoading ? '—' : `${openCount} position${openCount !== 1 ? 's' : ''}`, color: openCount > 0 ? '#fbbf24' : '#f8fafc' },
+                ] as { label: string; val: string; color: string }[]).map(({ label, val, color }) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem' }}>
+                    <span style={{ color: 'rgba(248,250,252,0.35)' }}>{label}</span>
+                    <span style={{ fontWeight: 700, color, fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace' }}>{val}</span>
+                  </div>
+                ))}
+              </div>
 
               {/* Utilisation bar */}
               {cap > 0 && !exposureLoading && (
-                <div style={{ marginTop: '0.35rem', height: 3, borderRadius: 99, background: 'rgba(255,255,255,0.07)' }}>
+                <div style={{ height: 3, borderRadius: 99, background: 'rgba(255,255,255,0.07)' }}>
                   <div style={{
                     height: '100%', borderRadius: 99, width: `${pct}%`,
                     background: pct >= 100 ? '#f87171' : pct >= 80 ? '#fbbf24' : '#34d399',
@@ -605,38 +775,6 @@ export default function LiveCard() {
                   }} />
                 </div>
               )}
-
-              {/* Change cap editor */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.45rem', paddingTop: '0.4rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                <span style={{ color: 'rgba(248,250,252,0.22)', fontSize: '0.62rem', flexShrink: 0 }}>Change cap: $</span>
-                <input
-                  type="number" min="0" step="1"
-                  value={capInput}
-                  onChange={(e) => setCapInput(e.target.value)}
-                  disabled={savingCap}
-                  title="Live max exposure (0 = unlimited)"
-                  style={{
-                    flex: 1, minWidth: 0, maxWidth: 72,
-                    background: 'rgba(248,250,252,0.05)', border: '1px solid rgba(248,250,252,0.08)',
-                    borderRadius: 4, color: '#f8fafc', fontSize: '0.72rem',
-                    padding: '0.15rem 0.3rem', fontVariantNumeric: 'tabular-nums', outline: 'none',
-                  }}
-                />
-                <button
-                  onClick={handleSaveLiveCap}
-                  disabled={savingCap}
-                  style={{
-                    padding: '0.15rem 0.45rem', borderRadius: 4,
-                    border: '1px solid rgba(52,211,153,0.3)', background: 'rgba(52,211,153,0.08)',
-                    color: '#34d399', fontSize: '0.65rem', fontWeight: 700,
-                    cursor: savingCap ? 'not-allowed' : 'pointer',
-                    opacity: savingCap ? 0.5 : 1, lineHeight: 1, whiteSpace: 'nowrap',
-                  }}
-                >
-                  {savingCap ? '…' : 'Save'}
-                </button>
-              </div>
-              <div style={{ fontSize: '0.56rem', color: 'rgba(248,250,252,0.15)', textAlign: 'right' }}>0 = unlimited</div>
             </div>
 
             {/* ARM LIVE bots + Live Active */}
