@@ -548,43 +548,13 @@ export default function LiveCard() {
         </div>
       </div>
 
-      {/* ── LIVE Master toggle (footer — always visible) ── */}
-      <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.65rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#f8fafc', letterSpacing: '0.01em' }}>
-              LIVE ON (Master)
-            </div>
-            <div style={{ fontSize: '0.62rem', color: 'rgba(248,250,252,0.35)', marginTop: '0.1rem', lineHeight: 1.4 }}>
-              Authorizes enabled bots to submit real orders
-            </div>
-          </div>
-          <div className="toggle-switch" style={{ flexShrink: 0 }}>
-            <input
-              type="checkbox"
-              checked={isEnabled}
-              onChange={(e) => handleToggle(e.target.checked)}
-              disabled={saving}
-              id="live-enabled"
-            />
-            <label className="toggle-slider" htmlFor="live-enabled" />
-          </div>
+      {/* ── LIVE Master toggle — now controlled by the global PAPER/LIVE toggle
+              in CryptoControlCenter. Kept in state for card styling, hidden from UI. ── */}
+      {allowance != null && cash != null && allowance < cash && (
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.5rem', fontSize: '0.62rem', color: '#fbbf24' }}>
+          ⚠ Allowance low
         </div>
-
-        {/* Inline save message */}
-        {message && (
-          <div style={{ marginTop: '0.35rem', fontSize: '0.68rem', color: message.type === 'success' ? '#10b981' : '#ef4444' }}>
-            {message.text}
-          </div>
-        )}
-
-        {/* Allowance warning */}
-        {allowance != null && cash != null && allowance < cash && (
-          <div style={{ marginTop: '0.3rem', fontSize: '0.62rem', color: '#fbbf24' }}>
-            ⚠ Allowance low
-          </div>
-        )}
-      </div>
+      )}
 
       {/* ── Collapsible: Live Risk & Controls ── */}
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.55rem' }}>

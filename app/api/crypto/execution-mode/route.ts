@@ -53,8 +53,8 @@ export async function GET() {
   }
 
   try {
-    // Fetch shared account row + bot rows + live master + open positions
-    const [accountRes, botRes, liveMasterRes, paperPosRes, livePosRes] = await Promise.all([
+    // Fetch shared account row + bot rows + live master + open positions + emergency stop
+    const [accountRes, botRes, liveMasterRes, paperPosRes, livePosRes, globalSettingsRes] = await Promise.all([
       client
         .from('bot_settings')
         .select('strategy_settings')
@@ -63,7 +63,7 @@ export async function GET() {
 
       client
         .from('bot_settings')
-        .select('bot_id, is_enabled, arm_live, mode')
+        .select('bot_id, is_enabled, arm_live, mode, trade_size_usd')
         .in('bot_id', CRYPTO_BOT_IDS),
 
       client
@@ -85,6 +85,13 @@ export async function GET() {
         .select('id, bot_id', { count: 'exact', head: false })
         .in('bot_id', CRYPTO_BOT_IDS)
         .eq('status', 'LIVE_OPEN'),
+
+      // Emergency stop (for live_ready computation)
+      client
+        .from('copy_global_settings')
+        .select('emergency_stop')
+        .eq('id', 1)
+        .maybeSingle(),
     ]);
 
     const ss = accountRes.data?.strategy_settings as Record<string, unknown> | null;
@@ -96,7 +103,7 @@ export async function GET() {
     const globalLiveMasterEnabled = liveMasterRow?.is_enabled ?? false;
 
     // Per-bot state (arm_live)
-    type BotRow = { bot_id: string; is_enabled: boolean; arm_live: boolean; mode: string };
+    type BotRow = { bot_id: string; is_enabled: boolean; arm_live: boolean; mode: string; trade_size_usd: number };
     const botRows = (botRes.data ?? []) as BotRow[];
     const enabledBots = botRows.filter((r) => r.is_enabled).map((r) => r.bot_id);
     const armedBots   = botRows.filter((r) => r.arm_live).map((r) => r.bot_id);
@@ -105,6 +112,18 @@ export async function GET() {
     const paperOpenPositions = (paperPosRes.data ?? []).length;
     const liveOpenPositions  = (livePosRes.data  ?? []).length;
 
+    // Live readiness — safe to expose (no secrets, no trade logic)
+    const emergencyStop = (globalSettingsRes.data as { emergency_stop: boolean } | null)?.emergency_stop ?? false;
+    const badSizeBots   = botRows
+      .filter((r) => r.is_enabled && (!r.trade_size_usd || r.trade_size_usd <= 0))
+      .map((r) => r.bot_id);
+    const liveReady          = !emergencyStop && badSizeBots.length === 0;
+    const liveNotReadyReason = emergencyStop
+      ? 'emergency_stop_active'
+      : badSizeBots.length > 0
+      ? `invalid_trade_size:${badSizeBots.join(',')}`
+      : null;
+
     return NextResponse.json(
       {
         ok:                           true,
@@ -112,7 +131,9 @@ export async function GET() {
         account_id:                   ACCOUNT_ID,
         crypto_live_master_enabled:   cryptoLiveMasterEnabled,
         global_live_master_enabled:   globalLiveMasterEnabled,
-        emergency_stop:               null,   // read from copy_global_settings (worker-side only)
+        emergency_stop:               emergencyStop,
+        live_ready:                   liveReady,
+        live_not_ready_reason:        liveNotReadyReason,
         enabled_bots:                 enabledBots,
         armed_bots:                   armedBots,
         paper_open_positions:         paperOpenPositions,

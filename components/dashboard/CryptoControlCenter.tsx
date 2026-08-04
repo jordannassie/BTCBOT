@@ -62,6 +62,15 @@ interface BotsApiResponse {
   bots?: BotStat[];
 }
 
+interface ExecModeResponse {
+  ok:                    boolean;
+  mode?:                 'PAPER' | 'LIVE';
+  live_ready?:           boolean;
+  live_not_ready_reason?: string | null;
+  error?:                string;
+  blocking_reason?:      string;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtUsd(v: number, digits = 2) {
@@ -232,6 +241,15 @@ export default function CryptoControlCenter() {
   const [bots,       setBots]      = useState<BotStat[]>([]);
   const [loading,    setLoading]   = useState(true);
 
+  // ── Execution mode state ───────────────────────────────────────────────────
+  const [execMode,          setExecMode]          = useState<'PAPER' | 'LIVE'>('PAPER');
+  const [liveReady,         setLiveReady]         = useState(false);
+  const [liveNotReadyReason,setLiveNotReadyReason]= useState<string | null>(null);
+  const [switching,         setSwitching]         = useState(false);
+  const [switchError,       setSwitchError]       = useState<string | null>(null);
+  const [showGoLiveModal,   setShowGoLiveModal]   = useState(false);
+  const [paperSwitchMsg,    setPaperSwitchMsg]    = useState<string | null>(null);
+
   // ── Toggle state (per-bot) ─────────────────────────────────────────────────
   const [toggling,   setToggling]  = useState<Set<BotId>>(new Set());
   const [toggleErr,  setToggleErr] = useState<Partial<Record<BotId, string>>>({});
@@ -255,11 +273,27 @@ export default function CryptoControlCenter() {
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     try {
-      const res  = await fetch('/api/crypto/bots', { cache: 'no-store' });
-      const json = await res.json() as BotsApiResponse;
-      if (json.ok && json.bots) setBots(json.bots);
+      const [botsRes, modeRes] = await Promise.all([
+        fetch('/api/crypto/bots',            { cache: 'no-store' }),
+        fetch('/api/crypto/execution-mode',  { cache: 'no-store' }),
+      ]);
+      const botsJson = await botsRes.json() as BotsApiResponse;
+      if (botsJson.ok && botsJson.bots) setBots(botsJson.bots);
+
+      const modeJson = await modeRes.json() as ExecModeResponse;
+      if (modeJson.ok) {
+        const newMode = modeJson.mode ?? 'PAPER';
+        setExecMode(newMode);
+        setLiveReady(modeJson.live_ready ?? false);
+        setLiveNotReadyReason(modeJson.live_not_ready_reason ?? null);
+        // If backend reports PAPER while we thought we were LIVE → safety revert
+        if (newMode === 'PAPER' && execMode === 'LIVE') {
+          setSwitchError('LIVE DISABLED — backend reverted to PAPER');
+        }
+      }
     } catch {}
     finally { setLoading(false); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -283,6 +317,99 @@ export default function CryptoControlCenter() {
   // Use BTC equity as the primary shared balance (only BTC trades currently)
   const btcBot         = bots.find((b) => b.bot_id === 'btc_5m_late');
   const availBalance   = btcBot ? btcBot.account_equity - btcBot.open_exposure : null;
+
+  // ── Execution mode switching ───────────────────────────────────────────────
+
+  const handleSwitchToPaper = useCallback(async () => {
+    if (switching) return;
+    setSwitching(true);
+    setSwitchError(null);
+    setPaperSwitchMsg(null);
+    try {
+      const [modeRes] = await Promise.all([
+        fetch('/api/crypto/execution-mode', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'PAPER' }), cache: 'no-store',
+        }),
+        // Also disarm the copy-trading LIVE master
+        fetch('/api/bot-settings', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bot_id: 'live', is_enabled: false }), cache: 'no-store',
+        }),
+      ]);
+      const modeJson = await modeRes.json() as ExecModeResponse;
+      if (!modeJson.ok) {
+        setSwitchError(modeJson.error ?? 'Failed to switch to PAPER');
+        return;
+      }
+      setExecMode('PAPER');
+      setPaperSwitchMsg('PAPER MODE ACTIVE — NO NEW LIVE ORDERS');
+      setTimeout(() => setPaperSwitchMsg(null), 5000);
+      await load();
+      dispatchBotChange();
+    } catch {
+      setSwitchError('Network error switching to PAPER');
+    } finally {
+      setSwitching(false);
+    }
+  }, [switching, load]);
+
+  const handleConfirmGoLive = useCallback(async () => {
+    if (switching) return;
+    setSwitching(true);
+    setSwitchError(null);
+    try {
+      const modeRes = await fetch('/api/crypto/execution-mode', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'LIVE' }), cache: 'no-store',
+      });
+      const modeJson = await modeRes.json() as ExecModeResponse;
+      if (!modeJson.ok) {
+        const rawErr = modeJson.error ?? modeJson.blocking_reason ?? 'Switch to LIVE failed';
+        const friendly = rawErr === 'emergency_stop_active'
+          ? 'LIVE BLOCKED — Emergency stop is active'
+          : rawErr.startsWith('invalid_trade_size')
+          ? 'LIVE BLOCKED — One or more bots have an invalid trade size'
+          : rawErr;
+        setSwitchError(friendly);
+        setShowGoLiveModal(false);
+        return;
+      }
+      // Also arm the copy-trading LIVE master (non-critical, ignore errors)
+      fetch('/api/bot-settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bot_id: 'live', is_enabled: true }), cache: 'no-store',
+      }).catch(() => {});
+      setExecMode('LIVE');
+      setShowGoLiveModal(false);
+      await load();
+      dispatchBotChange();
+    } catch {
+      setSwitchError('Network error switching to LIVE');
+      setShowGoLiveModal(false);
+    } finally {
+      setSwitching(false);
+    }
+  }, [switching, load]);
+
+  const handleModeToggleClick = useCallback(() => {
+    if (switching) return;
+    setSwitchError(null);
+    if (execMode === 'LIVE') {
+      handleSwitchToPaper();
+    } else {
+      if (!liveReady) {
+        const reason = liveNotReadyReason === 'emergency_stop_active'
+          ? 'LIVE BLOCKED — Emergency stop is active'
+          : liveNotReadyReason?.startsWith('invalid_trade_size')
+          ? 'LIVE NOT READY — One or more bots have an invalid trade size'
+          : 'LIVE NOT READY — CHECK WALLET AUTH';
+        setSwitchError(reason);
+        return;
+      }
+      setShowGoLiveModal(true);
+    }
+  }, [switching, execMode, liveReady, liveNotReadyReason, handleSwitchToPaper]);
 
   // ── Individual toggle ──────────────────────────────────────────────────────
   const handleToggle = useCallback(async (meta: BotMeta, enable: boolean) => {
@@ -408,28 +535,90 @@ export default function CryptoControlCenter() {
       }}
     >
 
-      {/* ── Mode indicator (PAPER always active; LIVE not ready) ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexShrink: 0 }}>
+      {/* ── PAPER / LIVE unified mode toggle ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexShrink: 0 }}>
+        {/* PAPER label */}
         <span style={{
-          fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.08em',
-          padding: '0.2rem 0.65rem', borderRadius: '0.35rem',
-          background: 'rgba(129,140,248,0.15)', border: '1px solid rgba(129,140,248,0.35)',
-          color: '#818cf8',
+          fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.07em',
+          color: execMode === 'PAPER' ? '#818cf8' : 'rgba(248,250,252,0.3)',
+          transition: 'color 0.2s',
         }}>
-          PAPER MODE
+          PAPER
         </span>
-        <span
-          title="LIVE mode is not yet available from the dashboard control center."
+
+        {/* Toggle pill */}
+        <button
+          onClick={handleModeToggleClick}
+          disabled={switching}
+          aria-label={execMode === 'PAPER' ? 'Switch to LIVE trading' : 'Switch to PAPER trading'}
+          title={
+            switching ? 'Switching…'
+            : execMode === 'LIVE' ? 'Click to return to PAPER mode'
+            : liveReady ? 'Click to go LIVE (confirmation required)'
+            : 'LIVE not ready'
+          }
           style={{
-            fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.06em',
-            padding: '0.18rem 0.55rem', borderRadius: '0.35rem',
-            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
-            color: 'rgba(248,250,252,0.2)', cursor: 'not-allowed',
+            position:   'relative',
+            width:      46, height: 26, borderRadius: 13,
+            border:     `1px solid ${execMode === 'LIVE' ? 'rgba(34,197,94,0.5)' : 'rgba(255,255,255,0.15)'}`,
+            cursor:     switching ? 'wait' : 'pointer',
+            background: execMode === 'LIVE' ? '#22c55e' : 'rgba(255,255,255,0.1)',
+            transition: 'background 0.2s, border-color 0.2s',
+            padding:    0, flexShrink: 0,
           }}
         >
-          LIVE — Not Ready
+          <span style={{
+            position:   'absolute',
+            top:        3,
+            left:       execMode === 'LIVE' ? 23 : 3,
+            width:      18, height: 18,
+            borderRadius: '50%',
+            background: '#f8fafc',
+            transition: 'left 0.2s',
+            boxShadow:  '0 1px 4px rgba(0,0,0,0.35)',
+          }} />
+        </button>
+
+        {/* LIVE label */}
+        <span style={{
+          fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.07em',
+          color: execMode === 'LIVE' ? '#22c55e'
+               : liveReady         ? 'rgba(248,250,252,0.55)'
+               :                     'rgba(248,250,252,0.2)',
+          transition: 'color 0.2s',
+        }}>
+          LIVE
         </span>
+
+        {/* Not-ready hint */}
+        {!liveReady && execMode === 'PAPER' && (
+          <span style={{ fontSize: '0.55rem', fontWeight: 700, color: '#fbbf24', letterSpacing: '0.04em' }}>
+            NOT READY
+          </span>
+        )}
       </div>
+
+      {/* Mode status badge */}
+      {execMode === 'LIVE' ? (
+        <span style={{
+          padding:    '0.18rem 0.6rem', borderRadius: '0.3rem',
+          background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
+          fontSize:   '0.62rem', fontWeight: 800, letterSpacing: '0.07em',
+          color:      '#f87171', flexShrink: 0,
+          animation:  'none',
+        }}>
+          ● LIVE TRADING ACTIVE
+        </span>
+      ) : (
+        <span style={{
+          padding:    '0.18rem 0.6rem', borderRadius: '0.3rem',
+          background: 'rgba(129,140,248,0.08)', border: '1px solid rgba(129,140,248,0.2)',
+          fontSize:   '0.62rem', fontWeight: 700, letterSpacing: '0.06em',
+          color:      '#818cf8', flexShrink: 0,
+        }}>
+          PAPER TRADING ACTIVE
+        </span>
+      )}
 
       {/* ── Divider ── */}
       <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)', flexShrink: 0 }} />
@@ -558,18 +747,74 @@ export default function CryptoControlCenter() {
       </div>
 
       {/* ── Inline status messages ── */}
-      {(pauseMsg || resetMsg) && (
+      {(pauseMsg || resetMsg || switchError || paperSwitchMsg) && (
         <div style={{
           width: '100%', fontSize: '0.65rem', fontWeight: 600, paddingTop: '0.2rem',
-          color: (pauseMsg ?? resetMsg)!.ok ? '#34d399' : '#f87171',
+          color: switchError ? '#f87171'
+               : paperSwitchMsg ? '#818cf8'
+               : (pauseMsg ?? resetMsg)!.ok ? '#34d399' : '#f87171',
         }}>
-          {pauseMsg?.text ?? resetMsg?.text}
+          {switchError ?? paperSwitchMsg ?? pauseMsg?.text ?? resetMsg?.text}
         </div>
       )}
 
       {/* ── Compact market countdown summary ── */}
       <MarketSyncBar bots={bots} />
     </div>
+
+    {/* ── GO LIVE confirmation modal ── */}
+    {showGoLiveModal && (
+      <div
+        className="copy-modal-overlay"
+        onClick={(e) => { if (e.target === e.currentTarget && !switching) setShowGoLiveModal(false); }}
+        style={{ zIndex: 300 }}
+      >
+        <div className="copy-modal" role="dialog" aria-modal="true" style={{ maxWidth: 420 }}>
+          <div className="copy-modal-header" style={{ borderBottom: '1px solid rgba(239,68,68,0.25)' }}>
+            <h3 className="copy-modal-title" style={{ color: '#f87171' }}>TURN ON LIVE TRADING?</h3>
+            <button className="copy-modal-close" onClick={() => setShowGoLiveModal(false)} disabled={switching}>×</button>
+          </div>
+          <div className="copy-modal-body">
+            <div style={{
+              padding: '0.65rem 0.85rem', marginBottom: '1rem',
+              background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+              borderRadius: '0.5rem', fontSize: '0.75rem', color: '#f8fafc', lineHeight: 1.55,
+            }}>
+              <strong style={{ color: '#f87171' }}>BTC, ETH, SOL and XRP</strong> will submit{' '}
+              <strong style={{ color: '#f8fafc' }}>real orders using their current trade sizes.</strong>
+            </div>
+            <p style={{ fontSize: '0.75rem', color: 'rgba(248,250,252,0.55)', marginBottom: '0.75rem', lineHeight: 1.6 }}>
+              The LIVE Master will be enabled and all four crypto bots will be armed.
+              Each bot&apos;s individual ON/OFF state and trade sizes are preserved.
+            </p>
+            <p style={{ fontSize: '0.7rem', color: 'rgba(248,250,252,0.4)', lineHeight: 1.5 }}>
+              To return to paper trading at any time, flip the PAPER / LIVE toggle.
+              No open positions will be closed automatically.
+            </p>
+          </div>
+          <div className="copy-modal-footer">
+            <button
+              className="copy-btn copy-btn-secondary"
+              onClick={() => setShowGoLiveModal(false)}
+              disabled={switching}
+            >
+              Cancel
+            </button>
+            <button
+              className="copy-btn copy-btn-primary"
+              onClick={handleConfirmGoLive}
+              disabled={switching}
+              style={{
+                background:  'rgba(239,68,68,0.2)', borderColor: 'rgba(239,68,68,0.5)',
+                color:       '#f87171', cursor: switching ? 'wait' : 'pointer',
+              }}
+            >
+              {switching ? 'Switching…' : 'GO LIVE'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* ── Reset Paper confirmation modal ── */}
     {showReset && (
