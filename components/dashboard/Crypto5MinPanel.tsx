@@ -149,8 +149,6 @@ type LateStat = {
   today_pnl:         number;
 };
 
-type Card = 'btc' | 'eth' | 'sol' | 'xrp';
-
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtUsd(v: unknown, digits = 2): string {
@@ -468,39 +466,69 @@ function ComingSoonCard({ asset }: { asset: string }) {
   const img = CRYPTO_IMAGES[asset];
   return (
     <div style={{
-      flex: '1 1 200px', minWidth: 180,
-      background: 'rgba(15,17,26,0.6)',
+      flex: '1 1 0', minWidth: 0,
+      background: 'rgba(15,17,26,0.5)',
       border: '1px solid rgba(255,255,255,0.06)',
       borderRadius: '0.75rem',
-      padding: '1rem',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      gap: '0.55rem', minHeight: 140,
+      padding: '1rem 1.1rem',
+      display: 'flex', flexDirection: 'column', gap: '0.5rem',
     }}>
-      {img && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={img.url}
-          alt={img.alt}
-          style={{
-            width: 72, height: 72,
-            objectFit: 'contain',
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.04)',
-            padding: '0.25rem',
-          }}
-        />
-      )}
-      <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'rgba(248,250,252,0.5)', letterSpacing: '0.04em' }}>
-        {asset} 5-MIN
-      </span>
-      <span style={{
-        fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em',
-        color: '#818cf8', background: 'rgba(99,102,241,0.1)',
-        border: '1px solid rgba(99,102,241,0.2)',
-        borderRadius: '0.35rem', padding: '0.15rem 0.55rem',
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+        {img && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={img.url}
+            alt={img.alt}
+            style={{
+              width: 36, height: 36,
+              objectFit: 'contain',
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.04)',
+              padding: '0.15rem',
+              flexShrink: 0,
+              opacity: 0.55,
+            }}
+          />
+        )}
+        <div>
+          <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'rgba(248,250,252,0.45)', letterSpacing: '0.04em' }}>
+            {asset} 5-MIN
+          </div>
+          <span style={{
+            fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.08em',
+            color: '#818cf8', background: 'rgba(99,102,241,0.1)',
+            border: '1px solid rgba(99,102,241,0.2)',
+            borderRadius: '0.3rem', padding: '0.1rem 0.4rem',
+            display: 'inline-block', marginTop: '0.2rem',
+          }}>
+            COMING SOON
+          </span>
+        </div>
+      </div>
+      {/* Description */}
+      <p style={{
+        margin: 0, fontSize: '0.67rem',
+        color: 'rgba(248,250,252,0.25)', lineHeight: 1.5,
       }}>
-        COMING SOON
-      </span>
+        Paper testing will be enabled after BTC validation completes.
+      </p>
+      {/* Disabled mode indicator */}
+      <div style={{
+        display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.1rem',
+      }}>
+        {['PAPER', 'LIVE'].map((m) => (
+          <span key={m} style={{
+            fontSize: '0.58rem', fontWeight: 700,
+            color: 'rgba(248,250,252,0.2)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: '0.25rem', padding: '0.1rem 0.4rem',
+            letterSpacing: '0.06em',
+          }}>
+            {m}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -625,7 +653,7 @@ function BtcCard({
   return (
     <>
     <div style={{
-      flex: '2 1 320px', minWidth: 280,
+      width: '100%',
       background: 'rgba(15,17,26,0.6)',
       border: '1px solid rgba(255,255,255,0.08)',
       borderRadius: '0.75rem',
@@ -1427,8 +1455,6 @@ export default function Crypto5MinPanel() {
     finally { setTestModeActivating(false); }
   };
 
-  const cards: Card[] = ['btc', 'eth', 'sol', 'xrp'];
-
   return (
     <section style={{
       margin: '0.75rem 0 0',
@@ -1462,12 +1488,46 @@ export default function Crypto5MinPanel() {
       </div>
 
       {expanded && (
-        <div style={{ display: 'flex', gap: '0.75rem', padding: '1rem 1.25rem', flexWrap: 'wrap' }}>
-          {cards.map((c) =>
-            c === 'btc'
-              ? <BtcCard key="btc" settings={settings} metrics={metrics} saving={saving} saveErr={saveErr} saveOk={saveOk} onSave={handleSave} onToggleMode={handleToggleMode} lateSettings={lateSettings} onToggleLate={handleToggleLate} lateToggling={lateToggling} lateDone={lateDone} lateErr={lateErr} marketStatus={marketStatus} onActivateTestMode={handleActivateTestMode} testModeActivating={testModeActivating} testModeDone={testModeDone} testModeErr={testModeErr} lateStat={lateStat} lastFetchedAt={lastFetchedAt} onSaveLateSize={handleSaveLateSize} saveLateSize={saveLateSize} saveLateSizeOk={saveLateSizeOk} saveLateSizeErr={saveLateSizeErr} />
-              : <ComingSoonCard key={c} asset={c.toUpperCase()} />
-          )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', padding: '1rem 1.25rem' }}>
+
+          {/* ── BTC — full-width primary strategy panel ── */}
+          <BtcCard
+            settings={settings}
+            metrics={metrics}
+            saving={saving}
+            saveErr={saveErr}
+            saveOk={saveOk}
+            onSave={handleSave}
+            onToggleMode={handleToggleMode}
+            lateSettings={lateSettings}
+            onToggleLate={handleToggleLate}
+            lateToggling={lateToggling}
+            lateDone={lateDone}
+            lateErr={lateErr}
+            marketStatus={marketStatus}
+            onActivateTestMode={handleActivateTestMode}
+            testModeActivating={testModeActivating}
+            testModeDone={testModeDone}
+            testModeErr={testModeErr}
+            lateStat={lateStat}
+            lastFetchedAt={lastFetchedAt}
+            onSaveLateSize={handleSaveLateSize}
+            saveLateSize={saveLateSize}
+            saveLateSizeOk={saveLateSizeOk}
+            saveLateSizeErr={saveLateSizeErr}
+          />
+
+          {/* ── ETH / SOL / XRP — compact coming-soon trio ── */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '0.75rem',
+          }}>
+            {(['ETH', 'SOL', 'XRP'] as const).map((asset) => (
+              <ComingSoonCard key={asset} asset={asset} />
+            ))}
+          </div>
+
         </div>
       )}
     </section>

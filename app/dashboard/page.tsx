@@ -3,12 +3,13 @@
 // Crypto Trading Dashboard — primary product page.
 //
 // Feature flags (lib/features.ts):
-//   SHOW_COPY_UI    = false → copy trading link is hidden from this page
+//   SHOW_COPY_UI    = false → no copy trading links are shown on this page
 //   SHOW_CRYPTO_UI  = true  → crypto bots are the primary content
 //
-// Copy trading dashboard remains accessible at /dashboard/copy regardless of flags.
+// /dashboard/copy remains directly accessible by URL regardless of flags.
+// All /api/copy/* routes are untouched.
 //
-// No trading logic in this file. All execution is in child components.
+// No trading logic in this file.
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
@@ -19,8 +20,6 @@ import CryptoPaperCard  from '@/components/dashboard/CryptoPaperCard';
 import CryptoKPIStrip   from '@/components/dashboard/CryptoKPIStrip';
 
 const Crypto5MinPanel = dynamic(() => import('@/components/dashboard/Crypto5MinPanel'), { ssr: false });
-
-// ── Refresh icon ──────────────────────────────────────────────────────────────
 
 function IconRefresh() {
   return (
@@ -37,8 +36,6 @@ function fmtAge(date: Date): string {
   if (diff < 60) return `${diff}s ago`;
   return `${Math.floor(diff / 60)}m ago`;
 }
-
-// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CryptoDashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -106,45 +103,22 @@ export default function CryptoDashboardPage() {
         <Crypto5MinPanel />
       </section>
 
-      {/* ── Admin access to Copy Trading (hidden unless SHOW_COPY_UI=true) ── */}
+      {/* Copy Trading link — only visible when SHOW_COPY_UI=true.
+           /dashboard/copy is always accessible directly by URL. */}
       {SHOW_COPY_UI && (
         <div style={{
-          marginTop: '2rem',
-          padding: '0.75rem 1rem',
-          background: 'rgba(255,255,255,0.02)',
-          border: '1px solid rgba(255,255,255,0.06)',
-          borderRadius: '0.5rem',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginTop: '2rem', paddingTop: '1rem',
+          borderTop: '1px solid rgba(255,255,255,0.04)',
+          textAlign: 'center',
         }}>
-          <span style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.3)' }}>
-            Copy Trading dashboard is active
-          </span>
           <a
             href="/dashboard/copy"
-            style={{
-              fontSize: '0.72rem', fontWeight: 600, color: '#60a5fa',
-              textDecoration: 'none', padding: '0.25rem 0.6rem',
-              border: '1px solid rgba(96,165,250,0.2)', borderRadius: '0.35rem',
-            }}
+            style={{ fontSize: '0.65rem', color: 'rgba(248,250,252,0.25)', textDecoration: 'none' }}
           >
-            Open Copy Trading →
+            Copy Trading Dashboard →
           </a>
         </div>
       )}
-
-      {/* Always-available subtle admin link (no flag dependency) */}
-      <div style={{
-        marginTop: '1.5rem', textAlign: 'center',
-        borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '1rem',
-      }}>
-        <a
-          href="/dashboard/copy"
-          style={{ fontSize: '0.62rem', color: 'rgba(248,250,252,0.18)', textDecoration: 'none' }}
-          title="Copy Trading dashboard"
-        >
-          Copy Trading ↗
-        </a>
-      </div>
     </div>
   );
 }
