@@ -70,6 +70,19 @@ export default function CryptoBotDetails({ asset, bot, onToggle, onReload }: Pro
   const isOn   = bot?.is_enabled ?? false;
   const curve  = bot?.equity_curve ?? [];
 
+  // Market data from strategy_settings (same source as compact card)
+  const ss          = (bot?.strategy_settings ?? {}) as Record<string, unknown>;
+  const mktSlug: string | null  = typeof ss.market_slug === 'string' && ss.market_slug ? ss.market_slug : null;
+  const mktUrl: string | null   = typeof ss.market_url  === 'string' && ss.market_url  ? ss.market_url  : mktSlug ? `https://polymarket.com/event/${encodeURIComponent(mktSlug)}` : null;
+  const secsRemain: number | null  = typeof ss.seconds_remaining === 'number' ? ss.seconds_remaining : null;
+  const priceToBeat: number | null = typeof ss.price_to_beat === 'number' ? ss.price_to_beat : null;
+  const refPrice: number | null    = typeof ss.reference_price === 'number' ? ss.reference_price : null;
+  const leadingSide: string | null = typeof ss.leading_side === 'string' ? ss.leading_side : null;
+  const lastDecision: string | null = typeof ss.last_decision === 'string' ? ss.last_decision : null;
+  const mktExpired: boolean = typeof ss.expired === 'boolean' ? ss.expired : false;
+  const displaySlug = mktSlug ?? bot?.latest_trade?.slug ?? null;
+  const hasOpenPos  = (s?.open_trades ?? 0) > 0;
+
   // ── Trade size save ──────────────────────────────────────────────────────
   const [tradeSize,    setTradeSize]    = useState('');
   const [savingSize,   setSavingSize]   = useState(false);
@@ -175,6 +188,55 @@ export default function CryptoBotDetails({ asset, bot, onToggle, onReload }: Pro
           {isOn ? '● Turn Off' : '○ Turn On'}
         </button>
       </div>
+
+      {/* ── Current market row ── */}
+      {bot && (displaySlug || mktUrl) && (
+        <div style={{
+          background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)',
+          borderRadius: '0.6rem', padding: '0.65rem 0.85rem',
+          display: 'flex', flexDirection: 'column', gap: '0.35rem',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.3)' }}>
+              Current Market
+            </div>
+            {mktUrl && (
+              <a href={mktUrl} target="_blank" rel="noopener noreferrer"
+                style={{
+                  fontSize: '0.65rem', fontWeight: 700, color: meta.color,
+                  textDecoration: 'none', padding: '0.15rem 0.55rem',
+                  border: `1px solid ${meta.color}40`, borderRadius: '0.3rem',
+                  background: `${meta.color}10`,
+                }}
+              >
+                {hasOpenPos ? 'View Active Trade ↗' : 'Open on Polymarket ↗'}
+              </a>
+            )}
+          </div>
+          {displaySlug && (
+            <div style={{ fontSize: '0.68rem', fontFamily: 'monospace', color: 'rgba(248,250,252,0.45)', wordBreak: 'break-all' }}>
+              {displaySlug}
+            </div>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem 1rem', fontSize: '0.68rem', color: 'rgba(248,250,252,0.45)' }}>
+            {secsRemain != null && (
+              <span>{mktExpired ? '⚠ Expired' : `⏱ ${secsRemain < 60 ? `${Math.round(secsRemain)}s` : `${Math.floor(secsRemain / 60)}m ${Math.round(secsRemain % 60)}s`} remaining`}</span>
+            )}
+            {priceToBeat != null && (
+              <span>Price to Beat: <span style={{ color: '#f8fafc', fontWeight: 600, fontFamily: 'monospace' }}>${priceToBeat.toFixed(4)}</span></span>
+            )}
+            {refPrice != null && (
+              <span>Spot: <span style={{ color: '#f8fafc', fontWeight: 600, fontFamily: 'monospace' }}>${refPrice.toFixed(2)}</span></span>
+            )}
+            {leadingSide && (
+              <span>Leading: <span style={{ fontWeight: 700, color: leadingSide.toUpperCase() === 'UP' ? '#34d399' : '#f87171' }}>{leadingSide.toUpperCase()}</span></span>
+            )}
+            {lastDecision && (
+              <span>Decision: <span style={{ color: '#f8fafc', fontWeight: 600 }}>{lastDecision}</span></span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Full stats grid ── */}
       {s ? (
@@ -326,10 +388,11 @@ function LatestTradeRow({ trade, meta }: { trade: RecentTrade; meta: (typeof ASS
         </span>
         {trade.slug && (
           <a
-            href={`https://polymarket.com/market/${trade.slug}`}
+            href={`https://polymarket.com/event/${encodeURIComponent(trade.slug ?? '')}`}
             target="_blank" rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            style={{ color: meta.color, fontSize: '0.65rem', textDecoration: 'none' }}
+            style={{ color: meta.color, fontSize: '0.65rem', textDecoration: 'none', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', verticalAlign: 'middle' }}
+            title={trade.slug}
           >
             {trade.slug.slice(-10)} ↗
           </a>

@@ -30,11 +30,23 @@ export type EquityPoint = {
 // ── Per-asset defaults ─────────────────────────────────────────────────────────
 
 const ASSET_COLORS: Record<string, string> = {
-  BTC: '#f97316',
-  ETH: '#818cf8',
-  SOL: '#a78bfa',
-  XRP: '#38bdf8',
+  BTC:    '#f97316',
+  ETH:    '#818cf8',
+  SOL:    '#a78bfa',
+  XRP:    '#38bdf8',
+  SHARED: '#818cf8', // combined chart
 };
+
+// Human-readable label for the chart header
+function assetLabel(asset: string): string {
+  if (asset === 'SHARED') return 'Crypto Paper Equity';
+  return `${asset} Paper Equity`;
+}
+
+function assetEmptyLabel(asset: string): string {
+  if (asset === 'SHARED') return 'No settled crypto trades yet';
+  return `No settled ${asset} trades yet`;
+}
 
 // ── Chart constants ────────────────────────────────────────────────────────────
 
@@ -77,7 +89,7 @@ export default function CryptoEquityChart({ asset, curve, startingBalance, accen
         color: 'rgba(248,250,252,0.25)',
         fontSize: compact ? '0.62rem' : '0.75rem',
       }}>
-        <span>No settled {asset} trades yet</span>
+        <span>{assetEmptyLabel(asset)}</span>
         {!compact && (
           <span style={{ fontSize: '0.6rem', opacity: 0.6 }}>
             Starting: ${startingBalance.toFixed(2)} · P/L: $0.00 · Trades: 0
@@ -128,7 +140,7 @@ export default function CryptoEquityChart({ asset, curve, startingBalance, accen
           marginBottom: '0.4rem',
         }}>
           <div style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.35)' }}>
-            {asset} Paper Equity
+            {assetLabel(asset)}
           </div>
           <div style={{ fontSize: '0.82rem', fontWeight: 700, color: chartColor, fontFamily: 'monospace' }}>
             ${latestEq.toFixed(2)}

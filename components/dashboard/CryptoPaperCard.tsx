@@ -45,10 +45,59 @@ type CryptoBot = {
   equity_curve:      EquityPoint[];
 };
 
-type ApiResponse = {
-  ok:    boolean;
-  bots?: CryptoBot[];
+type SharedAccount = {
+  account_id:        string;
+  starting_balance:  number;
+  realized_pnl:      number;
+  open_exposure:     number;
+  available_balance: number;
+  account_equity:    number;
 };
+
+type ApiResponse = {
+  ok:             boolean;
+  bots?:          CryptoBot[];
+  shared_account?: SharedAccount;
+};
+
+// ── Combined stats helper ─────────────────────────────────────────────────────
+
+function buildCombinedStats(bots: CryptoBot[], shared: SharedAccount | undefined): BotStats {
+  return {
+    total_trades:        bots.reduce((s, b) => s + b.stats.total_trades,        0),
+    trades_today:        bots.reduce((s, b) => s + b.stats.trades_today,        0),
+    open_trades:         bots.reduce((s, b) => s + b.stats.open_trades,         0),
+    closed_trades:       bots.reduce((s, b) => s + b.stats.closed_trades,       0),
+    wins:                bots.reduce((s, b) => s + b.stats.wins,                0),
+    losses:              bots.reduce((s, b) => s + b.stats.losses,              0),
+    pushes:              bots.reduce((s, b) => s + b.stats.pushes,              0),
+    win_rate:            0, // computed below
+    open_exposure_usd:   shared?.open_exposure     ?? bots.reduce((s, b) => s + b.stats.open_exposure_usd, 0),
+    total_amount_traded: bots.reduce((s, b) => s + b.stats.total_amount_traded, 0),
+    today_pnl:           bots.reduce((s, b) => s + b.stats.today_pnl,           0),
+    all_time_pnl:        shared?.realized_pnl      ?? bots.reduce((s, b) => s + b.stats.all_time_pnl,      0),
+  };
+}
+
+// ── Combined equity curve helper ──────────────────────────────────────────────
+// Merges all four bots' equity curve points, sorts chronologically by closed_at,
+// then rebuilds a running combined equity starting from the shared starting balance.
+
+function buildCombinedCurve(bots: CryptoBot[], startingBalance: number): EquityPoint[] {
+  const allPts = bots.flatMap((b) => b.equity_curve);
+  // Sort ascending by closed_at (market_slug suffix is Unix ts — already sorted per bot,
+  // but we merge across 4 bots so we must sort the union)
+  allPts.sort((a, b) => {
+    const ta = a.closed_at ? new Date(a.closed_at).getTime() : 0;
+    const tb = b.closed_at ? new Date(b.closed_at).getTime() : 0;
+    return ta - tb || 0;
+  });
+  let running = startingBalance;
+  return allPts.map((pt) => {
+    running += Number(pt.trade_pnl ?? 0);
+    return { ...pt, equity: parseFloat(running.toFixed(4)) };
+  });
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -86,7 +135,8 @@ function UpdatedAgo({ date }: { date: Date | null }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function CryptoPaperCard() {
-  const [bot,         setBot]         = useState<CryptoBot | null>(null);
+  const [allBots,     setAllBots]     = useState<CryptoBot[]>([]);
+  const [shared,      setShared]      = useState<SharedAccount | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [fetchedAt,   setFetchedAt]   = useState<Date | null>(null);
 
@@ -107,7 +157,8 @@ export default function CryptoPaperCard() {
       const res  = await fetch('/api/crypto/bots', { cache: 'no-store' });
       const json = await res.json() as ApiResponse;
       if (json.ok && json.bots?.length) {
-        setBot(json.bots[0]);
+        setAllBots(json.bots);
+        if (json.shared_account) setShared(json.shared_account);
         setFetchedAt(new Date());
       }
     } catch {}
@@ -152,10 +203,22 @@ export default function CryptoPaperCard() {
     }
   };
 
-  const s = bot?.stats;
+  // ── Combined derived values ──────────────────────────────────────────────────
+  // Use shared_account for balance/equity; sum per-bot stats for trade counts.
+  const combinedStats   = allBots.length ? buildCombinedStats(allBots, shared ?? undefined) : null;
+  const s               = combinedStats;
+  const startingBalance = shared?.starting_balance ?? allBots[0]?.starting_balance ?? 1000;
+  const accountEquity   = shared?.account_equity   ?? allBots[0]?.account_equity   ?? startingBalance;
+  const realizedPnl     = shared?.realized_pnl     ?? 0;
+  const openExposure    = shared?.open_exposure     ?? 0;
+  // Combined win rate (recomputed from combined wins/losses)
+  const winLossDenom    = (s?.wins ?? 0) + (s?.losses ?? 0);
+  const combinedWinRate = winLossDenom > 0 ? s!.wins / winLossDenom : 0;
+  if (s) s.win_rate = combinedWinRate;
+  // Combined equity curve (all 4 bots merged chronologically)
+  const combinedCurve   = allBots.length ? buildCombinedCurve(allBots, startingBalance) : [];
 
-  // Equity change direction for equity card color
-  const equityDelta = bot ? bot.account_equity - bot.starting_balance : 0;
+  const equityDelta     = accountEquity - startingBalance;
 
   return (
     <div className="crypto-paper-card" style={{
@@ -191,24 +254,23 @@ export default function CryptoPaperCard() {
           />
           <div>
             <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#f8fafc', letterSpacing: '0.04em' }}>
-              BTC Paper Account
+              Crypto Paper Account
             </div>
             <div style={{ fontSize: '0.68rem', color: 'rgba(248,250,252,0.35)', marginTop: '0.1rem' }}>
-              btc_5m_late · PAPER · {bot?.is_enabled ? 'ACTIVE' : 'OFF'}
+              Shared PAPER bankroll · BTC, ETH, SOL &amp; XRP
             </div>
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          {bot && (
+          {allBots.length > 0 && (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
               padding: '0.2rem 0.55rem', borderRadius: '0.3rem',
-              background: bot.is_enabled ? 'rgba(52,211,153,0.1)' : 'rgba(248,250,252,0.05)',
-              border: `1px solid ${bot.is_enabled ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.08)'}`,
+              background: 'rgba(52,211,153,0.07)', border: '1px solid rgba(52,211,153,0.2)',
               fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em',
-              color: bot.is_enabled ? '#34d399' : 'rgba(248,250,252,0.35)',
+              color: 'rgba(248,250,252,0.55)',
             }}>
-              {bot.is_enabled ? '● ACTIVE' : '○ OFF'}
+              {allBots.filter((b) => b.is_enabled).length} of {allBots.length} active
             </div>
           )}
           <div style={{ marginTop: '0.25rem' }}><UpdatedAgo date={fetchedAt} /></div>
@@ -220,20 +282,20 @@ export default function CryptoPaperCard() {
         <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'rgba(248,250,252,0.2)', fontFamily: 'monospace' }}>
           Loading…
         </div>
-      ) : bot ? (
+      ) : allBots.length > 0 ? (
         <div>
           <div style={{ fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.3)', marginBottom: '0.2rem' }}>
-            Current Paper Equity
+            Shared Crypto Paper Equity
           </div>
           <div style={{
             fontSize: '2.6rem', fontWeight: 800, fontFamily: 'monospace',
             color: equityDelta >= 0 ? '#f8fafc' : '#f87171',
             letterSpacing: '-0.02em', lineHeight: 1,
           }}>
-            {usd(bot.account_equity)}
+            {usd(accountEquity)}
           </div>
           <div style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.4)', marginTop: '0.35rem', display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-            <span>Starting: <span style={{ color: 'rgba(248,250,252,0.65)' }}>{usd(bot.starting_balance)}</span></span>
+            <span>Starting: <span style={{ color: 'rgba(248,250,252,0.65)' }}>{usd(startingBalance)}</span></span>
             {equityDelta !== 0 && (
               <span style={{ color: pnlColor(equityDelta) }}>{pnlStr(equityDelta)} all-time</span>
             )}
@@ -250,12 +312,12 @@ export default function CryptoPaperCard() {
           borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.75rem',
         }}>
           {([
-            { label: 'Realized P/L',  val: pnlStr(bot!.realized_pnl),  color: pnlColor(bot!.realized_pnl) },
-            { label: 'Today P/L',     val: pnlStr(s.today_pnl),         color: pnlColor(s.today_pnl) },
-            { label: 'Open Exposure', val: usd(bot!.open_exposure),      color: undefined },
-            { label: 'Open Positions',val: String(s.open_trades),        color: s.open_trades > 0 ? '#fbbf24' : undefined },
-            { label: 'Win Rate',      val: winRatePct(s.wins, s.losses), color: undefined },
-            { label: 'Total Trades',  val: String(s.total_trades),       color: undefined },
+            { label: 'Realized P/L',  val: pnlStr(realizedPnl),          color: pnlColor(realizedPnl) },
+            { label: 'Today P/L',     val: pnlStr(s.today_pnl),           color: pnlColor(s.today_pnl) },
+            { label: 'Open Exposure', val: usd(openExposure),             color: undefined },
+            { label: 'Open Positions',val: String(s.open_trades),         color: s.open_trades > 0 ? '#fbbf24' : undefined },
+            { label: 'Win Rate',      val: winRatePct(s.wins, s.losses),  color: undefined },
+            { label: 'Total Trades',  val: String(s.total_trades),        color: undefined },
           ] as { label: string; val: string; color?: string }[]).map(({ label, val, color }) => (
             <div key={label} style={{
               background: 'rgba(255,255,255,0.03)', borderRadius: '0.5rem',
@@ -269,13 +331,14 @@ export default function CryptoPaperCard() {
         </div>
       )}
 
-      {/* ── Mini equity chart ── */}
-      {bot?.equity_curve && (
+      {/* ── Combined crypto paper equity chart ── */}
+      {allBots.length > 0 && (
         <div style={{ marginTop: '-0.25rem' }}>
           <CryptoEquityChart
-            asset="BTC"
-            curve={bot.equity_curve}
-            startingBalance={bot.starting_balance}
+            asset="SHARED"
+            curve={combinedCurve}
+            startingBalance={startingBalance}
+            accentColor="#818cf8"
             compact={false}
           />
         </div>
