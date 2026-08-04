@@ -32,13 +32,24 @@ export const revalidate = 0;
 
 const NO_CACHE = { 'Cache-Control': 'no-store, max-age=0' };
 
-const BOT_NAMES: Record<string, string> = { btc_5m_late: 'BTC 5-Min' };
-// Only btc_5m_late — never aggregate btc_5m_ema
-const SUPPORTED_BOT_IDS = ['btc_5m_late'];
-const RECENT_LIMIT = 20;
-// Stable BTC paper starting balance — matches original paper_balance_usd default.
+const BOT_NAMES: Record<string, string> = {
+  btc_5m_late: 'BTC 5-Min',
+  eth_5m_paper: 'ETH 5-Min',
+  sol_5m_paper: 'SOL 5-Min',
+  xrp_5m_paper: 'XRP 5-Min',
+};
+// btc_5m_late + ETH/SOL/XRP — never aggregate btc_5m_ema
+const SUPPORTED_BOT_IDS = ['btc_5m_late', 'eth_5m_paper', 'sol_5m_paper', 'xrp_5m_paper'];
+// Stable paper starting balance per bot.
 // Do NOT use paper_balance_usd from bot_settings (FastLoop mutates it as P/L flows).
-const BTC_PAPER_START_DEFAULT = 100;
+const PAPER_START_DEFAULTS: Record<string, number> = {
+  btc_5m_late:  100,
+  eth_5m_paper: 100,
+  sol_5m_paper: 100,
+  xrp_5m_paper: 100,
+};
+const BTC_PAPER_START_DEFAULT = 100; // kept for backwards compat
+const RECENT_LIMIT = 20;
 
 function getClient() {
   let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
@@ -175,8 +186,8 @@ export async function GET() {
       const startingBalance: number =
         Number(
           (settings?.strategy_settings as Record<string, unknown> | null)
-            ?.btc_paper_start ?? BTC_PAPER_START_DEFAULT
-        ) || BTC_PAPER_START_DEFAULT;
+            ?.btc_paper_start ?? PAPER_START_DEFAULTS[botId] ?? BTC_PAPER_START_DEFAULT
+        ) || (PAPER_START_DEFAULTS[botId] ?? BTC_PAPER_START_DEFAULT);
 
       // ── Aggregate stats (from safe stats query) ────────────────────────────
       const forBot = statRows.filter((r) => r.bot_id === botId);

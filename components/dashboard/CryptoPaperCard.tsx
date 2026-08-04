@@ -90,6 +90,15 @@ export default function CryptoPaperCard() {
   const [loading,     setLoading]     = useState(true);
   const [fetchedAt,   setFetchedAt]   = useState<Date | null>(null);
 
+  // ── Reset paper account state ──────────────────────────────────────────────
+  const [showResetModal,  setShowResetModal]  = useState(false);
+  const [resetConfirmTxt, setResetConfirmTxt] = useState('');
+  const [resetting,       setResetting]       = useState(false);
+  const [resetMsg,        setResetMsg]        = useState<{ ok: boolean; text: string } | null>(null);
+
+  const CONFIRM_PHRASE = 'RESET PAPER';
+  const resetUnlocked  = resetConfirmTxt.trim() === CONFIRM_PHRASE;
+
   const load = useCallback(async () => {
     try {
       const res  = await fetch('/api/crypto/bots', { cache: 'no-store' });
@@ -107,6 +116,31 @@ export default function CryptoPaperCard() {
     const interval = setInterval(load, 5_000);
     return () => clearInterval(interval);
   }, [load]);
+
+  const handleReset = async () => {
+    if (!resetUnlocked || resetting) return;
+    setResetting(true);
+    setResetMsg(null);
+    try {
+      const res  = await fetch('/api/crypto/reset-paper', { method: 'POST', cache: 'no-store' });
+      const json = await res.json() as { ok: boolean; message?: string; error?: string };
+      if (json.ok) {
+        setResetMsg({ ok: true, text: json.message ?? 'Crypto paper account reset.' });
+        setShowResetModal(false);
+        setResetConfirmTxt('');
+        // Refresh all crypto data immediately
+        await load();
+        // Notify KPI strip and other listeners
+        window.dispatchEvent(new CustomEvent('crypto:paper-reset'));
+      } else {
+        setResetMsg({ ok: false, text: json.error ?? 'Reset failed.' });
+      }
+    } catch {
+      setResetMsg({ ok: false, text: 'Network error during reset.' });
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const s = bot?.stats;
 
@@ -254,6 +288,139 @@ export default function CryptoPaperCard() {
               <span>{s.trades_today} trade{s.trades_today !== 1 ? 's' : ''} today</span>
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Reset success / error message ── */}
+      {resetMsg && (
+        <div style={{
+          marginTop: '0.4rem', padding: '0.45rem 0.7rem',
+          background: resetMsg.ok ? 'rgba(52,211,153,0.08)' : 'rgba(248,113,113,0.08)',
+          border: `1px solid ${resetMsg.ok ? 'rgba(52,211,153,0.25)' : 'rgba(248,113,113,0.25)'}`,
+          borderRadius: '0.45rem', fontSize: '0.7rem',
+          color: resetMsg.ok ? '#34d399' : '#f87171',
+        }}>
+          {resetMsg.ok ? '✓ ' : '✗ '}{resetMsg.text}
+        </div>
+      )}
+
+      {/* ── Reset Paper Account button ── */}
+      <div style={{ marginTop: '0.5rem', paddingTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <button
+          onClick={() => { setShowResetModal(true); setResetMsg(null); setResetConfirmTxt(''); }}
+          disabled={resetting}
+          style={{
+            width: '100%', padding: '0.45rem 0.75rem',
+            background: 'rgba(248,113,113,0.06)',
+            border: '1px solid rgba(248,113,113,0.2)',
+            borderRadius: '0.5rem', cursor: 'pointer',
+            fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.04em',
+            color: 'rgba(248,113,113,0.7)',
+          }}
+        >
+          Reset Paper Account
+        </button>
+      </div>
+
+      {/* ── Reset confirmation modal ── */}
+      {showResetModal && (
+        <div
+          className="copy-modal-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget && !resetting) { setShowResetModal(false); setResetConfirmTxt(''); } }}
+          style={{ zIndex: 1000 }}
+        >
+          <div className="copy-modal" role="dialog" aria-modal="true" style={{ maxWidth: 440 }}>
+
+            {/* Header */}
+            <div className="copy-modal-header">
+              <h3 className="copy-modal-title">Reset Crypto Paper Account?</h3>
+              <button
+                className="copy-modal-close"
+                onClick={() => { setShowResetModal(false); setResetConfirmTxt(''); }}
+                disabled={resetting}
+              >×</button>
+            </div>
+
+            {/* Body */}
+            <div className="copy-modal-body">
+              <p style={{ fontSize: '0.8rem', color: 'rgba(248,250,252,0.65)', marginBottom: '0.75rem', lineHeight: 1.55 }}>
+                This will permanently clear all <strong style={{ color: '#f8fafc' }}>PAPER</strong> trades,
+                positions, performance and equity history for BTC, ETH, SOL and XRP.
+              </p>
+              <p style={{ fontSize: '0.8rem', color: 'rgba(248,250,252,0.65)', marginBottom: '1rem', lineHeight: 1.55 }}>
+                Your <strong style={{ color: '#34d399' }}>LIVE</strong> bankroll and LIVE trades will
+                <strong style={{ color: '#f8fafc' }}> not be affected</strong>.
+                Bot ON/OFF states, trade sizes and strategy settings are preserved.
+              </p>
+
+              {/* Expected outcome */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+                borderRadius: '0.45rem', padding: '0.6rem 0.8rem', marginBottom: '1rem',
+                fontSize: '0.7rem', display: 'flex', flexDirection: 'column', gap: '0.2rem',
+              }}>
+                {[
+                  ['Starting Balance', '$1,000.00'],
+                  ['Current Equity',   '$1,000.00'],
+                  ['Realized P/L',     '$0.00'],
+                  ['Open Positions',   '0'],
+                  ['Total Trades',     '0'],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'rgba(248,250,252,0.4)' }}>{label}</span>
+                    <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Confirm phrase input */}
+              <label style={{ display: 'block', fontSize: '0.72rem', color: 'rgba(248,250,252,0.5)', marginBottom: '0.4rem' }}>
+                Type <strong style={{ color: '#f87171', fontFamily: 'monospace' }}>RESET PAPER</strong> to confirm:
+              </label>
+              <input
+                type="text"
+                value={resetConfirmTxt}
+                onChange={(e) => setResetConfirmTxt(e.target.value)}
+                placeholder="RESET PAPER"
+                disabled={resetting}
+                autoFocus
+                style={{
+                  width: '100%', padding: '0.5rem 0.75rem',
+                  background: 'rgba(255,255,255,0.06)', border: `1px solid ${resetUnlocked ? 'rgba(248,113,113,0.5)' : 'rgba(255,255,255,0.12)'}`,
+                  borderRadius: '0.4rem', color: '#f8fafc', fontSize: '0.85rem',
+                  fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+              {resetMsg && !resetMsg.ok && (
+                <p style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: '#f87171' }}>✗ {resetMsg.text}</p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="copy-modal-footer">
+              <button
+                className="copy-btn copy-btn-secondary"
+                onClick={() => { setShowResetModal(false); setResetConfirmTxt(''); }}
+                disabled={resetting}
+              >
+                Cancel
+              </button>
+              <button
+                className="copy-btn copy-btn-primary"
+                onClick={handleReset}
+                disabled={!resetUnlocked || resetting}
+                style={{
+                  background: resetUnlocked ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.05)',
+                  borderColor: resetUnlocked ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.1)',
+                  color: resetUnlocked ? '#f87171' : 'rgba(248,250,252,0.25)',
+                  cursor: resetUnlocked && !resetting ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {resetting ? 'Resetting…' : 'Reset Crypto Paper Account'}
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
     </div>

@@ -68,7 +68,13 @@ export default function CryptoKPIStrip() {
   useEffect(() => {
     load();
     const t = setInterval(load, 5_000);
-    return () => clearInterval(t);
+    // Immediate re-fetch when paper account is reset
+    const onReset = () => load();
+    window.addEventListener('crypto:paper-reset', onReset);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('crypto:paper-reset', onReset);
+    };
   }, [load]);
 
   if (!bot) return null;

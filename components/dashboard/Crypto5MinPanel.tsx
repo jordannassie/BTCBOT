@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import BtcEquityChart, { type EquityPoint } from './BtcEquityChart';
+import CryptoAssetPaperCard from './CryptoAssetPaperCard';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -123,6 +124,8 @@ type BotStatSummary = {
 };
 
 type LateStat = {
+  bot_id:            string;
+  is_enabled:        boolean;
   trade_size_usd:    number;
   open_positions:    number;
   open_exposure_usd: number;
@@ -1316,6 +1319,7 @@ export default function Crypto5MinPanel() {
   const [marketStatus,  setMarketStatus]  = useState<MarketStatus | null>(null);
   // Stats for btc_5m_late from /api/crypto/bots — uses LateStat type (module scope)
   const [lateStat,     setLateStat]     = useState<LateStat | null>(null);
+  const [allBotStats,  setAllBotStats]  = useState<LateStat[] | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
@@ -1354,6 +1358,7 @@ export default function Crypto5MinPanel() {
       // Use first bot row — contains stats sub-object + recent_trades
       if (cryptoBotsJson.ok && Array.isArray(cryptoBotsJson.bots) && cryptoBotsJson.bots.length > 0) {
         setLateStat(cryptoBotsJson.bots[0]);
+        setAllBotStats(cryptoBotsJson.bots as LateStat[]);
         setLastFetchedAt(new Date());
       }
     } catch {}
@@ -1517,14 +1522,18 @@ export default function Crypto5MinPanel() {
             saveLateSizeErr={saveLateSizeErr}
           />
 
-          {/* ── ETH / SOL / XRP — compact coming-soon trio ── */}
+          {/* ── ETH / SOL / XRP — active paper bot cards ── */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
             gap: '0.75rem',
           }}>
             {(['ETH', 'SOL', 'XRP'] as const).map((asset) => (
-              <ComingSoonCard key={asset} asset={asset} />
+              <CryptoAssetPaperCard
+                key={asset}
+                asset={asset}
+                allBotStats={allBotStats}
+              />
             ))}
           </div>
 
