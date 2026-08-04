@@ -24,6 +24,7 @@
 // No FastLoop access. No wallet signing. No LIVE order submission.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import CryptoMarketCountdown from './CryptoMarketCountdown';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -42,11 +43,12 @@ const CONFIRM_PHRASE = 'RESET PAPER';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface BotStat {
-  bot_id:            string;
-  is_enabled:        boolean;
-  open_exposure:     number;
-  account_equity:    number;
-  starting_balance:  number;
+  bot_id:             string;
+  is_enabled:         boolean;
+  open_exposure:      number;
+  account_equity:     number;
+  starting_balance:   number;
+  strategy_settings?: Record<string, unknown>;
   stats: {
     open_trades:   number;
     total_trades:  number;
@@ -70,6 +72,157 @@ function fmtUsd(v: number, digits = 2) {
 
 function dispatchBotChange() {
   window.dispatchEvent(new CustomEvent('crypto:bot-state-changed'));
+}
+
+const MARKET_DURATION  = 300;
+const STALE_SEC        = 20;
+const OLD_GRACE_SEC    = 10;
+
+function getEndTs(ss: Record<string, unknown>): number | null {
+  if (typeof ss.market_end === 'number' && ss.market_end > 1_000_000_000) return ss.market_end;
+  const slug = typeof ss.market_slug === 'string' ? ss.market_slug : null;
+  if (!slug) return null;
+  const parts = slug.split('-');
+  const startTs = parseInt(parts[parts.length - 1], 10);
+  if (!Number.isFinite(startTs) || startTs < 1_000_000_000) return null;
+  return startTs + MARKET_DURATION;
+}
+
+function fmtMmSs(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Single-bot mini countdown (self-contained interval). */
+function MiniBotCountdown({ ss, color, label }: {
+  ss: Record<string, unknown> | undefined;
+  color: string;
+  label: string;
+}) {
+  const [secsLeft, setSecsLeft] = useState<number | null>(null);
+  const endTsRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!ss) { endTsRef.current = null; return; }
+    endTsRef.current = getEndTs(ss);
+  }, [ss]);
+
+  useEffect(() => {
+    const tick = () => {
+      const endTs = endTsRef.current;
+      if (endTs != null) setSecsLeft(Math.max(0, endTs - Date.now() / 1000));
+      else setSecsLeft(null);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const updatedAt = ss && typeof ss.updated_at === 'string' ? ss.updated_at : null;
+  const stale     = updatedAt ? (Date.now() - new Date(updatedAt).getTime()) / 1000 > STALE_SEC : false;
+  const mktSlug   = ss && typeof ss.market_slug === 'string' ? ss.market_slug : null;
+  const slugTs    = mktSlug ? parseInt(mktSlug.split('-').pop() ?? '', 10) : null;
+  const bucket    = Math.floor(Date.now() / 1000 / MARKET_DURATION) * MARKET_DURATION;
+  const oldMarket = !!(slugTs && slugTs < bucket && (Date.now() / 1000 - bucket) > OLD_GRACE_SEC);
+
+  const txtColor = stale     ? '#f87171'
+                 : oldMarket ? '#fbbf24'
+                 : secsLeft === 0 ? '#818cf8'
+                 : secsLeft == null ? 'rgba(248,250,252,0.2)'
+                 : color;
+
+  const display = secsLeft != null ? fmtMmSs(secsLeft) : '—:—';
+  const alert   = stale ? '⚠' : oldMarket ? '⏳' : '';
+
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0 }}>
+      <span style={{ fontSize: '0.6rem', fontWeight: 700, color: 'rgba(248,250,252,0.4)' }}>
+        {label}
+      </span>
+      <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', fontWeight: 800, color: txtColor, minWidth: '3rem', textAlign: 'right' }}>
+        {display}
+      </span>
+      {alert && <span style={{ fontSize: '0.6rem' }}>{alert}</span>}
+    </span>
+  );
+}
+
+/** Compact sync bar — shows all 4 mini countdowns + a sync status badge. */
+function MarketSyncBar({ bots }: { bots: BotStat[] }) {
+  // Derive sync status: all bots on same expected bucket?
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'issue' | 'unknown'>('unknown');
+
+  useEffect(() => {
+    const check = () => {
+      const nowSec = Date.now() / 1000;
+      const bucket = Math.floor(nowSec / MARKET_DURATION) * MARKET_DURATION;
+      const secsPast = nowSec - bucket;
+      const statuses = CRYPTO_BOTS.map((meta) => {
+        const bot = bots.find((b) => b.bot_id === meta.id);
+        const ss  = bot?.strategy_settings ?? {};
+        const slug = typeof ss.market_slug === 'string' ? ss.market_slug : null;
+        const slugTs = slug ? parseInt(slug.split('-').pop() ?? '', 10) : null;
+        const updatedAt = typeof ss.updated_at === 'string' ? ss.updated_at : null;
+        const stale = updatedAt ? (Date.now() - new Date(updatedAt).getTime()) / 1000 > STALE_SEC : true;
+        const old   = !!(slugTs && slugTs < bucket && secsPast > OLD_GRACE_SEC);
+        return { stale, old, slugTs };
+      });
+      const anyIssue = statuses.some((s) => s.stale || s.old);
+      const slugTsValues = statuses.map((s) => s.slugTs).filter(Boolean);
+      const allSame = slugTsValues.length === 4 && new Set(slugTsValues).size === 1;
+      setSyncStatus(anyIssue ? 'issue' : allSame ? 'synced' : 'unknown');
+    };
+    check();
+    const id = setInterval(check, 5000);
+    return () => clearInterval(id);
+  }, [bots]);
+
+  if (bots.length === 0) return null;
+
+  return (
+    <div style={{
+      width: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.65rem',
+      flexWrap: 'wrap',
+      paddingTop: '0.3rem',
+      borderTop: '1px solid rgba(255,255,255,0.06)',
+      fontSize: '0.65rem',
+    }}>
+      <span style={{ color: 'rgba(248,250,252,0.3)', fontWeight: 700, letterSpacing: '0.06em', fontSize: '0.6rem', flexShrink: 0 }}>
+        MARKETS
+      </span>
+
+      {CRYPTO_BOTS.map((meta) => {
+        const bot = bots.find((b) => b.bot_id === meta.id);
+        return (
+          <MiniBotCountdown
+            key={meta.id}
+            ss={bot?.strategy_settings}
+            color={meta.color}
+            label={meta.label}
+          />
+        );
+      })}
+
+      {/* Sync badge */}
+      <span style={{
+        marginLeft: 'auto',
+        padding: '0.12rem 0.45rem',
+        borderRadius: '0.3rem',
+        fontSize: '0.58rem',
+        fontWeight: 700,
+        letterSpacing: '0.06em',
+        background:    syncStatus === 'synced' ? 'rgba(52,211,153,0.08)' : syncStatus === 'issue' ? 'rgba(248,113,113,0.08)' : 'rgba(255,255,255,0.04)',
+        border:        `1px solid ${syncStatus === 'synced' ? 'rgba(52,211,153,0.25)' : syncStatus === 'issue' ? 'rgba(248,113,113,0.25)' : 'rgba(255,255,255,0.08)'}`,
+        color:         syncStatus === 'synced' ? '#34d399' : syncStatus === 'issue' ? '#f87171' : 'rgba(248,250,252,0.3)',
+        flexShrink: 0,
+      }}>
+        {syncStatus === 'synced' ? 'ALL MARKETS SYNCED' : syncStatus === 'issue' ? 'MARKET SYNC ISSUE' : 'CHECKING…'}
+      </span>
+    </div>
+  );
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -413,6 +566,9 @@ export default function CryptoControlCenter() {
           {pauseMsg?.text ?? resetMsg?.text}
         </div>
       )}
+
+      {/* ── Compact market countdown summary ── */}
+      <MarketSyncBar bots={bots} />
     </div>
 
     {/* ── Reset Paper confirmation modal ── */}

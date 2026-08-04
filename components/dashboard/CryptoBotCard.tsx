@@ -17,6 +17,7 @@
 
 import CryptoEquityChart,       { type EquityPoint }    from './CryptoEquityChart';
 import CryptoTradeSizeControl                           from './CryptoTradeSizeControl';
+import CryptoMarketCountdown                            from './CryptoMarketCountdown';
 
 // ── Asset config ───────────────────────────────────────────────────────────────
 
@@ -155,12 +156,6 @@ function polyUrl(slug: string | null | undefined, fallbackUrl?: string | null): 
   return `https://polymarket.com/event/${encodeURIComponent(slug)}`;
 }
 
-function fmtSecs(s: number | null | undefined): string {
-  if (s == null || s < 0) return '—';
-  if (s < 60) return `${Math.round(s)}s`;
-  return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
-}
-
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function CryptoBotCard({ asset, bot, selected, toggling, onSelect, onToggle, onSaved }: Props) {
@@ -169,31 +164,13 @@ export default function CryptoBotCard({ asset, bot, selected, toggling, onSelect
   const s      = bot?.stats;
   const curve  = bot?.equity_curve ?? [];
 
-  // ── Market data from strategy_settings (written by FastLoop every ~30s) ────
+  // ── Market data from strategy_settings (passed to CryptoMarketCountdown) ───
   const ss              = (bot?.strategy_settings ?? {}) as Record<string, unknown>;
-  const mktSlug: string | null = typeof ss.market_slug === 'string' && ss.market_slug ? ss.market_slug : null;
-  const mktUrlRaw:  string | null = typeof ss.market_url === 'string' && ss.market_url ? ss.market_url : null;
-  const secsRemain: number | null = typeof ss.seconds_remaining === 'number' ? ss.seconds_remaining : null;
-  const priceToBeat: number | null = typeof ss.price_to_beat === 'number' ? ss.price_to_beat : null;
-  const refPrice: number | null = typeof ss.reference_price === 'number' ? ss.reference_price : null;
-  const leadingSide: string | null = typeof ss.leading_side === 'string' ? ss.leading_side : null;
-  const mktExpired: boolean = typeof ss.expired === 'boolean' ? ss.expired : false;
-
-  // Latest open position (if any)
-  const latestOpen = bot?.latest_trade?.status?.toUpperCase() === 'OPEN' ? bot.latest_trade : null;
+  const mktSlug: string | null  = typeof ss.market_slug === 'string' && ss.market_slug ? ss.market_slug : null;
+  const mktUrlRaw: string | null = typeof ss.market_url === 'string' && ss.market_url ? ss.market_url : null;
   const hasOpenPos = (s?.open_trades ?? 0) > 0;
-
-  // Prefer strategy_settings slug; fall back to latest trade slug
   const displaySlug = mktSlug ?? (bot?.latest_trade?.slug ?? null);
   const marketUrl   = polyUrl(displaySlug, mktUrlRaw);
-
-  // Button label logic
-  const btnLabel = !displaySlug
-    ? 'Current Market Unavailable'
-    : hasOpenPos
-    ? 'View Active Trade ↗'
-    : 'Open Current Market ↗';
-  const btnDisabled = !marketUrl;
 
   const accentAlpha = selected ? '35' : '12';
   const borderColor = selected
@@ -331,110 +308,22 @@ export default function CryptoBotCard({ asset, bot, selected, toggling, onSelect
         </div>
       )}
 
-      {/* ── Current market ── */}
+      {/* ── Live market countdown (replaces static secsRemain display) ── */}
       {bot && (
         <div
           onClick={(e) => e.stopPropagation()}
-          style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}
+          style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}
         >
-          {/* Market slug row */}
-          {displaySlug ? (
-            <div style={{ fontSize: '0.6rem', color: 'rgba(248,250,252,0.35)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-              title={displaySlug}>
-              {displaySlug}
-            </div>
-          ) : (
-            <div style={{ fontSize: '0.6rem', color: 'rgba(248,250,252,0.2)', fontStyle: 'italic' }}>No active market</div>
-          )}
-
-          {/* Live market fields if available */}
-          {(secsRemain != null || priceToBeat != null || refPrice != null || leadingSide) && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem 0.65rem', fontSize: '0.6rem', color: 'rgba(248,250,252,0.4)' }}>
-              {secsRemain != null && !mktExpired && (
-                <span title="Time remaining">⏱ {fmtSecs(secsRemain)}</span>
-              )}
-              {mktExpired && (
-                <span style={{ color: '#fbbf24' }}>Expired</span>
-              )}
-              {priceToBeat != null && (
-                <span>Beat: <span style={{ color: '#f8fafc', fontWeight: 600 }}>${priceToBeat.toFixed(4)}</span></span>
-              )}
-              {refPrice != null && (
-                <span>Spot: <span style={{ color: '#f8fafc', fontWeight: 600 }}>${refPrice.toFixed(2)}</span></span>
-              )}
-              {leadingSide && (
-                <span>Leading: <span style={{ fontWeight: 700, color: leadingSide.toUpperCase() === 'UP' ? '#34d399' : '#f87171' }}>{leadingSide.toUpperCase()}</span></span>
-              )}
-            </div>
-          )}
-
-          {/* Open position badge */}
-          {hasOpenPos && latestOpen && (
-            <div style={{
-              display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center',
-              background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)',
-              borderRadius: '0.35rem', padding: '0.25rem 0.5rem', fontSize: '0.6rem',
-            }}>
-              <span style={{ color: '#fbbf24', fontWeight: 700, letterSpacing: '0.06em' }}>OPEN POSITION</span>
-              {latestOpen.side && (
-                <span style={{ color: latestOpen.side === 'UP' ? '#34d399' : '#f87171', fontWeight: 600 }}>
-                  {latestOpen.side}
-                </span>
-              )}
-              {latestOpen.entry_price != null && (
-                <span style={{ color: 'rgba(248,250,252,0.55)', fontFamily: 'monospace' }}>
-                  @ ${Number(latestOpen.entry_price).toFixed(4)}
-                </span>
-              )}
-              {latestOpen.size_usd != null && (
-                <span style={{ color: 'rgba(248,250,252,0.4)', fontFamily: 'monospace' }}>
-                  ${Number(latestOpen.size_usd).toFixed(2)}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Polymarket button */}
-          <a
-            href={marketUrl ?? '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => { if (btnDisabled) e.preventDefault(); e.stopPropagation(); }}
-            style={{
-              display:      'block',
-              textAlign:    'center',
-              padding:      '0.28rem 0.65rem',
-              borderRadius: '0.4rem',
-              fontSize:     '0.62rem',
-              fontWeight:   700,
-              letterSpacing:'0.04em',
-              textDecoration: 'none',
-              transition:   'all 0.15s',
-              background:   btnDisabled
-                ? 'rgba(255,255,255,0.03)'
-                : hasOpenPos
-                ? `${meta.color}18`
-                : 'rgba(255,255,255,0.06)',
-              border: `1px solid ${
-                btnDisabled
-                  ? 'rgba(255,255,255,0.06)'
-                  : hasOpenPos
-                  ? `${meta.color}40`
-                  : 'rgba(255,255,255,0.12)'
-              }`,
-              color: btnDisabled
-                ? 'rgba(248,250,252,0.2)'
-                : hasOpenPos
-                ? meta.color
-                : 'rgba(248,250,252,0.55)',
-              cursor: btnDisabled ? 'default' : 'pointer',
-              overflow: 'hidden',
-              whiteSpace: 'nowrap',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {btnLabel}
-          </a>
+          <CryptoMarketCountdown
+            strategySettings={ss}
+            latestTrade={bot.latest_trade}
+            hasOpenPos={hasOpenPos}
+            mode={bot.mode ?? 'PAPER'}
+            accentColor={meta.color}
+            asset={asset}
+            marketUrl={marketUrl}
+            display="card"
+          />
         </div>
       )}
 
