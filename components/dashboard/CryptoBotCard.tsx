@@ -15,7 +15,8 @@
 //   - Mini equity chart (same height for all 4)
 //   - "Details" button to expand the detail panel below
 
-import CryptoEquityChart, { type EquityPoint } from './CryptoEquityChart';
+import CryptoEquityChart,       { type EquityPoint }    from './CryptoEquityChart';
+import CryptoTradeSizeControl                           from './CryptoTradeSizeControl';
 
 // ── Asset config ───────────────────────────────────────────────────────────────
 
@@ -141,6 +142,7 @@ type Props = {
   toggling:  boolean;
   onSelect:  () => void;
   onToggle:  (enable: boolean) => void;
+  onSaved:   () => void;           // called after successful trade-size save
 };
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -161,7 +163,7 @@ function fmtSecs(s: number | null | undefined): string {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function CryptoBotCard({ asset, bot, selected, toggling, onSelect, onToggle }: Props) {
+export default function CryptoBotCard({ asset, bot, selected, toggling, onSelect, onToggle, onSaved }: Props) {
   const meta   = ASSET_META[asset];
   const isOn   = bot?.is_enabled ?? false;
   const s      = bot?.stats;
@@ -227,18 +229,29 @@ export default function CryptoBotCard({ asset, bot, selected, toggling, onSelect
         background:    `radial-gradient(circle at top right, ${meta.color}${accentAlpha}, transparent 70%)`,
       }} />
 
-      {/* ── Header: icon + name + status ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-          <img
-            src={meta.imgUrl}
-            alt={meta.imgAlt}
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            style={{
-              width: 28, height: 28, borderRadius: '50%', objectFit: 'cover',
-              border: `1.5px solid ${meta.color}50`, flexShrink: 0,
-            }}
-          />
+      {/* ── Header: icon + name  ·  Trade Size control ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
+        {/* Left: icon + name + status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flex: 1 }}>
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <img
+              src={meta.imgUrl}
+              alt={meta.imgAlt}
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              style={{
+                width: 28, height: 28, borderRadius: '50%', objectFit: 'cover',
+                border: `1.5px solid ${meta.color}50`,
+              }}
+            />
+            {/* Status dot on icon */}
+            <div style={{
+              position: 'absolute', bottom: -1, right: -1,
+              width: 8, height: 8, borderRadius: '50%',
+              background: isOn ? meta.color : 'rgba(255,255,255,0.15)',
+              boxShadow:  isOn ? `0 0 5px ${meta.color}90` : 'none',
+              border: '1.5px solid rgba(15,17,26,0.8)',
+            }} />
+          </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#f8fafc', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
               {meta.label}
@@ -249,12 +262,19 @@ export default function CryptoBotCard({ asset, bot, selected, toggling, onSelect
           </div>
         </div>
 
-        {/* Status dot */}
-        <div style={{
-          width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-          background: isOn ? meta.color : 'rgba(255,255,255,0.15)',
-          boxShadow:  isOn ? `0 0 6px ${meta.color}80` : 'none',
-        }} />
+        {/* Right: prominent trade-size control */}
+        {bot && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <CryptoTradeSizeControl
+              botId={meta.botId}
+              isBtc={meta.isBtc}
+              savedSize={bot.trade_size_usd}
+              accentColor={meta.color}
+              onSaved={onSaved}
+              compact
+            />
+          </div>
+        )}
       </div>
 
       {/* ── Toggle button — stop propagation so click doesn't also select ── */}

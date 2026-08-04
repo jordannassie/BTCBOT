@@ -124,6 +124,7 @@ export default function CryptoBotSection() {
               toggling={toggling.has(meta.botId)}
               onSelect={() => setSelected(asset)}
               onToggle={(enable) => handleToggle(meta.botId, enable)}
+              onSaved={load}
             />
           );
         })}

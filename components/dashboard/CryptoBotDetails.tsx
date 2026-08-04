@@ -17,8 +17,8 @@
 //   POST /api/btc-5m-late       — for BTC
 //   POST /api/crypto-5m         — for ETH/SOL/XRP
 
-import { useCallback, useState } from 'react';
 import CryptoEquityChart          from './CryptoEquityChart';
+import CryptoTradeSizeControl     from './CryptoTradeSizeControl';
 import { ASSET_META, type AssetKey, type BotData, type RecentTrade } from './CryptoBotCard';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -83,51 +83,7 @@ export default function CryptoBotDetails({ asset, bot, onToggle, onReload }: Pro
   const displaySlug = mktSlug ?? bot?.latest_trade?.slug ?? null;
   const hasOpenPos  = (s?.open_trades ?? 0) > 0;
 
-  // ── Trade size save ──────────────────────────────────────────────────────
-  const [tradeSize,    setTradeSize]    = useState('');
-  const [savingSize,   setSavingSize]   = useState(false);
-  const [saveSizeOk,   setSaveSizeOk]   = useState(false);
-  const [saveSizeErr,  setSaveSizeErr]  = useState<string | null>(null);
-
-  const handleSaveSize = useCallback(async () => {
-    const size = parseFloat(tradeSize);
-    if (!Number.isFinite(size) || size <= 0) {
-      setSaveSizeErr('Enter a valid positive amount');
-      return;
-    }
-    setSavingSize(true); setSaveSizeOk(false); setSaveSizeErr(null);
-    try {
-      let res: Response;
-      if (meta.isBtc) {
-        res = await fetch('/api/btc-5m-late', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trade_size_usd: size }),
-          cache: 'no-store',
-        });
-      } else {
-        res = await fetch('/api/crypto-5m', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bot_id: meta.botId, trade_size_usd: size }),
-          cache: 'no-store',
-        });
-      }
-      const json = await res.json() as { ok: boolean; error?: string };
-      if (json.ok) {
-        setSaveSizeOk(true);
-        setTradeSize('');
-        onReload();
-        setTimeout(() => setSaveSizeOk(false), 3000);
-      } else {
-        setSaveSizeErr(json.error ?? 'Save failed');
-      }
-    } catch {
-      setSaveSizeErr('Network error');
-    } finally {
-      setSavingSize(false);
-    }
-  }, [tradeSize, meta, onReload]);
+  // Trade-size logic is now handled by CryptoTradeSizeControl below — no local state needed.
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -304,59 +260,19 @@ export default function CryptoBotDetails({ asset, bot, onToggle, onReload }: Pro
         <RecentTradesTable trades={bot!.recent_trades.slice(0, 10)} meta={meta} />
       )}
 
-      {/* ── Trade size save ── */}
-      <div style={{
-        borderTop:   '1px solid rgba(255,255,255,0.06)',
-        paddingTop:  '0.75rem',
-        display:     'flex',
-        flexDirection: 'column',
-        gap:         '0.4rem',
-      }}>
-        <div style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.3)' }}>
-          Trade Settings
-        </div>
-        <div style={{ fontSize: '0.72rem', color: 'rgba(248,250,252,0.4)', marginBottom: '0.2rem' }}>
-          Saved trade size: <span style={{ color: '#f8fafc', fontWeight: 700, fontFamily: 'monospace' }}>
-            {bot ? fmtUsd(bot.trade_size_usd) : '—'}
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <input
-            type="number"
-            value={tradeSize}
-            onChange={(e) => { setTradeSize(e.target.value); setSaveSizeErr(null); setSaveSizeOk(false); }}
-            placeholder={bot ? String(bot.trade_size_usd) : '10.00'}
-            step="0.01" min="0.01"
-            style={{
-              flex: '1 1 120px', maxWidth: 180,
-              padding: '0.4rem 0.6rem',
-              background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: '0.4rem', color: '#f8fafc', fontSize: '0.82rem', fontFamily: 'monospace',
-              outline: 'none',
-            }}
+      {/* ── Trade size — shared CryptoTradeSizeControl ── */}
+      {bot && (
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.75rem' }}>
+          <CryptoTradeSizeControl
+            botId={meta.botId}
+            isBtc={meta.isBtc}
+            savedSize={bot.trade_size_usd}
+            accentColor={meta.color}
+            onSaved={onReload}
+            compact={false}
           />
-          <button
-            onClick={handleSaveSize}
-            disabled={savingSize || !bot || !tradeSize}
-            style={{
-              padding:      '0.4rem 0.9rem',
-              borderRadius: '0.4rem',
-              fontSize:     '0.72rem',
-              fontWeight:   700,
-              cursor:       savingSize || !bot || !tradeSize ? 'not-allowed' : 'pointer',
-              background:   saveSizeOk ? 'rgba(52,211,153,0.15)' : `${meta.color}15`,
-              border:       `1px solid ${saveSizeOk ? 'rgba(52,211,153,0.4)' : `${meta.color}40`}`,
-              color:        saveSizeOk ? '#34d399' : meta.color,
-              opacity:      !bot || !tradeSize ? 0.5 : 1,
-            }}
-          >
-            {savingSize ? 'Saving…' : saveSizeOk ? '✓ Saved' : 'Save Size'}
-          </button>
         </div>
-        {saveSizeErr && (
-          <div style={{ fontSize: '0.68rem', color: '#f87171' }}>✗ {saveSizeErr}</div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
