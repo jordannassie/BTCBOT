@@ -162,6 +162,18 @@ export default function DreamsStrip() {
           </button>
         </div>
 
+        {/* ── Main headline ── */}
+        <h2 style={{
+          margin:        '0 0 0.6rem 0',
+          fontSize:      'clamp(1.4rem, 4vw, 2.4rem)',
+          fontWeight:    900,
+          letterSpacing: '-0.01em',
+          color:         '#f8fafc',
+          lineHeight:    1.1,
+        }}>
+          I&apos;M GOING TO BE A BILLIONAIRE
+        </h2>
+
         {/* ── Scrolling strip ── */}
         <div
           ref={stripRef}
