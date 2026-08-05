@@ -19,6 +19,7 @@ import LiveCard              from '@/components/dashboard/LiveCard';
 import CryptoPaperCard       from '@/components/dashboard/CryptoPaperCard';
 import CryptoKPIStrip        from '@/components/dashboard/CryptoKPIStrip';
 import CryptoControlCenter   from '@/components/dashboard/CryptoControlCenter';
+import DreamsStrip           from '@/components/dashboard/DreamsStrip';
 
 const CryptoBotSection = dynamic(() => import('@/components/dashboard/CryptoBotSection'), { ssr: false });
 
@@ -61,6 +62,9 @@ export default function CryptoDashboardPage() {
 
   return (
     <div className="dashboard-container crypto-page">
+
+      {/* ── Dreams strip — hidden by default, preference saved in localStorage ── */}
+      <DreamsStrip />
 
       {/* ── Page header ── */}
       <div className="crypto-page-header">
