@@ -1,6 +1,5 @@
-// WeatherSummaryCards — Four summary stat cards for the Weather Trading page.
-// When summary is provided (after research), shows real values.
-// Before research runs, shows dashes.
+// WeatherSummaryCards — Four stat cards with large, readable numbers.
+// Shows live values after research runs, dashes before.
 
 import type { ResearchSummary } from '@/lib/weather-types';
 
@@ -12,20 +11,20 @@ export default function WeatherSummaryCards({ summary }: Props) {
   const cards = [
     {
       label: 'Markets Found',
-      value: summary ? String(summary.marketsFound)    : '—',
+      value: summary != null ? String(summary.marketsFound) : '—',
     },
     {
-      label: 'Markets Analyzed',
-      value: summary ? String(summary.marketsAnalyzed) : '—',
+      label: 'Analyzed',
+      value: summary != null ? String(summary.marketsAnalyzed) : '—',
     },
     {
       label: 'Qualified Calls',
-      value: summary ? String(summary.qualifiedCalls)  : '—',
-      highlight: summary && summary.qualifiedCalls > 0,
+      value: summary != null ? String(summary.qualifiedCalls) : '—',
+      highlight: summary != null && summary.qualifiedCalls > 0,
     },
     {
-      label: 'Waiting / Unavail.',
-      value: summary ? String(summary.waitingOrUnavail) : '—',
+      label: 'Waiting / Unavailable',
+      value: summary != null ? String(summary.waitingOrUnavail) : '—',
     },
   ];
 

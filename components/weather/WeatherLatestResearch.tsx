@@ -1,10 +1,7 @@
-// WeatherLatestResearch — Shows research results from the current refresh.
-// Replaces the old demo WeatherCallHistory component.
-//
-// Research calls are NOT trades and are NOT persisted.
-// Clearly states that this is research-only.
+// WeatherLatestResearch — Compact summary table of current research calls.
+// Research calls are NOT trades and are NOT persisted between sessions.
 
-import type { WeatherResearchResult, ResearchDecision } from '@/lib/weather-types';
+import type { WeatherResearchResult } from '@/lib/weather-types';
 
 interface Props {
   results: WeatherResearchResult[];
@@ -12,20 +9,20 @@ interface Props {
 
 function fmtPrice(p: number | null): string {
   if (p === null) return '—';
-  return `${(p * 100).toFixed(1)}¢`;
+  return `${(p * 100).toFixed(0)}¢`;
 }
 
-function fmtPct(p: number): string {
+function fmtProb(p: number, failed: boolean): string {
+  if (failed || p === 0) return '—';
   return `${(p * 100).toFixed(0)}%`;
 }
 
-function DecisionCell({ decision }: { decision: ResearchDecision }) {
-  const cls =
-    decision === 'TRADE YES' ? 'weather-hist-result-win' :
-    decision === 'TRADE NO'  ? 'weather-hist-result-win' :
-    decision === 'WAIT'      ? '' :
-    'weather-hist-result-pending';
-  return <span className={cls}>{decision}</span>;
+function decisionCls(decision: string, failed: boolean): string {
+  if (failed) return 'weather-hist-decision--unavail';
+  if (decision === 'TRADE YES') return 'weather-hist-decision--yes';
+  if (decision === 'TRADE NO')  return 'weather-hist-decision--no';
+  if (decision === 'WAIT')      return 'weather-hist-decision--wait';
+  return 'weather-hist-decision--unavail';
 }
 
 export default function WeatherLatestResearch({ results }: Props) {
@@ -33,51 +30,43 @@ export default function WeatherLatestResearch({ results }: Props) {
     <section className="weather-history-section">
       <div className="weather-history-header">
         <span className="weather-history-title">Latest Research Calls</span>
-        <span className="weather-history-demo-badge">
-          Research calls are not trades and are not yet saved as performance history.
+        <span className="weather-history-note">
+          Research only — not trades — not saved between sessions
         </span>
       </div>
 
       {results.length === 0 ? (
-        <div className="weather-positions-empty">
-          No research calls yet. Press Refresh Markets to run live research.
+        <div className="weather-history-empty">
+          No research calls yet. Press Refresh Research to begin.
         </div>
       ) : (
         <table className="weather-history-table">
           <thead>
             <tr>
               <th>City</th>
-              <th>Contract</th>
+              <th>Bracket</th>
               <th>YES Ask</th>
-              <th>NO Ask</th>
-              <th>Est. YES Prob</th>
+              <th>Est. Prob</th>
               <th>Decision</th>
-              <th>Confidence</th>
             </tr>
           </thead>
           <tbody>
-            {results.map((r) => (
-              <tr key={r.marketId}>
-                <td className="weather-hist-cell-city">
-                  {r.gpt.city || '—'}
-                </td>
-                <td>{r.gpt.contract || r.question.slice(0, 50)}</td>
-                <td>{fmtPrice(r.yesAsk)}</td>
-                <td>{fmtPrice(r.noAsk)}</td>
-                <td>{fmtPct(r.gpt.yesProbability)}</td>
-                <td><DecisionCell decision={r.finalDecision} /></td>
-                <td>
-                  <span
-                    className={
-                      r.gpt.confidence === 'HIGH'   ? 'weather-hist-result-win' :
-                      r.gpt.confidence === 'MEDIUM' ? 'weather-hist-result-pending' : ''
-                    }
-                  >
-                    {r.gpt.confidence}
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {results.map((r) => {
+              const failed = r.gptError !== null;
+              return (
+                <tr key={r.marketId}>
+                  <td>{r.gpt.city || '—'}</td>
+                  <td>{r.bracketLabel || '—'}</td>
+                  <td>{fmtPrice(r.yesAsk)}</td>
+                  <td>{fmtProb(r.gpt.yesProbability, failed)}</td>
+                  <td>
+                    <span className={decisionCls(r.finalDecision, failed)}>
+                      {failed ? 'Research Failed' : r.finalDecision}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
