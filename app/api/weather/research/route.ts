@@ -35,8 +35,9 @@ export const maxDuration = 25;
 // One market per serverless call so the function completes within maxDuration.
 // The client page loops this endpoint once per market.
 const MAX_MARKETS    = 1;
-// Leave headroom: 18 s OpenAI timeout inside a 25 s function budget.
-const OPENAI_TIMEOUT = 18_000;
+// Leave 3 s headroom: 22 s OpenAI timeout inside a 25 s function budget.
+// The @netlify/plugin-nextjs v5 maxDuration=25 is the hard ceiling.
+const OPENAI_TIMEOUT = 22_000;
 
 // ── OpenAI client (server-side) ───────────────────────────────────────────────
 
