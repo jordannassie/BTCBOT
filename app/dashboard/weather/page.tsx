@@ -279,17 +279,67 @@ function DiagnosticsPanel({ diag }: { diag: DiscoveryDiagnostics }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function zeroResearchSummary(): ResearchSummary {
+  return { marketsFound: 0, marketsAnalyzed: 0, qualifiedCalls: 0, waitingOrUnavail: 0, lastRefreshed: new Date().toISOString() };
+}
+
+function buildSummary(marketsFound: number, results: WeatherResearchResult[]): ResearchSummary {
+  return {
+    marketsFound,
+    marketsAnalyzed:  results.length,
+    qualifiedCalls:   results.filter((r) => r.finalDecision === 'TRADE YES' || r.finalDecision === 'TRADE NO').length,
+    waitingOrUnavail: results.filter((r) => r.finalDecision === 'WAIT' || r.finalDecision === 'UNAVAILABLE').length,
+    lastRefreshed:    new Date().toISOString(),
+  };
+}
+
 /** Classify a raw error message into a safe UI category */
 function categorizeError(msg: string): ErrorCategory {
   const m = msg.toLowerCase();
-  if (m.includes('model_not_found') || m.includes('model not found') || m.includes('does not exist')) return 'OPENAI_MODEL_ERROR';
-  if (m.includes('unauthorized') || m.includes('auth') || m.includes('api key') || m.includes('invalid key')) return 'OPENAI_AUTH_ERROR';
-  if (m.includes('rate limit') || m.includes('quota') || m.includes('too many requests')) return 'OPENAI_RATE_LIMIT';
-  if (m.includes('json') || m.includes('parse') || m.includes('invalid response')) return 'OPENAI_RESPONSE_INVALID';
+  if (m.includes('openai_model_error') || m.includes('model_not_found') || m.includes('model not found') || m.includes('does not exist')) return 'OPENAI_MODEL_ERROR';
+  if (m.includes('openai_auth_error') || m.includes('unauthorized') || m.includes('api key') || m.includes('invalid key')) return 'OPENAI_AUTH_ERROR';
+  if (m.includes('openai_rate_limit') || m.includes('rate limit') || m.includes('quota')) return 'OPENAI_RATE_LIMIT';
+  if (m.includes('openai_timeout') || m.includes('timed out') || m.includes('inactivity timeout')) return 'OPENAI_RATE_LIMIT';
+  if (m.includes('openai_response_invalid') || m.includes('unexpected token') || m.includes('no json found')) return 'OPENAI_RESPONSE_INVALID';
   if (m.includes('discovery failed') || m.includes('market discovery')) return 'DISCOVERY_FAILED';
   if (m.includes('price') || m.includes('order book') || m.includes('clob')) return 'PRICE_DATA_FAILED';
   if (m.includes('weather') || m.includes('open-meteo') || m.includes('observation')) return 'WEATHER_DATA_FAILED';
   return 'DISCOVERY_FAILED';
+}
+
+/**
+ * Safe fetch wrapper — always returns a parsed JSON object.
+ * If the server returns HTML or non-JSON, returns a safe error object instead
+ * of throwing or displaying raw HTML in the UI.
+ */
+async function safeFetchJson<T>(
+  url: string,
+  init?: RequestInit,
+  fallback?: T,
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, { ...init, cache: 'no-store' });
+  } catch (netErr) {
+    const msg = netErr instanceof Error ? netErr.message : String(netErr);
+    if (fallback !== undefined) return fallback;
+    throw new Error(`Network error: ${msg}`);
+  }
+
+  const ct = res.headers.get('content-type') ?? '';
+  const isJson = ct.includes('application/json');
+
+  if (!isJson) {
+    // Server returned HTML (e.g., Netlify 504 timeout page) or plain text
+    const snippet = (await res.text()).slice(0, 120).replace(/<[^>]*>/g, '').trim();
+    const safeMsg = `HTTP ${res.status} — server returned non-JSON${snippet ? `: ${snippet}` : ''}`;
+    if (fallback !== undefined) return fallback;
+    throw new Error(safeMsg);
+  }
+
+  return res.json() as Promise<T>;
 }
 
 export default function WeatherDashboardPage() {
@@ -307,29 +357,19 @@ export default function WeatherDashboardPage() {
       errorMsg: null,
       errorCategory: null,
       diagnostics: null,
+      results: [],
     }));
 
     try {
       // ── Step 1: Discover temperature events / bracket markets ─────────────
       let marketsData: MarketsApiResponse;
       try {
-        const marketsRes = await fetch('/api/weather/markets', {
-          method: 'GET',
-          cache: 'no-store',
-        });
-        if (!marketsRes.ok) {
-          const text = await marketsRes.text();
-          throw new Error(`Discovery HTTP ${marketsRes.status}: ${text.slice(0, 200)}`);
-        }
-        marketsData = await marketsRes.json() as MarketsApiResponse;
+        marketsData = await safeFetchJson<MarketsApiResponse>('/api/weather/markets');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setState((prev) => ({
-          ...prev,
-          phase: 'error',
-          progressMsg: '',
-          errorMsg: msg,
-          errorCategory: 'DISCOVERY_FAILED',
+          ...prev, phase: 'error', progressMsg: '',
+          errorMsg: msg, errorCategory: 'DISCOVERY_FAILED',
           lastRefreshed: new Date().toISOString(),
         }));
         return;
@@ -337,9 +377,7 @@ export default function WeatherDashboardPage() {
 
       if (!marketsData.ok) {
         setState((prev) => ({
-          ...prev,
-          phase: 'error',
-          progressMsg: '',
+          ...prev, phase: 'error', progressMsg: '',
           errorMsg: `DISCOVERY_FAILED: ${marketsData.error || 'Unknown discovery error'}`,
           errorCategory: 'DISCOVERY_FAILED',
           diagnostics: marketsData.diagnostics ?? null,
@@ -348,44 +386,46 @@ export default function WeatherDashboardPage() {
         return;
       }
 
-      const markets: WeatherMarket[] = marketsData.markets;
+      const allMarkets: WeatherMarket[] = marketsData.markets;
       const diagnostics = marketsData.diagnostics ?? null;
 
-      if (markets.length === 0) {
+      if (allMarkets.length === 0) {
         setState({
-          phase: 'no-markets',
-          progressMsg: '',
-          results: [],
-          summary: {
-            marketsFound: 0, marketsAnalyzed: 0, qualifiedCalls: 0,
-            waitingOrUnavail: 0, lastRefreshed: new Date().toISOString(),
-          },
-          errorMsg: null,
-          errorCategory: 'NO_MARKETS_FOUND',
-          diagnostics,
-          lastRefreshed: new Date().toISOString(),
+          phase: 'no-markets', progressMsg: '', results: [],
+          summary: { marketsFound: 0, marketsAnalyzed: 0, qualifiedCalls: 0, waitingOrUnavail: 0, lastRefreshed: new Date().toISOString() },
+          errorMsg: null, errorCategory: 'NO_MARKETS_FOUND',
+          diagnostics, lastRefreshed: new Date().toISOString(),
         });
         return;
       }
 
-      // ── Step 2: Fetch order books for all token IDs ───────────────────────
-      updatePhase('pricing', `Reading live order books for ${markets.length} markets…`);
+      // ── Step 2: Select markets to research ───────────────────────────────
+      // Priority: today's markets first, then tomorrow's. Max 3 markets for research
+      // to stay within Netlify function budget (1 market per invocation).
+      const MAX_RESEARCH = 3;
+      const todayMarkets     = allMarkets.filter((m) => !m.isTomorrow);
+      const tomorrowMarkets  = allMarkets.filter((m) =>  m.isTomorrow);
+      const researchQueue: WeatherMarket[] = [
+        ...todayMarkets,
+        ...tomorrowMarkets,
+      ].slice(0, MAX_RESEARCH);
 
-      const allTokenIds = markets.flatMap((m) => m.tokenIds);
-      const pricesRes = await fetch('/api/weather/prices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tokenIds: allTokenIds }),
-        cache: 'no-store',
-      });
-      const pricesData: PricesApiResponse = await pricesRes.json();
+      updatePhase('pricing', `Reading live order books for ${researchQueue.length} markets…`);
+
+      // ── Step 3: Fetch order books for selected markets only ───────────────
+      const allTokenIds = researchQueue.flatMap((m) => m.tokenIds);
+      const pricesData = await safeFetchJson<PricesApiResponse>(
+        '/api/weather/prices',
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tokenIds: allTokenIds }) },
+        { ok: false, orderBooks: {}, error: 'Price fetch failed' },
+      );
       const orderBooks = pricesData.ok ? pricesData.orderBooks : {};
 
-      // ── Step 3: Fetch weather observations ────────────────────────────────
+      // ── Step 4: Fetch weather observations ────────────────────────────────
       updatePhase('observing', 'Fetching weather observations…');
 
       const observations: Record<string, ObservationApiResponse['observation']> = {};
-      for (const market of markets) {
+      for (const market of researchQueue) {
         if (market.inferredLat === null || market.inferredLon === null) continue;
         const params = new URLSearchParams({
           lat:  String(market.inferredLat),
@@ -394,67 +434,98 @@ export default function WeatherDashboardPage() {
           city: market.inferredCity     || 'Unknown',
         });
         try {
-          const obsRes = await fetch(`/api/weather/observation?${params}`, { cache: 'no-store' });
-          const obsData: ObservationApiResponse = await obsRes.json();
+          const obsData = await safeFetchJson<ObservationApiResponse>(
+            `/api/weather/observation?${params}`,
+            undefined,
+            { ok: false, observation: null, error: 'Observation unavailable' },
+          );
           if (obsData.ok && obsData.observation) {
             observations[market.marketId] = obsData.observation;
           }
-        } catch { /* Non-fatal — weather data is optional */ }
+        } catch { /* Non-fatal */ }
       }
 
-      // ── Step 4: GPT research ──────────────────────────────────────────────
-      updatePhase('researching', `Running GPT research on ${markets.length} markets…`);
+      // ── Step 5: GPT research — ONE market per serverless call ─────────────
+      // The research route enforces MAX_MARKETS=1. We loop here to research
+      // each market independently so a single timeout doesn't cancel the rest.
 
-      const researchInputs: WeatherResearchInput[] = markets.map((market) => ({
-        market,
-        orderBooks,
-        observation: observations[market.marketId] ?? null,
-      }));
+      const accumulatedResults: WeatherResearchResult[] = [];
+      let firstResearchError: string | null = null;
 
-      const researchRes = await fetch('/api/weather/research', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markets: researchInputs }),
-        cache: 'no-store',
-      });
+      for (let idx = 0; idx < researchQueue.length; idx++) {
+        const market = researchQueue[idx];
+        const label  = market.bracketLabel || market.inferredCity || market.question.slice(0, 30);
+        updatePhase('researching', `GPT research ${idx + 1}/${researchQueue.length}: ${label}…`);
 
-      const researchData: ResearchApiResponse = await researchRes.json();
+        const researchInput: WeatherResearchInput = {
+          market,
+          orderBooks,
+          observation: observations[market.marketId] ?? null,
+        };
 
-      if (!researchData.ok) {
-        const errMsg = researchData.error || 'Research failed';
-        // Show partial results if we have them
-        if (researchData.results && researchData.results.length > 0) {
-          setState({
-            phase: 'partial',
-            progressMsg: '',
-            results: researchData.results,
-            summary: researchData.summary,
-            errorMsg: errMsg,
-            errorCategory: categorizeError(errMsg),
-            diagnostics,
-            lastRefreshed: new Date().toISOString(),
-          });
+        let researchData: ResearchApiResponse;
+        try {
+          researchData = await safeFetchJson<ResearchApiResponse>(
+            '/api/weather/research',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ markets: [researchInput] }),
+            },
+            { ok: false, results: [], summary: zeroResearchSummary(), error: 'Research server returned non-JSON' },
+          );
+        } catch (fetchErr) {
+          // Network-level failure for this market — treat as UNAVAILABLE and continue
+          const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+          if (!firstResearchError) firstResearchError = errMsg;
+          // Don't stop — continue to next market
+          continue;
+        }
+
+        if (researchData.ok && researchData.results.length > 0) {
+          accumulatedResults.push(...researchData.results);
         } else {
+          // Server returned ok:false — still continue but record error
+          const errMsg = researchData.error || 'Research failed for this market';
+          if (!firstResearchError) firstResearchError = errMsg;
+          // If the result set is empty (not UNAVAILABLE), we just skip it
+        }
+
+        // Show incremental results after each market completes
+        if (accumulatedResults.length > 0) {
+          const partialSummary = buildSummary(allMarkets.length, accumulatedResults);
           setState((prev) => ({
             ...prev,
-            phase: 'error',
-            progressMsg: '',
-            errorMsg: errMsg,
-            errorCategory: categorizeError(errMsg),
+            phase: 'researching',
+            results: [...accumulatedResults],
+            summary: partialSummary,
             diagnostics,
-            lastRefreshed: new Date().toISOString(),
           }));
         }
+      }
+
+      // ── Step 6: Final state ───────────────────────────────────────────────
+      const finalSummary = buildSummary(allMarkets.length, accumulatedResults);
+
+      if (accumulatedResults.length === 0) {
+        // Nothing came back — show error
+        const errMsg = firstResearchError ?? 'No research results returned';
+        setState((prev) => ({
+          ...prev,
+          phase: 'error', progressMsg: '',
+          errorMsg: errMsg, errorCategory: categorizeError(errMsg),
+          diagnostics, lastRefreshed: new Date().toISOString(),
+        }));
         return;
       }
 
       setState({
-        phase: 'complete',
+        phase: firstResearchError ? 'partial' : 'complete',
         progressMsg: '',
-        results: researchData.results,
-        summary: researchData.summary,
-        errorMsg: null,
-        errorCategory: 'RESEARCH_COMPLETE',
+        results: accumulatedResults,
+        summary: finalSummary,
+        errorMsg:      firstResearchError ?? null,
+        errorCategory: firstResearchError ? categorizeError(firstResearchError) : 'RESEARCH_COMPLETE',
         diagnostics,
         lastRefreshed: new Date().toISOString(),
       });
@@ -462,11 +533,8 @@ export default function WeatherDashboardPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setState((prev) => ({
-        ...prev,
-        phase: 'error',
-        progressMsg: '',
-        errorMsg: msg,
-        errorCategory: categorizeError(msg),
+        ...prev, phase: 'error', progressMsg: '',
+        errorMsg: msg, errorCategory: categorizeError(msg),
         lastRefreshed: new Date().toISOString(),
       }));
     }

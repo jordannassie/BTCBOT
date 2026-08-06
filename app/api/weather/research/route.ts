@@ -26,11 +26,17 @@ import type {
   EvidenceSource,
 } from '@/lib/weather-types';
 
-export const dynamic  = 'force-dynamic';
+export const dynamic    = 'force-dynamic';
 export const revalidate = 0;
+// Tell @netlify/plugin-nextjs to allow up to 25 s for this serverless function.
+// Netlify's hard cap for synchronous functions is 26 s; stay 1 s under it.
+export const maxDuration = 25;
 
-const MAX_MARKETS      = 10;
-const OPENAI_TIMEOUT   = 45_000;  // 45 s per market
+// One market per serverless call so the function completes within maxDuration.
+// The client page loops this endpoint once per market.
+const MAX_MARKETS    = 1;
+// Leave headroom: 18 s OpenAI timeout inside a 25 s function budget.
+const OPENAI_TIMEOUT = 18_000;
 
 // ── OpenAI client (server-side) ───────────────────────────────────────────────
 
@@ -38,13 +44,47 @@ function getOpenAIClient(): OpenAI | null {
   const key = process.env.OPENAI_API_KEY;
   if (!key || key.trim() === '') return null;
   return new OpenAI({
-    apiKey:  key,
-    timeout: OPENAI_TIMEOUT,
+    apiKey:     key,
+    timeout:    OPENAI_TIMEOUT,
     maxRetries: 0,
   });
 }
 
 const MODEL = process.env.OPENAI_WEATHER_MODEL || 'gpt-5.6-terra';
+
+// ── Error categorisation ──────────────────────────────────────────────────────
+
+type ResearchErrorCategory =
+  | 'OPENAI_MODEL_ERROR'
+  | 'OPENAI_AUTH_ERROR'
+  | 'OPENAI_RATE_LIMIT'
+  | 'OPENAI_TIMEOUT'
+  | 'OPENAI_RESPONSE_INVALID'
+  | 'RESEARCH_SERVER_ERROR';
+
+function categoriseOpenAIError(err: unknown): { category: ResearchErrorCategory; message: string } {
+  const msg  = err instanceof Error ? err.message : String(err);
+  const code = (err as { status?: number; code?: string }).status
+    ?? (err as { status?: number; code?: string }).code;
+
+  const lower = msg.toLowerCase();
+  if (lower.includes('model_not_found') || lower.includes('does not exist') || lower.includes('model not found')) {
+    return { category: 'OPENAI_MODEL_ERROR', message: `Model "${MODEL}" not found or not accessible.` };
+  }
+  if (lower.includes('unauthorized') || lower.includes('invalid api key') || code === 401) {
+    return { category: 'OPENAI_AUTH_ERROR', message: 'OpenAI API key invalid or unauthorized.' };
+  }
+  if (lower.includes('rate limit') || lower.includes('quota') || code === 429) {
+    return { category: 'OPENAI_RATE_LIMIT', message: 'OpenAI rate limit or quota exceeded.' };
+  }
+  if (lower.includes('timeout') || lower.includes('timed out') || lower.includes('abort')) {
+    return { category: 'OPENAI_TIMEOUT', message: 'OpenAI request timed out (limit: 18 s).' };
+  }
+  if (lower.includes('json') || lower.includes('parse') || lower.includes('unexpected token')) {
+    return { category: 'OPENAI_RESPONSE_INVALID', message: `OpenAI returned non-JSON output: ${msg.slice(0, 120)}` };
+  }
+  return { category: 'RESEARCH_SERVER_ERROR', message: `Unexpected error: ${msg.slice(0, 200)}` };
+}
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 
@@ -397,29 +437,36 @@ async function researchMarket(
   let gptError: string | null = null;
 
   try {
-    // Use OpenAI Responses API with web search
+    const t0 = Date.now();
+    // Use OpenAI Responses API with web search enabled
     const response = await openai.responses.create({
       model: MODEL,
       tools: [{ type: 'web_search_preview' }] as Parameters<typeof openai.responses.create>[0]['tools'],
       input: `${SYSTEM_PROMPT}\n\n${prompt}`,
     } as Parameters<typeof openai.responses.create>[0]);
 
+    const elapsedMs = Date.now() - t0;
+
     // Extract text output from Responses API
     const outputText: string = (response as unknown as { output_text?: string }).output_text ?? '';
+
+    // Safe server-side log — no key, no full prompt
+    console.log(`[weather/research] model=${MODEL} market=${market.marketId} elapsedMs=${elapsedMs} webSearch=true outputLen=${outputText.length}`);
 
     if (!outputText) throw new Error('Empty response from OpenAI');
 
     // Find JSON in the output (may be preceded by web search annotations)
     const jsonStart = outputText.indexOf('{');
     const jsonEnd   = outputText.lastIndexOf('}');
-    if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON found in response');
+    if (jsonStart === -1 || jsonEnd === -1) throw new Error(`No JSON found in response; outputLen=${outputText.length}`);
     const jsonStr = outputText.slice(jsonStart, jsonEnd + 1);
 
     const parsed = JSON.parse(jsonStr) as unknown;
     gpt = validateGptResponse(parsed);
   } catch (err) {
-    gptError = err instanceof Error ? err.message : String(err);
-    console.error('[weather/research] GPT error for market', market.marketId, ':', gptError);
+    const { category, message: catMsg } = categoriseOpenAIError(err);
+    gptError = `${category}: ${catMsg}`;
+    console.error('[weather/research] GPT error market', market.marketId, '—', category, '—', catMsg);
 
     gpt = {
       city:                    market.inferredCity || 'Unknown',
@@ -484,21 +531,40 @@ async function researchMarket(
 // ── Main handler ──────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // Check for API key
+  // ── Outer try/catch ensures the route ALWAYS returns JSON, never HTML ────────
+  try {
+    return await handleResearch(req);
+  } catch (outerErr) {
+    const msg = outerErr instanceof Error ? outerErr.message : String(outerErr);
+    console.error('[weather/research] unhandled outer error:', msg.slice(0, 200));
+    return NextResponse.json(
+      {
+        ok:      false,
+        results: [],
+        summary: zeroSummary(),
+        error:   `RESEARCH_SERVER_ERROR: ${msg.slice(0, 200)}`,
+      } satisfies ResearchApiResponse,
+      { status: 500, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+    );
+  }
+}
+
+async function handleResearch(req: NextRequest): Promise<NextResponse> {
+  // ── Check API key ─────────────────────────────────────────────────────────
   const openai = getOpenAIClient();
   if (!openai) {
     return NextResponse.json(
       {
         ok:      false,
         results: [],
-        summary: { marketsFound: 0, marketsAnalyzed: 0, qualifiedCalls: 0, waitingOrUnavail: 0, lastRefreshed: new Date().toISOString() },
-        error:   'OPENAI_API_KEY is not configured on this server.',
+        summary: zeroSummary(),
+        error:   'OPENAI_AUTH_ERROR: OPENAI_API_KEY is not configured on this server.',
       } satisfies ResearchApiResponse,
-      { status: 503 }
+      { status: 503, headers: { 'Content-Type': 'application/json' } }
     );
   }
 
-  // Parse and validate request body
+  // ── Parse request body ─────────────────────────────────────────────────────
   let body: unknown;
   try {
     body = await req.json();
@@ -516,6 +582,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // MAX_MARKETS = 1: each serverless invocation handles exactly one market.
+  // The client page loops this endpoint once per market.
   const inputs = ((body as { markets: unknown[] }).markets).slice(0, MAX_MARKETS) as WeatherResearchInput[];
 
   if (inputs.length === 0) {
@@ -525,45 +593,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  try {
-    // Research markets one at a time (avoid parallel GPT calls to manage cost/rate limits)
-    const results: WeatherResearchResult[] = [];
-    for (const input of inputs) {
-      const result = await researchMarket(openai, input);
-      results.push(result);
-    }
+  console.log(`[weather/research] model=${MODEL} markets=${inputs.length} maxDuration=${maxDuration}s`);
 
-    const qualifiedCalls  = results.filter((r) => r.finalDecision === 'TRADE YES' || r.finalDecision === 'TRADE NO').length;
-    const waitingOrUnavail = results.filter((r) => r.finalDecision === 'WAIT' || r.finalDecision === 'UNAVAILABLE').length;
-
-    const summary: ResearchSummary = {
-      marketsFound:     inputs.length,
-      marketsAnalyzed:  results.length,
-      qualifiedCalls,
-      waitingOrUnavail,
-      lastRefreshed:    new Date().toISOString(),
-    };
-
-    const response: ResearchApiResponse = {
-      ok:      true,
-      results,
-      summary,
-      error:   null,
-    };
-
-    return NextResponse.json(response, {
-      headers: { 'Cache-Control': 'no-store, max-age=0' },
-    });
-
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[weather/research] error:', message);
-
-    return NextResponse.json(
-      { ok: false, results: [], summary: zeroSummary(), error: message } satisfies ResearchApiResponse,
-      { status: 500 }
-    );
+  // ── Research (one market) ─────────────────────────────────────────────────
+  const results: WeatherResearchResult[] = [];
+  for (const input of inputs) {
+    const result = await researchMarket(openai, input);
+    results.push(result);
   }
+
+  const qualifiedCalls   = results.filter((r) => r.finalDecision === 'TRADE YES' || r.finalDecision === 'TRADE NO').length;
+  const waitingOrUnavail = results.filter((r) => r.finalDecision === 'WAIT' || r.finalDecision === 'UNAVAILABLE').length;
+
+  const summary: ResearchSummary = {
+    marketsFound:     inputs.length,
+    marketsAnalyzed:  results.length,
+    qualifiedCalls,
+    waitingOrUnavail,
+    lastRefreshed:    new Date().toISOString(),
+  };
+
+  return NextResponse.json(
+    { ok: true, results, summary, error: null } satisfies ResearchApiResponse,
+    { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+  );
 }
 
 function zeroSummary(): ResearchSummary {
