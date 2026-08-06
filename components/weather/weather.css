@@ -1066,3 +1066,83 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ── Bracket label & tomorrow badge ──────────────────────────────────────── */
+
+.weather-opp-bracket-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary, #94a3b8);
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+.weather-opp-tomorrow-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #f59e0b;
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: 4px;
+  padding: 0.1em 0.5em;
+  text-transform: uppercase;
+}
+
+/* ── Discovery diagnostics ───────────────────────────────────────────────── */
+
+.weather-diag-details {
+  margin: 0.75rem 0;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.weather-diag-summary {
+  padding: 0.6rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #94a3b8);
+  cursor: pointer;
+  user-select: none;
+  background: rgba(255,255,255,0.03);
+}
+
+.weather-diag-summary:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.weather-diag-panel {
+  padding: 0.75rem 1rem 1rem;
+  background: rgba(0,0,0,0.15);
+}
+
+.weather-diag-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #64748b);
+  margin: 0.75rem 0 0.4rem;
+}
+
+.weather-diag-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.weather-diag-table td {
+  padding: 0.25rem 0;
+  color: var(--text-secondary, #94a3b8);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.weather-diag-table td:last-child {
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-primary, #e2e8f0);
+  font-variant-numeric: tabular-nums;
+}

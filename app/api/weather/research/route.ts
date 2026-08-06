@@ -378,6 +378,10 @@ async function researchMarket(
     return {
       marketId:    market.marketId, question: market.question,
       conditionId: market.conditionId, polymarketUrl: market.polymarketUrl, endDate: market.endDate,
+      parentEventTitle: market.parentEventTitle ?? '',
+      bracketLabel:     market.bracketLabel ?? '',
+      isTomorrow:       market.isTomorrow ?? false,
+      bracketUnverified: market.bracketUnverified ?? false,
       yesOutcome, noOutcome, yesTokenId, noTokenId,
       yesAsk: null, noAsk: null, yesBid: null, noBid: null,
       yesEdge: null, noEdge: null, orderBookTimestamp,
@@ -438,14 +442,24 @@ async function researchMarket(
   }
 
   // Apply deterministic decision rules
-  const { finalDecision, reason, yesEdge, noEdge } = applyDeterministicRules(gpt, yesAsk, noAsk);
+  // Force WAIT if bracket parsing was unverified
+  const bracketUnverified = market.bracketUnverified ?? false;
+  const effectiveGpt = bracketUnverified
+    ? { ...gpt, gptDecision: 'WAIT' as const, warnings: [...gpt.warnings, 'Bracket label could not be parsed — WAIT enforced'] }
+    : gpt;
+  const { finalDecision, reason, yesEdge, noEdge } = applyDeterministicRules(effectiveGpt, yesAsk, noAsk);
+  const decisionReasonFull = bracketUnverified ? `Bracket unverified; ${reason}` : reason;
 
   return {
-    marketId:       market.marketId,
-    question:       market.question,
-    conditionId:    market.conditionId,
-    polymarketUrl:  market.polymarketUrl,
-    endDate:        market.endDate,
+    marketId:         market.marketId,
+    question:         market.question,
+    conditionId:      market.conditionId,
+    polymarketUrl:    market.polymarketUrl,
+    endDate:          market.endDate,
+    parentEventTitle: market.parentEventTitle ?? '',
+    bracketLabel:     market.bracketLabel ?? '',
+    isTomorrow:       market.isTomorrow ?? false,
+    bracketUnverified: market.bracketUnverified ?? false,
     yesOutcome,
     noOutcome,
     yesTokenId,
@@ -457,9 +471,9 @@ async function researchMarket(
     yesEdge,
     noEdge,
     orderBookTimestamp,
-    gpt,
+    gpt:            effectiveGpt,
     finalDecision,
-    decisionReason: reason,
+    decisionReason: decisionReasonFull,
     observation:    observation ?? null,
     analyzedAt,
     hasOrderBook,

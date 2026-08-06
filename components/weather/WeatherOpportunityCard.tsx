@@ -106,6 +106,12 @@ export default function WeatherOpportunityCard({ result }: WeatherOpportunityCar
         <div className="weather-opp-city-block">
           <span className="weather-opp-city">{gpt.city || 'Unknown City'}</span>
           <span className="weather-opp-station">{stationLabel}</span>
+          {result.bracketLabel && (
+            <span className="weather-opp-bracket-label">Bracket: {result.bracketLabel}</span>
+          )}
+          {result.isTomorrow && (
+            <span className="weather-opp-tomorrow-badge">Tomorrow</span>
+          )}
         </div>
 
         <div className="weather-opp-times">

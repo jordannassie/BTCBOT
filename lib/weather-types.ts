@@ -33,6 +33,16 @@ export interface WeatherMarket {
   inferredLon:     number | null;
   /** Known timezone for city */
   inferredTimezone: string | null;
+  /** Parent event ID (temperature events have nested bracket markets) */
+  parentEventId:   string;
+  /** Parent event title e.g. "Highest temperature in Atlanta on August 6?" */
+  parentEventTitle: string;
+  /** Bracket label e.g. "88-89°F" */
+  bracketLabel:    string;
+  /** True if this market's measurement date is tomorrow (not today) */
+  isTomorrow:      boolean;
+  /** True if bracket parsing confidence is uncertain (force WAIT) */
+  bracketUnverified: boolean;
 }
 
 // ── CLOB order book ───────────────────────────────────────────────────────────
@@ -121,11 +131,15 @@ export interface GptResearchFields {
 
 /** Final research result (GPT fields + deterministic rule enforcement) */
 export interface WeatherResearchResult {
-  marketId:     string;
-  question:     string;
-  conditionId:  string;
-  polymarketUrl: string;
-  endDate:      string;
+  marketId:         string;
+  question:         string;
+  conditionId:      string;
+  polymarketUrl:    string;
+  endDate:          string;
+  parentEventTitle: string;
+  bracketLabel:     string;
+  isTomorrow:       boolean;
+  bracketUnverified: boolean;
 
   // Executable prices (from CLOB, not GPT)
   yesOutcome:   string;
@@ -168,11 +182,31 @@ export interface ResearchSummary {
 
 // ── API response shapes ───────────────────────────────────────────────────────
 
+// ── Discovery diagnostics ─────────────────────────────────────────────────────
+
+/** Safe discovery metadata — never contains secrets or stack traces */
+export interface DiscoveryDiagnostics {
+  eventsScanned:            number;
+  temperatureEventsMatched: number;
+  eligibleEvents:           number;
+  nestedMarketsFound:       number;
+  eligibleMarkets:          number;
+  rejectedCounts: {
+    closed:                 number;
+    wrongDate:              number;
+    notTemperature:         number;
+    missingTokens:          number;
+    invalidOutcomeMapping:  number;
+    unparseableBracket:     number;
+  };
+}
+
 export interface MarketsApiResponse {
-  ok:       boolean;
-  markets:  WeatherMarket[];
-  total:    number;
-  error:    string | null;
+  ok:          boolean;
+  markets:     WeatherMarket[];
+  total:       number;
+  error:       string | null;
+  diagnostics: DiscoveryDiagnostics;
 }
 
 export interface PricesApiResponse {

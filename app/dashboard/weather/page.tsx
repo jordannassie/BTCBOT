@@ -28,6 +28,7 @@ import type {
   PricesApiResponse,
   ObservationApiResponse,
   ResearchApiResponse,
+  DiscoveryDiagnostics,
 } from '@/lib/weather-types';
 
 // ── Page state ────────────────────────────────────────────────────────────────
@@ -43,21 +44,38 @@ type Phase =
   | 'no-markets'
   | 'error';
 
+/** Error category codes for clear UI separation */
+type ErrorCategory =
+  | 'NO_MARKETS_FOUND'
+  | 'DISCOVERY_FAILED'
+  | 'PRICE_DATA_FAILED'
+  | 'WEATHER_DATA_FAILED'
+  | 'OPENAI_MODEL_ERROR'
+  | 'OPENAI_AUTH_ERROR'
+  | 'OPENAI_RATE_LIMIT'
+  | 'OPENAI_RESPONSE_INVALID'
+  | 'RESEARCH_COMPLETE'
+  | null;
+
 interface PageState {
-  phase:        Phase;
-  progressMsg:  string;
-  results:      WeatherResearchResult[];
-  summary:      ResearchSummary | null;
-  errorMsg:     string | null;
+  phase:         Phase;
+  progressMsg:   string;
+  results:       WeatherResearchResult[];
+  summary:       ResearchSummary | null;
+  errorMsg:      string | null;
+  errorCategory: ErrorCategory;
+  diagnostics:   DiscoveryDiagnostics | null;
   lastRefreshed: string | null;
 }
 
 const IDLE_STATE: PageState = {
-  phase:        'idle',
-  progressMsg:  '',
-  results:      [],
-  summary:      null,
-  errorMsg:     null,
+  phase:         'idle',
+  progressMsg:   '',
+  results:       [],
+  summary:       null,
+  errorMsg:      null,
+  errorCategory: null,
+  diagnostics:   null,
   lastRefreshed: null,
 };
 
@@ -177,8 +195,8 @@ function IdleState() {
       <div className="weather-idle-icon">🌡</div>
       <p className="weather-idle-title">Press Refresh Markets to begin</p>
       <p className="weather-idle-sub">
-        Searches Polymarket for live temperature bracket markets · Fetches real order books ·
-        Retrieves public weather data · Runs GPT research
+        Discovers Polymarket temperature events · Reads live order books ·
+        Retrieves public weather data · Runs GPT research with web search
       </p>
       <p className="weather-idle-note">Research only — no orders are placed.</p>
     </div>
@@ -187,11 +205,23 @@ function IdleState() {
 
 // ── Error state ───────────────────────────────────────────────────────────────
 
-function ErrorState({ message }: { message: string }) {
+function ErrorState({ message, category }: { message: string; category: ErrorCategory }) {
+  const labels: Record<NonNullable<ErrorCategory>, string> = {
+    NO_MARKETS_FOUND:       'No Markets Found',
+    DISCOVERY_FAILED:       'Discovery Failed',
+    PRICE_DATA_FAILED:      'Price Data Failed',
+    WEATHER_DATA_FAILED:    'Weather Data Failed',
+    OPENAI_MODEL_ERROR:     'OpenAI Model Error',
+    OPENAI_AUTH_ERROR:      'OpenAI Auth Error',
+    OPENAI_RATE_LIMIT:      'OpenAI Rate Limit',
+    OPENAI_RESPONSE_INVALID:'OpenAI Response Invalid',
+    RESEARCH_COMPLETE:      'Research Complete',
+  };
+  const label = category && labels[category] ? `${labels[category]}` : 'Research Error';
   return (
     <div className="weather-error-state">
       <div className="weather-error-icon">⚠</div>
-      <p className="weather-error-title">Research encountered an error</p>
+      <p className="weather-error-title">{label}</p>
       <p className="weather-error-msg">{message}</p>
     </div>
   );
@@ -199,20 +229,68 @@ function ErrorState({ message }: { message: string }) {
 
 // ── No-markets state ──────────────────────────────────────────────────────────
 
-function NoMarketsState() {
+function NoMarketsState({ diagnostics }: { diagnostics: DiscoveryDiagnostics | null }) {
   return (
     <div className="weather-no-markets-state">
-      <p className="weather-no-markets-title">No eligible temperature markets found on Polymarket today</p>
+      <p className="weather-no-markets-title">NO_MARKETS_FOUND — No eligible temperature markets</p>
       <p className="weather-no-markets-sub">
-        Searched Polymarket for active same-day temperature bracket markets ending within
-        48 hours. None were found. Polymarket may not have launched weather temperature
-        markets today. Try again later or tomorrow morning when new markets open.
+        Searched Polymarket temperature events for today and tomorrow. No active bracket
+        markets with executable order books were found. Polymarket may not yet have
+        launched temperature markets for these dates. Try again later.
       </p>
+      {diagnostics && (
+        <details className="weather-diag-details">
+          <summary className="weather-diag-summary">Discovery details</summary>
+          <DiagnosticsPanel diag={diagnostics} />
+        </details>
+      )}
+    </div>
+  );
+}
+
+// ── Diagnostics panel ─────────────────────────────────────────────────────────
+
+function DiagnosticsPanel({ diag }: { diag: DiscoveryDiagnostics }) {
+  return (
+    <div className="weather-diag-panel">
+      <table className="weather-diag-table">
+        <tbody>
+          <tr><td>Events scanned</td><td>{diag.eventsScanned}</td></tr>
+          <tr><td>Temperature events matched</td><td>{diag.temperatureEventsMatched}</td></tr>
+          <tr><td>Eligible events (with markets)</td><td>{diag.eligibleEvents}</td></tr>
+          <tr><td>Nested bracket markets found</td><td>{diag.nestedMarketsFound}</td></tr>
+          <tr><td>Eligible bracket markets</td><td>{diag.eligibleMarkets}</td></tr>
+        </tbody>
+      </table>
+      <p className="weather-diag-label">Rejection counts:</p>
+      <table className="weather-diag-table">
+        <tbody>
+          <tr><td>Closed / inactive</td><td>{diag.rejectedCounts.closed}</td></tr>
+          <tr><td>Wrong date</td><td>{diag.rejectedCounts.wrongDate}</td></tr>
+          <tr><td>Not temperature</td><td>{diag.rejectedCounts.notTemperature}</td></tr>
+          <tr><td>Missing tokens</td><td>{diag.rejectedCounts.missingTokens}</td></tr>
+          <tr><td>Invalid outcome mapping</td><td>{diag.rejectedCounts.invalidOutcomeMapping}</td></tr>
+          <tr><td>Unparseable bracket</td><td>{diag.rejectedCounts.unparseableBracket}</td></tr>
+        </tbody>
+      </table>
     </div>
   );
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
+
+/** Classify a raw error message into a safe UI category */
+function categorizeError(msg: string): ErrorCategory {
+  const m = msg.toLowerCase();
+  if (m.includes('model_not_found') || m.includes('model not found') || m.includes('does not exist')) return 'OPENAI_MODEL_ERROR';
+  if (m.includes('unauthorized') || m.includes('auth') || m.includes('api key') || m.includes('invalid key')) return 'OPENAI_AUTH_ERROR';
+  if (m.includes('rate limit') || m.includes('quota') || m.includes('too many requests')) return 'OPENAI_RATE_LIMIT';
+  if (m.includes('json') || m.includes('parse') || m.includes('invalid response')) return 'OPENAI_RESPONSE_INVALID';
+  if (m.includes('discovery failed') || m.includes('market discovery')) return 'DISCOVERY_FAILED';
+  if (m.includes('price') || m.includes('order book') || m.includes('clob')) return 'PRICE_DATA_FAILED';
+  if (m.includes('weather') || m.includes('open-meteo') || m.includes('observation')) return 'WEATHER_DATA_FAILED';
+  return 'DISCOVERY_FAILED';
+}
 
 export default function WeatherDashboardPage() {
   const [state, setState] = useState<PageState>(IDLE_STATE);
@@ -225,23 +303,53 @@ export default function WeatherDashboardPage() {
     setState((prev) => ({
       ...prev,
       phase: 'discovering',
-      progressMsg: 'Finding weather markets on Polymarket…',
+      progressMsg: 'Discovering Polymarket temperature events…',
       errorMsg: null,
+      errorCategory: null,
+      diagnostics: null,
     }));
 
     try {
-      // ── Step 1: Discover temperature markets ──────────────────────────────
-      const marketsRes = await fetch('/api/weather/markets', {
-        method: 'GET',
-        cache: 'no-store',
-      });
-      const marketsData: MarketsApiResponse = await marketsRes.json();
+      // ── Step 1: Discover temperature events / bracket markets ─────────────
+      let marketsData: MarketsApiResponse;
+      try {
+        const marketsRes = await fetch('/api/weather/markets', {
+          method: 'GET',
+          cache: 'no-store',
+        });
+        if (!marketsRes.ok) {
+          const text = await marketsRes.text();
+          throw new Error(`Discovery HTTP ${marketsRes.status}: ${text.slice(0, 200)}`);
+        }
+        marketsData = await marketsRes.json() as MarketsApiResponse;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setState((prev) => ({
+          ...prev,
+          phase: 'error',
+          progressMsg: '',
+          errorMsg: msg,
+          errorCategory: 'DISCOVERY_FAILED',
+          lastRefreshed: new Date().toISOString(),
+        }));
+        return;
+      }
 
       if (!marketsData.ok) {
-        throw new Error(`Market discovery failed: ${marketsData.error || 'Unknown error'}`);
+        setState((prev) => ({
+          ...prev,
+          phase: 'error',
+          progressMsg: '',
+          errorMsg: `DISCOVERY_FAILED: ${marketsData.error || 'Unknown discovery error'}`,
+          errorCategory: 'DISCOVERY_FAILED',
+          diagnostics: marketsData.diagnostics ?? null,
+          lastRefreshed: new Date().toISOString(),
+        }));
+        return;
       }
 
       const markets: WeatherMarket[] = marketsData.markets;
+      const diagnostics = marketsData.diagnostics ?? null;
 
       if (markets.length === 0) {
         setState({
@@ -253,13 +361,15 @@ export default function WeatherDashboardPage() {
             waitingOrUnavail: 0, lastRefreshed: new Date().toISOString(),
           },
           errorMsg: null,
+          errorCategory: 'NO_MARKETS_FOUND',
+          diagnostics,
           lastRefreshed: new Date().toISOString(),
         });
         return;
       }
 
       // ── Step 2: Fetch order books for all token IDs ───────────────────────
-      updatePhase('pricing', 'Reading live order books…');
+      updatePhase('pricing', `Reading live order books for ${markets.length} markets…`);
 
       const allTokenIds = markets.flatMap((m) => m.tokenIds);
       const pricesRes = await fetch('/api/weather/prices', {
@@ -293,7 +403,7 @@ export default function WeatherDashboardPage() {
       }
 
       // ── Step 4: GPT research ──────────────────────────────────────────────
-      updatePhase('researching', `Running GPT research (0/${markets.length})…`);
+      updatePhase('researching', `Running GPT research on ${markets.length} markets…`);
 
       const researchInputs: WeatherResearchInput[] = markets.map((market) => ({
         market,
@@ -311,6 +421,7 @@ export default function WeatherDashboardPage() {
       const researchData: ResearchApiResponse = await researchRes.json();
 
       if (!researchData.ok) {
+        const errMsg = researchData.error || 'Research failed';
         // Show partial results if we have them
         if (researchData.results && researchData.results.length > 0) {
           setState({
@@ -318,11 +429,21 @@ export default function WeatherDashboardPage() {
             progressMsg: '',
             results: researchData.results,
             summary: researchData.summary,
-            errorMsg: researchData.error,
+            errorMsg: errMsg,
+            errorCategory: categorizeError(errMsg),
+            diagnostics,
             lastRefreshed: new Date().toISOString(),
           });
         } else {
-          throw new Error(researchData.error || 'Research failed');
+          setState((prev) => ({
+            ...prev,
+            phase: 'error',
+            progressMsg: '',
+            errorMsg: errMsg,
+            errorCategory: categorizeError(errMsg),
+            diagnostics,
+            lastRefreshed: new Date().toISOString(),
+          }));
         }
         return;
       }
@@ -333,6 +454,8 @@ export default function WeatherDashboardPage() {
         results: researchData.results,
         summary: researchData.summary,
         errorMsg: null,
+        errorCategory: 'RESEARCH_COMPLETE',
+        diagnostics,
         lastRefreshed: new Date().toISOString(),
       });
 
@@ -343,6 +466,7 @@ export default function WeatherDashboardPage() {
         phase: 'error',
         progressMsg: '',
         errorMsg: msg,
+        errorCategory: categorizeError(msg),
         lastRefreshed: new Date().toISOString(),
       }));
     }
@@ -352,8 +476,8 @@ export default function WeatherDashboardPage() {
     setState(IDLE_STATE);
   }, []);
 
-  const { phase, results, summary, errorMsg, lastRefreshed } = state;
-  const showResults = ['complete', 'partial'].includes(phase) && results.length > 0;
+  const { phase, results, summary, errorMsg, errorCategory, diagnostics, lastRefreshed } = state;
+  const showResults   = ['complete', 'partial'].includes(phase) && results.length > 0;
   const showNoMarkets = phase === 'no-markets';
   const showError     = phase === 'error';
 
@@ -394,8 +518,16 @@ export default function WeatherDashboardPage() {
 
       {/* ── Main content area ── */}
       {phase === 'idle'    && <IdleState />}
-      {showError           && <ErrorState message={errorMsg!} />}
-      {showNoMarkets       && <NoMarketsState />}
+      {showError           && <ErrorState message={errorMsg!} category={errorCategory} />}
+      {showNoMarkets       && <NoMarketsState diagnostics={diagnostics} />}
+
+      {/* ── Diagnostics (available after any completed run) ── */}
+      {showResults && diagnostics && (
+        <details className="weather-diag-details">
+          <summary className="weather-diag-summary">Discovery details</summary>
+          <DiagnosticsPanel diag={diagnostics} />
+        </details>
+      )}
 
       {showResults && (
         <section>
